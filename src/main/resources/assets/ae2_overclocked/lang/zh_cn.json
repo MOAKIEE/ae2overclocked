@@ -1,0 +1,11 @@
+{
+    "itemGroup.ae2_overclocked": "AE2 超频",
+    "item.ae2_overclocked.capacity_card": "堆叠卡",
+    "item.ae2_overclocked.energy_card": "超级能源卡",
+    "item.ae2_overclocked.overclock_card": "超速卡",
+    "item.ae2_overclocked.parallel_card": "并行卡 (×2)",
+    "item.ae2_overclocked.parallel_card_8x": "并行卡 (×8)",
+    "item.ae2_overclocked.parallel_card_64x": "并行卡 (×64)",
+    "item.ae2_overclocked.parallel_card_1024x": "并行卡 (×1024)",
+    "item.ae2_overclocked.parallel_card_max": "并行卡 (Max)"
+}
