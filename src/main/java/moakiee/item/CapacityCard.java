@@ -9,6 +9,6 @@ import net.minecraft.world.item.Item;
 public class CapacityCard extends UpgradeCardItem {
 
     public CapacityCard() {
-        super(new Item.Properties().stacksTo(1));
+        super(new Item.Properties().stacksTo(64));
     }
 }

@@ -28,23 +28,17 @@ public class ModUpgrades {
 
             // ── AE2 压印器（必选）────────────────────────────────────
             registerForMachine(AEBlocks.INSCRIBER);
-            registerForMachine(AEBlocks.PATTERN_PROVIDER);
 
             // ── ExtendedAE（可选）─────────────────────
             if (ModList.get().isLoaded("expatternprovider")) {
                 registerForMachineId("expatternprovider:ex_inscriber");
                 registerForMachineId("expatternprovider:circuit_cutter");
-                registerForMachineId("expatternprovider:ex_pattern_provider");
             }
 
             // ── AdvancedAE（可选）─────────────────────
             if (ModList.get().isLoaded("advanced_ae") || ModList.get().isLoaded("advancedae")) {
                 registerForMachineId("advanced_ae:reaction_chamber");
                 registerForMachineId("advancedae:reaction_chamber");
-                registerForMachineId("advanced_ae:adv_pattern_provider");
-                registerForMachineId("advancedae:adv_pattern_provider");
-                registerForMachineId("advanced_ae:small_adv_pattern_provider");
-                registerForMachineId("advancedae:small_adv_pattern_provider");
             }
         });
     }

@@ -11,7 +11,12 @@
     "MixinAEBaseMenu",
     "MixinReactionChamberEntityCapacity",
     "MixinTileCircuitCutterCapacity",
-    "MixinFriendlyByteBuf"
+    "MixinFriendlyByteBuf",
+    "MixinAEBasePoweredBlockEntity",
+    "MixinInscriberOverclock",
+    "MixinExInscriberThreadOverclock",
+    "MixinCircuitCutterOverclock",
+    "MixinReactionChamberOverclock"
   ],
   "client": [
     "MixinAEBaseScreen",

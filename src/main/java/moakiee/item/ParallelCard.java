@@ -15,7 +15,7 @@ public class ParallelCard extends UpgradeCardItem {
     private final int multiplier;
 
     public ParallelCard(int multiplier) {
-        super(new Item.Properties().stacksTo(1));
+        super(new Item.Properties().stacksTo(64));
         this.multiplier = multiplier;
     }
 

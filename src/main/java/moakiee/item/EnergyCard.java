@@ -9,6 +9,6 @@ import net.minecraft.world.item.Item;
 public class EnergyCard extends UpgradeCardItem {
 
     public EnergyCard() {
-        super(new Item.Properties().stacksTo(1));
+        super(new Item.Properties().stacksTo(64));
     }
 }
