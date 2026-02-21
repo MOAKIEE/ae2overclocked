@@ -82,6 +82,9 @@ public abstract class MixinAEBaseInvBlockEntity {
         }
     }
 
+    // 旧版网络同步 Mixin 遗留的标签名（需要清理）
+    private static final String AE2OC_NET_COUNT_LEGACY = "ae2ocNetCount";
+
     /**
      * 在原版 loadTag 完成后，检查并恢复超量堆叠。
      */
@@ -111,11 +114,26 @@ public abstract class MixinAEBaseInvBlockEntity {
                 int restoredCount = item.getInt(AE2OC_COUNT_KEY);
                 if (restoredCount > 0) {
                     // 获取原版加载的物品（此时 count 可能是错的）
+                    // 注意：getStackInSlot 返回 inventory 中的实际引用，
+                    // 直接修改 count 即可，不要调用 setItemDirect，
+                    // 否则会触发 notifyContentsChanged → wakeDevice → 世界加载卡死
                     ItemStack stack = inv.getStackInSlot(x);
                     if (!stack.isEmpty()) {
                         stack.setCount(restoredCount);
-                        inv.setItemDirect(x, stack);
                         AE2OC_LOGGER.info("[AE2OC] loadTag slot={} count={}", x, restoredCount);
+                    }
+                }
+            }
+            
+            // 清理旧版网络同步 Mixin 遗留的标签（可能导致问题）
+            ItemStack stack = inv.getStackInSlot(x);
+            if (!stack.isEmpty()) {
+                CompoundTag tag = stack.getTag();
+                if (tag != null && tag.contains(AE2OC_NET_COUNT_LEGACY)) {
+                    AE2OC_LOGGER.info("[AE2OC] Cleaning legacy ae2ocNetCount tag from slot={}", x);
+                    tag.remove(AE2OC_NET_COUNT_LEGACY);
+                    if (tag.isEmpty()) {
+                        stack.setTag(null);
                     }
                 }
             }

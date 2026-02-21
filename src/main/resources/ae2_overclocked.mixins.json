@@ -11,7 +11,6 @@
     "MixinAEBaseMenu",
     "MixinReactionChamberEntityCapacity",
     "MixinTileCircuitCutterCapacity",
-    "MixinFriendlyByteBuf",
     "MixinAEBasePoweredBlockEntity",
     "MixinInscriberOverclock",
     "MixinExInscriberThreadOverclock",

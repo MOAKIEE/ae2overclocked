@@ -7,6 +7,8 @@ import appeng.api.networking.ticking.TickRateModulation;
 import appeng.recipes.handlers.InscriberProcessType;
 import appeng.recipes.handlers.InscriberRecipe;
 import moakiee.support.OverclockCardRuntime;
+import moakiee.support.ParallelCardRuntime;
+import moakiee.support.ParallelEngine;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -18,65 +20,63 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 /**
- * 超频卡功能注入 - ExtendedAE 扩展压印器线程
- * 
- * ExtendedAE 的压印器使用 InscriberThread 作为工作单元，
- * 每个 TileExInscriber 包含 4 个 InscriberThread。
- * 
- * 功能：安装超频卡后，每个线程的配方在1 tick内瞬间完成
- * 
- * 注意：完全使用反射访问字段和方法以避免 refMap 问题
+ * 并行卡 + 超频卡 功能注入 — ExtendedAE 扩展压印器线程
+ *
+ * ExtendedAE 的 TileExInscriber 内部使用 4 个 InscriberThread。
+ * 每个线程独立运行，超频/并行卡通过 host 字段检测。
+ *
+ * 结算顺序与压印器一致：先定并行量 → 再算总电 → 判超频 → 秒结算
  */
 @Mixin(targets = "com.glodblock.github.extendedae.common.me.InscriberThread", remap = false)
 public abstract class MixinExInscriberThreadOverclock {
 
-    /**
-     * 配方总能量消耗（每线程）
-     */
     @Unique
     private static final double AE2OC_THREAD_RECIPE_ENERGY = 2000.0;
 
-    /**
-     * 在 tick() 方法头部注入超频逻辑
-     */
+    /** 缓存并行结算结果 */
+    @Unique
+    private int ae2oc_pendingParallel = 0;
+
     @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
-    private void ae2oc_overclockThreadTick(CallbackInfoReturnable<TickRateModulation> cir) {
+    private void ae2oc_parallelOverclockThreadTick(CallbackInfoReturnable<TickRateModulation> cir) {
         Object self = this;
-        
+
         try {
-            // 获取 host 字段
+            // 获取 host
             Field hostField = ae2oc_getField(self.getClass(), "host");
             hostField.setAccessible(true);
             Object host = hostField.get(self);
-            
-            // 检测宿主是否安装超频卡
-            if (!OverclockCardRuntime.hasOverclockCard(host)) {
-                return; // 没有超频卡，执行原版逻辑
+
+            boolean hasOverclock = OverclockCardRuntime.hasOverclockCard(host);
+            int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(host);
+
+            // 无卡 → 走原版
+            if (!hasOverclock && parallelMultiplier <= 1) {
+                return;
             }
 
-            // 获取 smash 字段
+            // 获取 smash/finalStep 字段
             Field smashField = ae2oc_getField(self.getClass(), "smash");
             smashField.setAccessible(true);
             boolean smash = smashField.getBoolean(self);
-            
-            // 获取 finalStep 字段
+
             Field finalStepField = ae2oc_getField(self.getClass(), "finalStep");
             finalStepField.setAccessible(true);
             int finalStep = finalStepField.getInt(self);
 
-            // 如果正在播放动画，使用加速动画逻辑
+            // 正在播放 smash 动画
             if (smash) {
-                finalStep += 4; // 加速4倍
+                finalStep += 4;
                 finalStepField.setInt(self, finalStep);
-                
+
                 if (finalStep >= 8 && finalStep < 16) {
-                    // 执行产物输出
-                    ae2oc_finishCraft(self, host);
+                    int parallel = Math.max(this.ae2oc_pendingParallel, 1);
+                    ae2oc_finishCraftParallel(self, host, parallel);
+                    this.ae2oc_pendingParallel = 0;
                     finalStepField.setInt(self, 16);
                 }
                 if (finalStep >= 16) {
                     finalStepField.setInt(self, 0);
-                    // setSmash(false)
                     Method setSmash = self.getClass().getMethod("setSmash", boolean.class);
                     setSmash.invoke(self, false);
                     ae2oc_markHostForUpdate(host);
@@ -85,49 +85,217 @@ public abstract class MixinExInscriberThreadOverclock {
                 return;
             }
 
-            // 获取当前配方
+            // 获取配方
             Method getTask = self.getClass().getMethod("getTask");
             InscriberRecipe recipe = (InscriberRecipe) getTask.invoke(self);
             if (recipe == null) {
-                return; // 没有配方，执行原版逻辑
+                return;
             }
 
-            // 获取 sideItemHandler 字段
-            Field sideItemHandlerField = ae2oc_getField(self.getClass(), "sideItemHandler");
-            sideItemHandlerField.setAccessible(true);
-            Object sideItemHandler = sideItemHandlerField.get(self);
-
-            // 检查输出槽是否有空间（模拟插入）
-            ItemStack outputCopy = recipe.getResultItem().copy();
-            Method insertItem = sideItemHandler.getClass().getMethod("insertItem", int.class, ItemStack.class, boolean.class);
-            ItemStack remaining = (ItemStack) insertItem.invoke(sideItemHandler, 1, outputCopy, true);
-            if (!remaining.isEmpty()) {
-                return; // 输出槽满，执行原版逻辑
+            // 计算并行数
+            int actualParallel = ae2oc_calculateParallel(self, host, recipe, parallelMultiplier);
+            if (actualParallel < 1) {
+                return;
             }
 
-            // 检查并消耗能量
-            if (!ae2oc_tryConsumePower(host, AE2OC_THREAD_RECIPE_ENERGY)) {
-                return; // 能量不足，执行原版逻辑
+            if (hasOverclock) {
+                // 超频模式
+                double totalEnergy = actualParallel * AE2OC_THREAD_RECIPE_ENERGY;
+                if (!ae2oc_tryConsumePower(host, totalEnergy)) {
+                    return;
+                }
+
+                this.ae2oc_pendingParallel = actualParallel;
+                Method setSmash = self.getClass().getMethod("setSmash", boolean.class);
+                setSmash.invoke(self, true);
+                finalStepField.setInt(self, 0);
+                ae2oc_markHostForUpdate(host);
+                cir.setReturnValue(TickRateModulation.URGENT);
+            } else {
+                // 仅并行模式：缓存并行数，让原版推进度条
+                this.ae2oc_pendingParallel = actualParallel;
             }
 
-            // === 所有条件满足，瞬间完成配方 ===
-            
-            // 触发完成动画
-            Method setSmash = self.getClass().getMethod("setSmash", boolean.class);
-            setSmash.invoke(self, true);
-            finalStepField.setInt(self, 0);
-            ae2oc_markHostForUpdate(host);
-
-            cir.setReturnValue(TickRateModulation.URGENT);
-            
         } catch (Exception e) {
-            // 反射失败，执行原版逻辑
+            // 反射失败，走原版
         }
     }
 
     /**
-     * 递归获取字段（包括父类）
+     * 计算实际并行数（木桶效应）
      */
+    @Unique
+    private int ae2oc_calculateParallel(Object self, Object host, InscriberRecipe recipe, int cardMultiplier) {
+        try {
+            Field sideField = ae2oc_getField(self.getClass(), "sideItemHandler");
+            sideField.setAccessible(true);
+            Object sideHandler = sideField.get(self);
+
+            Method getStackInSlot = sideHandler.getClass().getMethod("getStackInSlot", int.class);
+            ItemStack inputStack = (ItemStack) getStackInSlot.invoke(sideHandler, 0);
+            int inputCount = inputStack.getCount();
+
+            // PRESS 模板约束
+            if (recipe.getProcessType() == InscriberProcessType.PRESS) {
+                Field topField = ae2oc_getField(self.getClass(), "topItemHandler");
+                topField.setAccessible(true);
+                Object topHandler = topField.get(self);
+
+                Field bottomField = ae2oc_getField(self.getClass(), "bottomItemHandler");
+                bottomField.setAccessible(true);
+                Object bottomHandler = bottomField.get(self);
+
+                ItemStack topStack = (ItemStack) getStackInSlot.invoke(topHandler, 0);
+                ItemStack bottomStack = (ItemStack) getStackInSlot.invoke(bottomHandler, 0);
+
+                int topCount = topStack.isEmpty() ? Integer.MAX_VALUE : topStack.getCount();
+                int bottomCount = bottomStack.isEmpty() ? Integer.MAX_VALUE : bottomStack.getCount();
+                cardMultiplier = Math.min(cardMultiplier, Math.min(topCount, bottomCount));
+            }
+
+            ItemStack outputStack = recipe.getResultItem().copy();
+
+            Method insertMethod = sideHandler.getClass().getMethod("insertItem",
+                    int.class, ItemStack.class, boolean.class);
+
+            double availableEnergy = ae2oc_getAvailableEnergy(host);
+
+            ParallelEngine.ParallelResult result = ParallelEngine.calculate(
+                    cardMultiplier, inputCount, 1, outputStack,
+                    (stack, simulate) -> {
+                        try {
+                            return (ItemStack) insertMethod.invoke(sideHandler, 1, stack, simulate);
+                        } catch (Exception e) {
+                            return stack;
+                        }
+                    },
+                    availableEnergy, AE2OC_THREAD_RECIPE_ENERGY
+            );
+
+            return result.actualParallel();
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /**
+     * 原子化执行多倍结算
+     */
+    @Unique
+    private void ae2oc_finishCraftParallel(Object self, Object host, int parallel) {
+        try {
+            Method getTask = self.getClass().getMethod("getTask");
+            InscriberRecipe recipe = (InscriberRecipe) getTask.invoke(self);
+            if (recipe == null) return;
+
+            Field sideField = ae2oc_getField(self.getClass(), "sideItemHandler");
+            sideField.setAccessible(true);
+            Object sideHandler = sideField.get(self);
+
+            Field topField = ae2oc_getField(self.getClass(), "topItemHandler");
+            topField.setAccessible(true);
+            Object topHandler = topField.get(self);
+
+            Field bottomField = ae2oc_getField(self.getClass(), "bottomItemHandler");
+            bottomField.setAccessible(true);
+            Object bottomHandler = bottomField.get(self);
+
+            // 多倍产物
+            ItemStack outputCopy = recipe.getResultItem().copy();
+            outputCopy.setCount(outputCopy.getCount() * parallel);
+
+            Method insertMethod = sideHandler.getClass().getMethod("insertItem",
+                    int.class, ItemStack.class, boolean.class);
+            ItemStack remaining = (ItemStack) insertMethod.invoke(sideHandler, 1, outputCopy, false);
+
+            int actualInserted = outputCopy.getCount() - remaining.getCount();
+            int singleOutputCount = recipe.getResultItem().getCount();
+            int actualParallel = singleOutputCount > 0 ? actualInserted / singleOutputCount : 0;
+
+            if (actualParallel > 0) {
+                Method setProcessingTime = self.getClass().getDeclaredMethod("setProcessingTime", int.class);
+                setProcessingTime.setAccessible(true);
+                setProcessingTime.invoke(self, 0);
+
+                if (recipe.getProcessType() == InscriberProcessType.PRESS) {
+                    Method extractItem = topHandler.getClass().getMethod("extractItem",
+                            int.class, int.class, boolean.class);
+                    extractItem.invoke(topHandler, 0, actualParallel, false);
+                    extractItem.invoke(bottomHandler, 0, actualParallel, false);
+                }
+
+                Method sideExtract = sideHandler.getClass().getMethod("extractItem",
+                        int.class, int.class, boolean.class);
+                sideExtract.invoke(sideHandler, 0, actualParallel, false);
+            }
+
+            ae2oc_saveHostChanges(host);
+        } catch (Exception e) {
+            // 忽略
+        }
+    }
+
+    @Unique
+    private double ae2oc_getAvailableEnergy(Object host) {
+        double total = 0;
+        try {
+            Method extractMethod = host.getClass().getMethod(
+                    "extractAEPower", double.class, Actionable.class, PowerMultiplier.class);
+            total += (double) extractMethod.invoke(host, Double.MAX_VALUE,
+                    Actionable.SIMULATE, PowerMultiplier.CONFIG);
+
+            Method getMainNode = host.getClass().getMethod("getMainNode");
+            Object mainNode = getMainNode.invoke(host);
+            if (mainNode != null) {
+                Method getGrid = mainNode.getClass().getMethod("getGrid");
+                Object grid = getGrid.invoke(mainNode);
+                if (grid != null) {
+                    Method getEnergyService = grid.getClass().getMethod("getEnergyService");
+                    IEnergyService energyService = (IEnergyService) getEnergyService.invoke(grid);
+                    total += energyService.extractAEPower(Double.MAX_VALUE, Actionable.SIMULATE, PowerMultiplier.CONFIG);
+                }
+            }
+        } catch (Exception e) {
+            // 忽略
+        }
+        return total;
+    }
+
+    @Unique
+    private boolean ae2oc_tryConsumePower(Object host, double powerNeeded) {
+        try {
+            Method extractMethod = host.getClass().getMethod(
+                    "extractAEPower", double.class, Actionable.class, PowerMultiplier.class);
+
+            double extracted = (double) extractMethod.invoke(host, powerNeeded,
+                    Actionable.SIMULATE, PowerMultiplier.CONFIG);
+            if (extracted >= powerNeeded - 0.01) {
+                extractMethod.invoke(host, powerNeeded, Actionable.MODULATE, PowerMultiplier.CONFIG);
+                return true;
+            }
+
+            Method getMainNode = host.getClass().getMethod("getMainNode");
+            Object mainNode = getMainNode.invoke(host);
+            if (mainNode != null) {
+                Method getGrid = mainNode.getClass().getMethod("getGrid");
+                Object grid = getGrid.invoke(mainNode);
+                if (grid != null) {
+                    Method getEnergyService = grid.getClass().getMethod("getEnergyService");
+                    IEnergyService energyService = (IEnergyService) getEnergyService.invoke(grid);
+                    double networkExtracted = energyService.extractAEPower(powerNeeded, Actionable.SIMULATE,
+                            PowerMultiplier.CONFIG);
+                    if (networkExtracted >= powerNeeded - 0.01) {
+                        energyService.extractAEPower(powerNeeded, Actionable.MODULATE, PowerMultiplier.CONFIG);
+                        return true;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // 反射失败
+        }
+        return false;
+    }
+
     @Unique
     private Field ae2oc_getField(Class<?> clazz, String fieldName) throws NoSuchFieldException {
         try {
@@ -141,113 +309,6 @@ public abstract class MixinExInscriberThreadOverclock {
         }
     }
 
-    /**
-     * 完成配方制作（消耗材料和产出物品）
-     */
-    @Unique
-    private void ae2oc_finishCraft(Object self, Object host) {
-        try {
-            Method getTask = self.getClass().getMethod("getTask");
-            InscriberRecipe recipe = (InscriberRecipe) getTask.invoke(self);
-            if (recipe == null) {
-                return;
-            }
-
-            // 获取 inventory 字段
-            Field sideItemHandlerField = ae2oc_getField(self.getClass(), "sideItemHandler");
-            sideItemHandlerField.setAccessible(true);
-            Object sideItemHandler = sideItemHandlerField.get(self);
-            
-            Field topItemHandlerField = ae2oc_getField(self.getClass(), "topItemHandler");
-            topItemHandlerField.setAccessible(true);
-            Object topItemHandler = topItemHandlerField.get(self);
-            
-            Field bottomItemHandlerField = ae2oc_getField(self.getClass(), "bottomItemHandler");
-            bottomItemHandlerField.setAccessible(true);
-            Object bottomItemHandler = bottomItemHandlerField.get(self);
-
-            ItemStack outputCopy = recipe.getResultItem().copy();
-
-            // 插入产物
-            Method insertItem = sideItemHandler.getClass().getMethod("insertItem", int.class, ItemStack.class, boolean.class);
-            ItemStack remaining = (ItemStack) insertItem.invoke(sideItemHandler, 1, outputCopy, false);
-            
-            if (remaining.isEmpty()) {
-                // 成功插入，重置进度
-                Method setProcessingTime = self.getClass().getDeclaredMethod("setProcessingTime", int.class);
-                setProcessingTime.setAccessible(true);
-                setProcessingTime.invoke(self, 0);
-
-                // 消耗模板（如果是 PRESS 类型）
-                Method extractItem = topItemHandler.getClass().getMethod("extractItem", int.class, int.class, boolean.class);
-                if (recipe.getProcessType() == InscriberProcessType.PRESS) {
-                    extractItem.invoke(topItemHandler, 0, 1, false);
-                    extractItem.invoke(bottomItemHandler, 0, 1, false);
-                }
-
-                // 消耗输入材料
-                Method sideExtract = sideItemHandler.getClass().getMethod("extractItem", int.class, int.class, boolean.class);
-                sideExtract.invoke(sideItemHandler, 0, 1, false);
-            }
-
-            ae2oc_saveHostChanges(host);
-            
-        } catch (Exception e) {
-            // 反射失败
-        }
-    }
-
-    /**
-     * 尝试消耗配方所需的全部能量
-     */
-    @Unique
-    private boolean ae2oc_tryConsumePower(Object host, double powerNeeded) {
-        try {
-            // 通过反射调用 host.extractAEPower()
-            Method extractMethod = host.getClass().getMethod(
-                    "extractAEPower", double.class, Actionable.class, PowerMultiplier.class);
-            
-            // 先模拟
-            double extracted = (double) extractMethod.invoke(host, powerNeeded, 
-                    Actionable.SIMULATE, PowerMultiplier.CONFIG);
-            
-            if (extracted >= powerNeeded - 0.01) {
-                // 内部缓存足够，正式消耗
-                extractMethod.invoke(host, powerNeeded, Actionable.MODULATE, PowerMultiplier.CONFIG);
-                return true;
-            }
-
-            // 尝试从网络提取
-            Method getMainNode = host.getClass().getMethod("getMainNode");
-            Object mainNode = getMainNode.invoke(host);
-            
-            if (mainNode != null) {
-                Method getGrid = mainNode.getClass().getMethod("getGrid");
-                Object grid = getGrid.invoke(mainNode);
-                
-                if (grid != null) {
-                    Method getEnergyService = grid.getClass().getMethod("getEnergyService");
-                    IEnergyService energyService = (IEnergyService) getEnergyService.invoke(grid);
-                    
-                    double networkExtracted = energyService.extractAEPower(powerNeeded, Actionable.SIMULATE, 
-                            PowerMultiplier.CONFIG);
-                    
-                    if (networkExtracted >= powerNeeded - 0.01) {
-                        energyService.extractAEPower(powerNeeded, Actionable.MODULATE, PowerMultiplier.CONFIG);
-                        return true;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            // 反射失败，返回 false
-        }
-        
-        return false;
-    }
-
-    /**
-     * 通过反射调用 host.markForUpdate()
-     */
     @Unique
     private void ae2oc_markHostForUpdate(Object host) {
         try {
@@ -257,9 +318,6 @@ public abstract class MixinExInscriberThreadOverclock {
         }
     }
 
-    /**
-     * 通过反射调用 host.saveChanges()
-     */
     @Unique
     private void ae2oc_saveHostChanges(Object host) {
         try {
