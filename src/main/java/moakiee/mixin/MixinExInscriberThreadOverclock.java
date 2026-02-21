@@ -3,7 +3,9 @@ package moakiee.mixin;
 import appeng.api.config.Actionable;
 import appeng.api.config.PowerMultiplier;
 import appeng.api.networking.energy.IEnergyService;
+import appeng.api.networking.storage.IStorageService;
 import appeng.api.networking.ticking.TickRateModulation;
+import appeng.api.stacks.AEItemKey;
 import appeng.recipes.handlers.InscriberProcessType;
 import appeng.recipes.handlers.InscriberRecipe;
 import moakiee.support.OverclockCardRuntime;
@@ -180,6 +182,8 @@ public abstract class MixinExInscriberThreadOverclock {
 
     /**
      * 原子化执行多倍结算
+     * 
+     * 产物先输出到本地槽，再转移到 ME 网络（如果有并行卡）
      */
     @Unique
     private void ae2oc_finishCraftParallel(Object self, Object host, int parallel) {
@@ -202,14 +206,17 @@ public abstract class MixinExInscriberThreadOverclock {
 
             // 多倍产物
             ItemStack outputCopy = recipe.getResultItem().copy();
-            outputCopy.setCount(outputCopy.getCount() * parallel);
+            int totalOutput = outputCopy.getCount() * parallel;
+            outputCopy.setCount(totalOutput);
 
+            int singleOutputCount = recipe.getResultItem().getCount();
+            
+            // 先放入本地输出槽
             Method insertMethod = sideHandler.getClass().getMethod("insertItem",
                     int.class, ItemStack.class, boolean.class);
-            ItemStack remaining = (ItemStack) insertMethod.invoke(sideHandler, 1, outputCopy, false);
+            ItemStack leftover = (ItemStack) insertMethod.invoke(sideHandler, 1, outputCopy, false);
+            int actualInserted = totalOutput - leftover.getCount();
 
-            int actualInserted = outputCopy.getCount() - remaining.getCount();
-            int singleOutputCount = recipe.getResultItem().getCount();
             int actualParallel = singleOutputCount > 0 ? actualInserted / singleOutputCount : 0;
 
             if (actualParallel > 0) {
@@ -228,8 +235,53 @@ public abstract class MixinExInscriberThreadOverclock {
                         int.class, int.class, boolean.class);
                 sideExtract.invoke(sideHandler, 0, actualParallel, false);
             }
+            
+            // 如果有并行卡，把本地输出槽的产物转移到 ME 网络
+            int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(host);
+            if (parallelMultiplier > 1) {
+                ae2oc_transferOutputToNetwork(host, sideHandler);
+            }
 
             ae2oc_saveHostChanges(host);
+        } catch (Exception e) {
+            // 忽略
+        }
+    }
+    
+    /**
+     * 把本地输出槽的产物转移到 ME 网络
+     */
+    @Unique
+    private void ae2oc_transferOutputToNetwork(Object host, Object sideHandler) {
+        try {
+            Method getMainNode = host.getClass().getMethod("getMainNode");
+            Object mainNode = getMainNode.invoke(host);
+            if (mainNode == null) return;
+            
+            Method getGrid = mainNode.getClass().getMethod("getGrid");
+            Object grid = getGrid.invoke(mainNode);
+            if (grid == null) return;
+            
+            IStorageService storageService = (IStorageService) ((appeng.api.networking.IGrid) grid).getService(IStorageService.class);
+            if (storageService == null) return;
+            
+            Method getStackInSlot = sideHandler.getClass().getMethod("getStackInSlot", int.class);
+            Method extractItem = sideHandler.getClass().getMethod("extractItem", int.class, int.class, boolean.class);
+            
+            // 输出槽是 slot 1
+            ItemStack stack = (ItemStack) getStackInSlot.invoke(sideHandler, 1);
+            if (stack.isEmpty()) return;
+            
+            AEItemKey key = AEItemKey.of(stack);
+            if (key == null) return;
+            
+            long inserted = storageService.getInventory().insert(key, stack.getCount(), Actionable.MODULATE, null);
+            
+            if (inserted > 0) {
+                // 从本地槽取出已转移的数量
+                extractItem.invoke(sideHandler, 1, (int) inserted, false);
+            }
+            
         } catch (Exception e) {
             // 忽略
         }

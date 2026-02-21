@@ -5,7 +5,9 @@ import appeng.api.config.PowerMultiplier;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.energy.IEnergyService;
 import appeng.api.networking.energy.IEnergySource;
+import appeng.api.networking.storage.IStorageService;
 import appeng.api.networking.ticking.TickRateModulation;
+import appeng.api.stacks.AEItemKey;
 import appeng.blockentity.misc.InscriberBlockEntity;
 import appeng.recipes.handlers.InscriberProcessType;
 import appeng.recipes.handlers.InscriberRecipe;
@@ -243,6 +245,8 @@ public abstract class MixinInscriberOverclock {
      * 
      * 在同一方法内完成：扣材料 → 出产物
      * （能量已在触发 smash 前预扣）
+     * 
+     * 产物先输出到本地槽，再转移到 ME 网络（如果有并行卡）
      */
     @Unique
     private void ae2oc_finishCraftParallel(InscriberBlockEntity self, int parallel) {
@@ -266,16 +270,18 @@ public abstract class MixinInscriberOverclock {
 
             // 构造多倍产物
             ItemStack outputCopy = recipe.getResultItem().copy();
-            outputCopy.setCount(outputCopy.getCount() * parallel);
+            int totalOutput = outputCopy.getCount() * parallel;
+            outputCopy.setCount(totalOutput);
 
-            // 原子化操作：先尝试插入产物
+            int singleOutputCount = recipe.getResultItem().getCount();
+            
+            // 先放入本地输出槽
             java.lang.reflect.Method insertMethod = sideHandler.getClass().getMethod("insertItem",
                     int.class, ItemStack.class, boolean.class);
-            ItemStack remaining = (ItemStack) insertMethod.invoke(sideHandler, 1, outputCopy, false);
+            ItemStack leftover = (ItemStack) insertMethod.invoke(sideHandler, 1, outputCopy, false);
+            int actualInserted = totalOutput - leftover.getCount();
 
             // 计算实际成功放入的份数
-            int actualInserted = outputCopy.getCount() - remaining.getCount();
-            int singleOutputCount = recipe.getResultItem().getCount();
             int actualParallel = singleOutputCount > 0 ? actualInserted / singleOutputCount : 0;
 
             if (actualParallel > 0) {
@@ -301,12 +307,57 @@ public abstract class MixinInscriberOverclock {
                         int.class, int.class, boolean.class);
                 extractSide.invoke(sideHandler, 0, actualParallel, false);
             }
+            
+            // 如果有并行卡，把本地输出槽的产物转移到 ME 网络
+            int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
+            if (parallelMultiplier > 1) {
+                ae2oc_transferOutputToNetwork(self, sideHandler);
+            }
 
         } catch (Exception e) {
             e.printStackTrace();
         }
 
         ae2oc_saveChanges(self);
+    }
+    
+    /**
+     * 把本地输出槽的产物转移到 ME 网络
+     */
+    @Unique
+    private void ae2oc_transferOutputToNetwork(InscriberBlockEntity self, Object sideHandler) {
+        try {
+            java.lang.reflect.Method getMainNode = self.getClass().getMethod("getMainNode");
+            Object mainNode = getMainNode.invoke(self);
+            if (mainNode == null) return;
+            
+            java.lang.reflect.Method getGrid = mainNode.getClass().getMethod("getGrid");
+            Object grid = getGrid.invoke(mainNode);
+            if (grid == null) return;
+            
+            IStorageService storageService = (IStorageService) ((appeng.api.networking.IGrid) grid).getService(IStorageService.class);
+            if (storageService == null) return;
+            
+            java.lang.reflect.Method getStackInSlot = sideHandler.getClass().getMethod("getStackInSlot", int.class);
+            java.lang.reflect.Method extractItem = sideHandler.getClass().getMethod("extractItem", int.class, int.class, boolean.class);
+            
+            // 输出槽是 slot 1
+            ItemStack stack = (ItemStack) getStackInSlot.invoke(sideHandler, 1);
+            if (stack.isEmpty()) return;
+            
+            AEItemKey key = AEItemKey.of(stack);
+            if (key == null) return;
+            
+            long inserted = storageService.getInventory().insert(key, stack.getCount(), Actionable.MODULATE, null);
+            
+            if (inserted > 0) {
+                // 从本地槽取出已转移的数量
+                extractItem.invoke(sideHandler, 1, (int) inserted, false);
+            }
+            
+        } catch (Exception e) {
+            // 忽略
+        }
     }
 
     /**

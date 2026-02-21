@@ -1,5 +1,6 @@
 package moakiee.mixin;
 
+import appeng.api.config.Actionable;
 import appeng.me.energy.StoredEnergyAmount;
 import moakiee.support.EnergyCardRuntime;
 import org.spongepowered.asm.mixin.Final;
@@ -61,6 +62,27 @@ public class MixinAEBasePoweredBlockEntity {
      */
     @Inject(method = "getInternalMaxPower", at = @At("RETURN"), cancellable = true)
     private void ae2oc_getInternalMaxPower(CallbackInfoReturnable<Double> cir) {
+        ae2oc_updateStoredMaximum();
+        
+        if (EnergyCardRuntime.hasEnergyCard(this)) {
+            cir.setReturnValue(AE2OC_MAX_POWER);
+        }
+    }
+
+    /**
+     * 拦截 injectAEPower() 方法（FE 充电路径的关键入口）
+     * 在充电前先更新 stored.maximum，确保 stored.insert() 能正常工作
+     */
+    @Inject(method = "injectAEPower", at = @At("HEAD"))
+    private void ae2oc_injectAEPower(double amt, Actionable mode, CallbackInfoReturnable<Double> cir) {
+        ae2oc_updateStoredMaximum();
+    }
+
+    /**
+     * 统一的能量上限更新逻辑
+     */
+    @Unique
+    private void ae2oc_updateStoredMaximum() {
         double currentMax = stored.getMaximum();
         
         if (EnergyCardRuntime.hasEnergyCard(this)) {
@@ -74,8 +96,6 @@ public class MixinAEBasePoweredBlockEntity {
             if (currentMax < AE2OC_MAX_POWER) {
                 stored.setMaximum(AE2OC_MAX_POWER);
             }
-            
-            cir.setReturnValue(AE2OC_MAX_POWER);
         } else {
             // 没有能源卡
             // 如果之前有扩展过，恢复到原版上限

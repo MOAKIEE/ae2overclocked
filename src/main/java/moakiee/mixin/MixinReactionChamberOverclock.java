@@ -4,8 +4,10 @@ import appeng.api.config.Actionable;
 import appeng.api.config.PowerMultiplier;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.energy.IEnergyService;
+import appeng.api.networking.storage.IStorageService;
 import appeng.api.networking.ticking.TickRateModulation;
 import appeng.api.stacks.AEFluidKey;
+import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
 import moakiee.support.OverclockCardRuntime;
@@ -235,13 +237,19 @@ public abstract class MixinReactionChamberOverclock {
             double totalEnergy = actualParallel * unitEnergy;
             if (!ae2oc_tryConsumePower(self, node, totalEnergy)) return;
 
-            for (int i = 0; i < actualParallel; i++) {
-                ae2oc_consumeOnceWithRecipe(recipe, inputInv, fluidInv);
-            }
+            // 批量消耗材料（替代循环调用单份消耗）
+            ae2oc_consumeBatchWithRecipe(recipe, inputInv, fluidInv, actualParallel);
 
+            // 先放入本地输出槽
             ItemStack outputStack = outputItem.copy();
-            outputStack.setCount(outputStack.getCount() * actualParallel);
+            int totalOutput = outputStack.getCount() * actualParallel;
+            outputStack.setCount(totalOutput);
             insertItem.invoke(outputInv, 0, outputStack, false);
+            
+            // 如果有并行卡，把本地输出槽的产物转移到 ME 网络
+            if (parallelMultiplier > 1) {
+                ae2oc_transferItemOutputToNetwork(node, outputInv);
+            }
         } else {
             Method getResultFluid = recipe.getClass().getMethod("getResultFluid");
             FluidStack outputFluid = (FluidStack) getResultFluid.invoke(recipe);
@@ -258,14 +266,20 @@ public abstract class MixinReactionChamberOverclock {
             double totalEnergy = actualParallel * unitEnergy;
             if (!ae2oc_tryConsumePower(self, node, totalEnergy)) return;
 
-            for (int i = 0; i < actualParallel; i++) {
-                ae2oc_consumeOnceWithRecipe(recipe, inputInv, fluidInv);
-            }
+            // 批量消耗材料（替代循环调用单份消耗）
+            ae2oc_consumeBatchWithRecipe(recipe, inputInv, fluidInv, actualParallel);
 
             AEFluidKey fluidKey = AEFluidKey.of(outputFluid);
             int totalFluidAmount = outputFluid.getAmount() * actualParallel;
+            
+            // 先放入本地流体槽
             Method addMethod = fluidInv.getClass().getMethod("add", int.class, AEFluidKey.class, int.class);
             addMethod.invoke(fluidInv, 0, fluidKey, totalFluidAmount);
+            
+            // 如果有并行卡，把本地槽的流体转移到 ME 网络
+            if (parallelMultiplier > 1) {
+                ae2oc_transferFluidOutputToNetwork(node, fluidInv);
+            }
         }
 
         // 重置
@@ -313,7 +327,7 @@ public abstract class MixinReactionChamberOverclock {
             if (!ae2oc_tryConsumePower(self, node, extraEnergy)) return;
 
             if (this.ae2oc_cachedIsItemOutput) {
-                // 物品产出
+                // 物品产出 - 批量处理
                 Field outputInvField = ae2oc_getField(self.getClass(), "outputInv");
                 outputInvField.setAccessible(true);
                 Object outputInv = outputInvField.get(self);
@@ -321,29 +335,57 @@ public abstract class MixinReactionChamberOverclock {
                 Method insertItem = outputInv.getClass().getMethod("insertItem",
                         int.class, ItemStack.class, boolean.class);
 
-                // 逐轮执行
-                int actualExtra = 0;
-                for (int i = 0; i < extraRounds; i++) {
-                    ItemStack singleOutput = this.ae2oc_cachedItemOutput.copy();
-                    ItemStack remaining = (ItemStack) insertItem.invoke(outputInv, 0, singleOutput, true);
-                    if (!remaining.isEmpty()) break;
-
-                    ae2oc_consumeOnceWithRecipe(this.ae2oc_cachedRecipe, inputInv, fluidInv);
-                    insertItem.invoke(outputInv, 0, singleOutput, false);
-                    actualExtra++;
+                // 计算总产出
+                ItemStack totalOutput = this.ae2oc_cachedItemOutput.copy();
+                totalOutput.setCount(totalOutput.getCount() * extraRounds);
+                
+                // 先放入本地槽
+                ItemStack leftover = (ItemStack) insertItem.invoke(outputInv, 0, totalOutput, false);
+                int actualInserted = totalOutput.getCount() - leftover.getCount();
+                
+                // 计算实际完成的轮数
+                int singleOutputCount = this.ae2oc_cachedItemOutput.getCount();
+                int actualExtra = singleOutputCount > 0 ? actualInserted / singleOutputCount : 0;
+                
+                // 批量消耗材料
+                if (actualExtra > 0) {
+                    ae2oc_consumeBatchWithRecipe(this.ae2oc_cachedRecipe, inputInv, fluidInv, actualExtra);
+                }
+                
+                // 如果有并行卡，把本地槽的产物转移到 ME 网络
+                int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
+                if (parallelMultiplier > 1) {
+                    ae2oc_transferItemOutputToNetwork(node, outputInv);
                 }
             } else {
-                // 流体产出
+                // 流体产出 - 批量处理
                 AEFluidKey fluidKey = AEFluidKey.of(this.ae2oc_cachedFluidOutput);
                 Method addMethod = fluidInv.getClass().getMethod("add", int.class, AEFluidKey.class, int.class);
 
-                for (int i = 0; i < extraRounds; i++) {
-                    Method canAdd = fluidInv.getClass().getMethod("canAdd", int.class, AEFluidKey.class, int.class);
-                    if (!(boolean) canAdd.invoke(fluidInv, 0, fluidKey, this.ae2oc_cachedFluidOutput.getAmount())) {
-                        break;
-                    }
-                    ae2oc_consumeOnceWithRecipe(this.ae2oc_cachedRecipe, inputInv, fluidInv);
-                    addMethod.invoke(fluidInv, 0, fluidKey, this.ae2oc_cachedFluidOutput.getAmount());
+                // 计算总流体量
+                int singleFluidAmount = this.ae2oc_cachedFluidOutput.getAmount();
+                int totalFluidAmount = singleFluidAmount * extraRounds;
+                
+                // 先放入本地槽
+                Method canAdd = fluidInv.getClass().getMethod("canAdd", int.class, AEFluidKey.class, int.class);
+                int actualInserted = 0;
+                if ((boolean) canAdd.invoke(fluidInv, 0, fluidKey, totalFluidAmount)) {
+                    addMethod.invoke(fluidInv, 0, fluidKey, totalFluidAmount);
+                    actualInserted = totalFluidAmount;
+                }
+                
+                // 计算实际完成的轮数
+                int actualExtra = singleFluidAmount > 0 ? actualInserted / singleFluidAmount : 0;
+                
+                // 批量消耗材料
+                if (actualExtra > 0) {
+                    ae2oc_consumeBatchWithRecipe(this.ae2oc_cachedRecipe, inputInv, fluidInv, actualExtra);
+                }
+                
+                // 如果有并行卡，把本地槽的流体转移到 ME 网络
+                int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
+                if (parallelMultiplier > 1) {
+                    ae2oc_transferFluidOutputToNetwork(node, fluidInv);
                 }
             }
 
@@ -512,16 +554,28 @@ public abstract class MixinReactionChamberOverclock {
     }
 
     @Unique
+    private static final int AE2OC_MAX_PARALLEL_LIMIT = 1_000_000_000; // 避免整数溢出
+    
+    @Unique
     private int ae2oc_getFluidOutputLimit(Object fluidInv, FluidStack outputFluid, int maxParallel) {
         try {
             AEFluidKey fluidKey = AEFluidKey.of(outputFluid);
             Method canAdd = fluidInv.getClass().getMethod("canAdd", int.class, AEFluidKey.class, int.class);
 
-            int lo = 0, hi = maxParallel;
+            // 限制并行数防止整数溢出
+            int safeMaxParallel = Math.min(maxParallel, AE2OC_MAX_PARALLEL_LIMIT);
+            
+            int lo = 0, hi = safeMaxParallel;
             while (lo < hi) {
-                int mid = (lo + hi + 1) / 2;
-                int testAmount = outputFluid.getAmount() * mid;
-                if ((boolean) canAdd.invoke(fluidInv, 0, fluidKey, testAmount)) {
+                // 使用安全的中点计算方式避免溢出
+                int mid = lo + (hi - lo + 1) / 2;
+                // 使用 long 计算避免溢出
+                long testAmount = (long) outputFluid.getAmount() * mid;
+                if (testAmount > Integer.MAX_VALUE) {
+                    hi = mid - 1;
+                    continue;
+                }
+                if ((boolean) canAdd.invoke(fluidInv, 0, fluidKey, (int) testAmount)) {
                     lo = mid;
                 } else {
                     hi = mid - 1;
@@ -588,6 +642,92 @@ public abstract class MixinReactionChamberOverclock {
                     if ((boolean) checkType.invoke(input, fluidStack)) {
                         Method consume = input.getClass().getMethod("consume", Object.class);
                         consume.invoke(input, fluidStack);
+                    }
+                }
+            }
+
+            // 更新流体槽
+            if (fluidStack != null) {
+                Method setStack = fluidInv.getClass().getMethod("setStack", int.class, GenericStack.class);
+                if (fluidStack.isEmpty()) {
+                    setStack.invoke(fluidInv, 1, null);
+                } else {
+                    setStack.invoke(fluidInv, 1, new GenericStack(
+                            Objects.requireNonNull(AEFluidKey.of(fluidStack)), fluidStack.getAmount()));
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * 批量消耗输入材料（替代循环调用单份消耗）
+     * 一次性扣除 batchCount 份材料，避免大量循环导致游戏卡死
+     */
+    @Unique
+    private void ae2oc_consumeBatchWithRecipe(Object recipe, Object inputInv, Object fluidInv, int batchCount) {
+        if (batchCount <= 0) return;
+        
+        try {
+            Method getValidInputs = recipe.getClass().getMethod("getValidInputs");
+            @SuppressWarnings("unchecked")
+            java.util.List<Object> validInputs = (java.util.List<Object>) getValidInputs.invoke(recipe);
+
+            // 获取流体槽内容
+            Method getStack = fluidInv.getClass().getMethod("getStack", int.class);
+            Object gs = getStack.invoke(fluidInv, 1);
+            FluidStack fluidStack = null;
+            if (gs != null) {
+                Field whatField = gs.getClass().getDeclaredField("what");
+                whatField.setAccessible(true);
+                Object aeKey = whatField.get(gs);
+                if (aeKey instanceof AEFluidKey key) {
+                    Field amountField = gs.getClass().getDeclaredField("amount");
+                    amountField.setAccessible(true);
+                    long amount = amountField.getLong(gs);
+                    fluidStack = key.toStack((int) amount);
+                }
+            }
+
+            Method getSize = inputInv.getClass().getMethod("size");
+            int invSize = (int) getSize.invoke(inputInv);
+
+            // 处理每种输入要求
+            for (Object input : validInputs) {
+                // 获取单份消耗量
+                Method getAmount = input.getClass().getMethod("getAmount");
+                int singleConsumeAmount = (int) getAmount.invoke(input);
+                if (singleConsumeAmount <= 0) singleConsumeAmount = 1;
+                
+                // 计算总消耗量
+                int totalConsumeAmount = singleConsumeAmount * batchCount;
+                int remainingToConsume = totalConsumeAmount;
+                
+                // 从物品槽消耗
+                for (int x = 0; x < invSize && remainingToConsume > 0; x++) {
+                    Method getStackInSlot = inputInv.getClass().getMethod("getStackInSlot", int.class);
+                    ItemStack stack = (ItemStack) getStackInSlot.invoke(inputInv, x);
+                    
+                    if (stack.isEmpty()) continue;
+
+                    Method checkType = input.getClass().getMethod("checkType", Object.class);
+                    if ((boolean) checkType.invoke(input, stack)) {
+                        int consumeFromSlot = Math.min(stack.getCount(), remainingToConsume);
+                        stack.shrink(consumeFromSlot);
+                        remainingToConsume -= consumeFromSlot;
+
+                        Method setItemDirect = inputInv.getClass().getMethod("setItemDirect",
+                                int.class, ItemStack.class);
+                        setItemDirect.invoke(inputInv, x, stack);
+                    }
+                }
+                
+                // 从流体槽消耗（如果还有剩余）
+                if (fluidStack != null && remainingToConsume > 0) {
+                    Method checkType = input.getClass().getMethod("checkType", Object.class);
+                    if ((boolean) checkType.invoke(input, fluidStack)) {
+                        int consumeFromFluid = Math.min(fluidStack.getAmount(), remainingToConsume);
+                        fluidStack.shrink(consumeFromFluid);
                     }
                 }
             }
@@ -683,6 +823,88 @@ public abstract class MixinReactionChamberOverclock {
             Method method = self.getClass().getMethod("saveChanges");
             method.invoke(self);
         } catch (Exception ignored) {
+        }
+    }
+    
+    /**
+     * 把本地物品输出槽的产物转移到 ME 网络
+     */
+    @Unique
+    private void ae2oc_transferItemOutputToNetwork(IGridNode node, Object outputInv) {
+        try {
+            var grid = node.getGrid();
+            if (grid == null) return;
+            
+            IStorageService storageService = grid.getService(IStorageService.class);
+            if (storageService == null) return;
+            
+            Method getStackInSlot = outputInv.getClass().getMethod("getStackInSlot", int.class);
+            Method setItemDirect = outputInv.getClass().getMethod("setItemDirect", int.class, ItemStack.class);
+            
+            // 检查输出槽 0
+            ItemStack stack = (ItemStack) getStackInSlot.invoke(outputInv, 0);
+            if (stack.isEmpty()) return;
+            
+            AEItemKey key = AEItemKey.of(stack);
+            if (key == null) return;
+            
+            long inserted = storageService.getInventory().insert(key, stack.getCount(), Actionable.MODULATE, null);
+            
+            if (inserted >= stack.getCount()) {
+                // 全部插入成功，清空本地槽
+                setItemDirect.invoke(outputInv, 0, ItemStack.EMPTY);
+            } else if (inserted > 0) {
+                // 部分插入，减少本地槽数量
+                stack.shrink((int) inserted);
+                setItemDirect.invoke(outputInv, 0, stack);
+            }
+            
+        } catch (Exception e) {
+            // 忽略
+        }
+    }
+    
+    /**
+     * 把本地流体输出槽的流体转移到 ME 网络
+     */
+    @Unique
+    private void ae2oc_transferFluidOutputToNetwork(IGridNode node, Object fluidInv) {
+        try {
+            var grid = node.getGrid();
+            if (grid == null) return;
+            
+            IStorageService storageService = grid.getService(IStorageService.class);
+            if (storageService == null) return;
+            
+            Method getStack = fluidInv.getClass().getMethod("getStack", int.class);
+            Method setStack = fluidInv.getClass().getMethod("setStack", int.class, GenericStack.class);
+            
+            // 检查流体输出槽 0
+            Object gs = getStack.invoke(fluidInv, 0);
+            if (gs == null) return;
+            
+            Field whatField = gs.getClass().getDeclaredField("what");
+            whatField.setAccessible(true);
+            Object aeKey = whatField.get(gs);
+            
+            Field amountField = gs.getClass().getDeclaredField("amount");
+            amountField.setAccessible(true);
+            long amount = amountField.getLong(gs);
+            
+            if (!(aeKey instanceof AEFluidKey fluidKey) || amount <= 0) return;
+            
+            long inserted = storageService.getInventory().insert(fluidKey, amount, Actionable.MODULATE, null);
+            
+            if (inserted >= amount) {
+                // 全部插入成功，清空本地槽
+                setStack.invoke(fluidInv, 0, null);
+            } else if (inserted > 0) {
+                // 部分插入，减少本地槽数量
+                setStack.invoke(fluidInv, 0, new GenericStack(fluidKey, amount - inserted));
+            }
+            
+        } catch (Exception e) {
+            // 忽略
         }
     }
 }

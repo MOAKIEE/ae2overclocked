@@ -15,7 +15,13 @@
     "MixinInscriberOverclock",
     "MixinExInscriberThreadOverclock",
     "MixinCircuitCutterOverclock",
-    "MixinReactionChamberOverclock"
+    "MixinReactionChamberOverclock",
+    "MixinInscriberBlockEntity",
+    "MixinTileCircuitCutterNetwork",
+    "MixinReactionChamberEntityNetwork",
+    "MixinInscriberThreadNetwork",
+    "MixinFriendlyByteBuf",
+    "MixinUpgradeInventory"
   ],
   "client": [
     "MixinAEBaseScreen",

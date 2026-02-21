@@ -7,5 +7,6 @@
     "item.ae2_overclocked.parallel_card_8x": "并行卡 (×8)",
     "item.ae2_overclocked.parallel_card_64x": "并行卡 (×64)",
     "item.ae2_overclocked.parallel_card_1024x": "并行卡 (×1024)",
-    "item.ae2_overclocked.parallel_card_max": "并行卡 (Max)"
+    "item.ae2_overclocked.parallel_card_max": "并行卡 (Max)",
+    "message.ae2_overclocked.parallel_card_conflict": "已安装其他等级的并行卡，每台机器只允许安装一张并行卡"
 }

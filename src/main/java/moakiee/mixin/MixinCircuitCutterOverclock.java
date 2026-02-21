@@ -4,7 +4,9 @@ import appeng.api.config.Actionable;
 import appeng.api.config.PowerMultiplier;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.energy.IEnergyService;
+import appeng.api.networking.storage.IStorageService;
 import appeng.api.networking.ticking.TickRateModulation;
+import appeng.api.stacks.AEItemKey;
 import moakiee.support.OverclockCardRuntime;
 import moakiee.support.ParallelCardRuntime;
 import moakiee.support.ParallelEngine;
@@ -231,17 +233,27 @@ public abstract class MixinCircuitCutterOverclock {
         double availableEnergy = ae2oc_getAvailableEnergy(self, node);
 
         // 计算实际并行数
-        ParallelEngine.ParallelResult result = ParallelEngine.calculate(
-                parallelMultiplier, inputCount, 1, recipeOutput,
-                (stack, simulate) -> {
-                    try {
-                        return (ItemStack) insertItem.invoke(outputInv, 0, stack, simulate);
-                    } catch (Exception e) {
-                        return stack;
-                    }
-                },
-                availableEnergy, AE2OC_CUTTER_RECIPE_ENERGY
-        );
+        // 当有并行卡时，产物优先输出到ME网络，不受本地槽限制
+        ParallelEngine.ParallelResult result;
+        if (parallelMultiplier > 1) {
+            result = ParallelEngine.calculateSimple(
+                    parallelMultiplier, inputCount, 1,
+                    Integer.MAX_VALUE, // 输出空间不限制，因为会输出到ME网络
+                    availableEnergy, AE2OC_CUTTER_RECIPE_ENERGY
+            );
+        } else {
+            result = ParallelEngine.calculate(
+                    parallelMultiplier, inputCount, 1, recipeOutput,
+                    (stack, simulate) -> {
+                        try {
+                            return (ItemStack) insertItem.invoke(outputInv, 0, stack, simulate);
+                        } catch (Exception e) {
+                            return stack;
+                        }
+                    },
+                    availableEnergy, AE2OC_CUTTER_RECIPE_ENERGY
+            );
+        }
 
         int actualParallel = result.actualParallel();
         if (actualParallel < 1) return;
@@ -249,15 +261,16 @@ public abstract class MixinCircuitCutterOverclock {
         double totalEnergy = actualParallel * AE2OC_CUTTER_RECIPE_ENERGY;
         if (!ae2oc_tryConsumePower(self, node, totalEnergy)) return;
 
-        // 原子化结算
+        // 原子化结算 - runRecipe 会消耗材料并产出到本地槽
         Method runRecipe = ctx.getClass().getMethod("runRecipe", Recipe.class);
         for (int i = 0; i < actualParallel; i++) {
             runRecipe.invoke(ctx, currentRecipe);
         }
 
-        ItemStack outputStack = recipeOutput.copy();
-        outputStack.setCount(outputStack.getCount() * actualParallel);
-        insertItem.invoke(outputInv, 0, outputStack, false);
+        // 如果有并行卡，把本地输出槽的产物转移到 ME 网络
+        if (parallelMultiplier > 1) {
+            ae2oc_transferOutputToNetwork(node, outputInv);
+        }
 
         Field progressField = ae2oc_getField(self.getClass(), "progress");
         progressField.setAccessible(true);
@@ -273,6 +286,7 @@ public abstract class MixinCircuitCutterOverclock {
 
     /**
      * 计算并行数（用于仅并行模式 HEAD 阶段）
+     * 当有并行卡时，产物会优先输出到ME网络，所以输出空间不受本地槽限制
      */
     @Unique
     private int ae2oc_calculateParallel(Object self, IGridNode node, Object recipe, int cardMultiplier) {
@@ -293,10 +307,20 @@ public abstract class MixinCircuitCutterOverclock {
             recipeOutputField.setAccessible(true);
             ItemStack recipeOutput = ((ItemStack) recipeOutputField.get(recipe)).copy();
 
+            double availableEnergy = ae2oc_getAvailableEnergy(self, node);
+
+            // 当有并行卡(cardMultiplier > 1)时，产物优先输出到ME网络，使用简化计算（不受本地槽限制）
+            if (cardMultiplier > 1) {
+                return ParallelEngine.calculateSimple(
+                        cardMultiplier, inputCount, 1,
+                        Integer.MAX_VALUE, // 输出空间不限制，因为会输出到ME网络
+                        availableEnergy, AE2OC_CUTTER_RECIPE_ENERGY
+                ).actualParallel();
+            }
+
+            // 无并行卡时使用本地槽限制
             Method insertItem = outputInv.getClass().getMethod("insertItem",
                     int.class, ItemStack.class, boolean.class);
-
-            double availableEnergy = ae2oc_getAvailableEnergy(self, node);
 
             ParallelEngine.ParallelResult result = ParallelEngine.calculate(
                     cardMultiplier, inputCount, 1, recipeOutput,
@@ -317,6 +341,8 @@ public abstract class MixinCircuitCutterOverclock {
 
     /**
      * 追加 (P-1) 倍额外产出（原版已处理了 1 倍）
+     * 
+     * 如果安装了并行卡，产物优先输出到 ME 网络
      */
     @Unique
     private void ae2oc_doExtraOutputs(Object self, IGridNode node, int extraRounds) {
@@ -331,8 +357,6 @@ public abstract class MixinCircuitCutterOverclock {
             outputField.setAccessible(true);
             Object outputInv = outputField.get(self);
 
-            Method insertItem = outputInv.getClass().getMethod("insertItem",
-                    int.class, ItemStack.class, boolean.class);
             Method runRecipe = ctx.getClass().getMethod("runRecipe", Recipe.class);
             Method testRecipe = ctx.getClass().getMethod("testRecipe", Recipe.class);
 
@@ -347,19 +371,23 @@ public abstract class MixinCircuitCutterOverclock {
                 if (!ae2oc_tryConsumePower(self, node, extraEnergy)) return;
             }
 
-            // 逐轮执行（验证材料 → 消耗 → 产出）
+            // 检查是否有并行卡
+            int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
+            
+            // 逐轮执行（验证材料 → 消耗 + 产出）
             int actualExtra = 0;
             for (int i = 0; i < extraRounds; i++) {
-                // 验证材料和输出空间
+                // 验证材料
                 if (!(boolean) testRecipe.invoke(ctx, this.ae2oc_cachedRecipe)) break;
-                ItemStack singleOutput = this.ae2oc_cachedOutput.copy();
-                ItemStack remaining = (ItemStack) insertItem.invoke(outputInv, 0, singleOutput, true);
-                if (!remaining.isEmpty()) break;
-
-                // 执行
+                
+                // 执行配方（消耗材料 + 产出到本地槽）
                 runRecipe.invoke(ctx, this.ae2oc_cachedRecipe);
-                insertItem.invoke(outputInv, 0, singleOutput, false);
                 actualExtra++;
+            }
+            
+            // 如果有并行卡，把本地输出槽的产物转移到 ME 网络
+            if (parallelMultiplier > 1 && actualExtra > 0) {
+                ae2oc_transferOutputToNetwork(node, outputInv);
             }
 
             if (actualExtra > 0) {
@@ -368,6 +396,75 @@ public abstract class MixinCircuitCutterOverclock {
 
         } catch (Exception e) {
             // 忽略
+        }
+    }
+    
+    /**
+     * 把本地输出槽的产物转移到 ME 网络
+     */
+    @Unique
+    private void ae2oc_transferOutputToNetwork(IGridNode node, Object outputInv) {
+        try {
+            var grid = node.getGrid();
+            if (grid == null) return;
+            
+            IStorageService storageService = grid.getService(IStorageService.class);
+            if (storageService == null) return;
+            
+            Method getStackInSlot = outputInv.getClass().getMethod("getStackInSlot", int.class);
+            Method setItemDirect = outputInv.getClass().getMethod("setItemDirect", int.class, ItemStack.class);
+            
+            // 只检查输出槽 0
+            ItemStack stack = (ItemStack) getStackInSlot.invoke(outputInv, 0);
+            if (stack.isEmpty()) return;
+            
+            AEItemKey key = AEItemKey.of(stack);
+            if (key == null) return;
+            
+            long inserted = storageService.getInventory().insert(key, stack.getCount(), Actionable.MODULATE, null);
+            
+            if (inserted >= stack.getCount()) {
+                // 全部插入成功，清空本地槽
+                setItemDirect.invoke(outputInv, 0, ItemStack.EMPTY);
+            } else if (inserted > 0) {
+                // 部分插入，减少本地槽数量
+                stack.shrink((int) inserted);
+                setItemDirect.invoke(outputInv, 0, stack);
+            }
+            
+        } catch (Exception e) {
+            // 忽略
+        }
+    }
+    
+    /**
+     * 尝试将产物输出到 ME 网络
+     * @return 实际插入的物品数量
+     */
+    @Unique
+    private int ae2oc_tryOutputToNetwork(IGridNode node, ItemStack outputStack) {
+        try {
+            var grid = node.getGrid();
+            if (grid == null) {
+                return 0;
+            }
+            
+            IStorageService storageService = grid.getService(IStorageService.class);
+            if (storageService == null) {
+                return 0;
+            }
+            
+            AEItemKey key = AEItemKey.of(outputStack);
+            if (key == null) {
+                return 0;
+            }
+            
+            long inserted = storageService.getInventory().insert(key, outputStack.getCount(), Actionable.MODULATE, null);
+            
+            return (int) inserted;
+            
+        } catch (Exception e) {
+            return 0;
         }
     }
 

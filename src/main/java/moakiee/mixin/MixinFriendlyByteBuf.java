@@ -18,10 +18,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * 原版 writeItem() 将 count 写为 byte（-128~127），超过 127 的堆叠会溢出。
  * 本 mixin 完全接管大数量物品的序列化，将真实数量存入 tag 的 ae2ocNetCount 字段。
  * <p>
- * 注意：不修改原始 ItemStack，避免影响游戏状态。
+ * 修改：将阈值改为 64，处理所有超过原版堆叠上限的情况，避免闪烁问题。
  * 
- * 使用 remap = false 因为 official 映射环境下 Mixin 处理器无法找到映射。
- * 方法名同时提供 official (writeItem) 和 SRG (m_130055_) 以兼容两种环境。
+ * 使用 SRG 方法名：writeItem = m_130055_, readItem = m_130267_
  */
 @Mixin(value = FriendlyByteBuf.class, remap = false)
 public class MixinFriendlyByteBuf {
@@ -41,11 +40,11 @@ public class MixinFriendlyByteBuf {
     }
 
     /**
-     * writeItem: 完全接管 count > 127 的物品序列化。
-     * Vanilla 1.20.1 格式: boolean(非空) + VarInt(itemId) + byte(count) + NBT(shareTag)
+     * writeItem: 完全接管 count > 64 的物品序列化。
+     * SRG 名: m_130055_
      */
     @Inject(
-            method = "writeItem",
+            method = {"writeItem", "m_130055_"},
             at = @At("HEAD"),
             cancellable = true,
             require = 0
@@ -57,11 +56,11 @@ public class MixinFriendlyByteBuf {
             ae2oc_loggedOnce = true;
         }
 
-        if (stack.isEmpty() || stack.getCount() <= 127) {
+        if (stack.isEmpty() || stack.getCount() <= 64) {
             return; // 正常范围，让原版处理
         }
 
-        // count > 127: 完全接管序列化
+        // count > 64: 完全接管序列化，避免任何潜在的截断问题
         FriendlyByteBuf buf = (FriendlyByteBuf) (Object) this;
 
         AE2OC_LOGGER.info("[AE2OC] writeItem intercepted: {} x{}", stack.getItem(), stack.getCount());
@@ -93,9 +92,10 @@ public class MixinFriendlyByteBuf {
 
     /**
      * readItem RETURN: 检查 tag 中的 ae2ocNetCount 并恢复真实数量。
+     * SRG 名: m_130267_
      */
     @Inject(
-            method = "readItem",
+            method = {"readItem", "m_130267_"},
             at = @At("RETURN"),
             require = 0
     )

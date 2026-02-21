@@ -7,5 +7,6 @@
     "item.ae2_overclocked.parallel_card_8x": "Parallel Card (x8)",
     "item.ae2_overclocked.parallel_card_64x": "Parallel Card (x64)",
     "item.ae2_overclocked.parallel_card_1024x": "Parallel Card (x1024)",
-    "item.ae2_overclocked.parallel_card_max": "Parallel Card (Max)"
+    "item.ae2_overclocked.parallel_card_max": "Parallel Card (Max)",
+    "message.ae2_overclocked.parallel_card_conflict": "Another parallel card is already installed. Only one parallel card per machine is allowed."
 }
