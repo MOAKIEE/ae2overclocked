@@ -36,9 +36,8 @@ public class ModUpgrades {
             }
 
             // ── AdvancedAE（可选）─────────────────────
-            if (ModList.get().isLoaded("advanced_ae") || ModList.get().isLoaded("advancedae")) {
+            if (ModList.get().isLoaded("advanced_ae")) {
                 registerForMachineId("advanced_ae:reaction_chamber");
-                registerForMachineId("advancedae:reaction_chamber");
             }
         });
     }
@@ -71,7 +70,7 @@ public class ModUpgrades {
         // 堆叠卡（限 1 张）
         Upgrades.add(ModItems.CAPACITY_CARD.get(),   machine, MAX_CARDS);
         // 超级能源卡（限 1 张）
-        Upgrades.add(ModItems.ENERGY_CARD.get(),     machine, MAX_CARDS);
+        Upgrades.add(ModItems.SUPER_ENERGY_CARD.get(),     machine, MAX_CARDS);
         // 超速卡（限 1 张）
         Upgrades.add(ModItems.OVERCLOCK_CARD.get(),  machine, MAX_CARDS);
     }

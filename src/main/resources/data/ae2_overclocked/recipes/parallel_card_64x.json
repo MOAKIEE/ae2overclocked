@@ -1,0 +1,70 @@
+{
+  "type": "forge:conditional",
+  "recipes": [
+    {
+      "conditions": [
+        {
+          "type": "forge:mod_loaded",
+          "modid": "advanced_ae"
+        }
+      ],
+      "recipe": {
+        "type": "minecraft:crafting_shaped",
+        "pattern": [
+          "ACA",
+          "BDB",
+          "ABA"
+        ],
+        "key": {
+          "A": {
+            "item": "advanced_ae:shattered_singularity"
+          },
+          "B": {
+            "item": "ae2_overclocked:parallel_card_8x"
+          },
+          "C": {
+            "item": "advanced_ae:quantum_processor"
+          },
+          "D": {
+            "item": "minecraft:nether_star"
+          }
+        },
+        "result": {
+          "item": "ae2_overclocked:parallel_card_64x"
+        }
+      }
+    },
+    {
+      "conditions": [
+        {
+          "type": "forge:true"
+        }
+      ],
+      "recipe": {
+        "type": "minecraft:crafting_shaped",
+        "pattern": [
+          "ACA",
+          "BDB",
+          "ABA"
+        ],
+        "key": {
+          "A": {
+            "item": "ae2:singularity"
+          },
+          "B": {
+            "item": "ae2_overclocked:parallel_card_8x"
+          },
+          "C": {
+            "item": "ae2:calculation_processor"
+          },
+          "D": {
+            "item": "minecraft:nether_star"
+          }
+        },
+        "result": {
+          "item": "ae2_overclocked:parallel_card_64x"
+        }
+      }
+    }
+  ]
+}

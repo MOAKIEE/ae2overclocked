@@ -64,7 +64,7 @@ public final class EnergyCardRuntime {
 
         // 直接实现 IUpgradeableObject 接口
         if (target instanceof IUpgradeableObject upgradeable) {
-            return upgradeable.getUpgrades().getInstalledUpgrades(ModItems.ENERGY_CARD.get());
+            return upgradeable.getUpgrades().getInstalledUpgrades(ModItems.SUPER_ENERGY_CARD.get());
         }
 
         // 尝试通过 getUpgrades() 方法获取
@@ -93,7 +93,7 @@ public final class EnergyCardRuntime {
     }
 
     /**
-     * 通过反射调用 getUpgrades().getInstalledUpgrades(ENERGY_CARD)
+     * 通过反射调用 getUpgrades().getInstalledUpgrades(SUPER_ENERGY_CARD)
      */
     private static Integer tryGetInstalledFromGetUpgrades(Object target) {
         try {
@@ -106,7 +106,7 @@ public final class EnergyCardRuntime {
                     "getInstalledUpgrades",
                     net.minecraft.world.level.ItemLike.class
             );
-            Object result = getInstalled.invoke(upgrades, ModItems.ENERGY_CARD.get());
+            Object result = getInstalled.invoke(upgrades, ModItems.SUPER_ENERGY_CARD.get());
             if (result instanceof Integer i) {
                 return i;
             }

@@ -25,8 +25,8 @@ public class ModItems {
             ITEMS.register("capacity_card", CapacityCard::new);
 
     // ── 超级能源卡（单一等级）─────────────────────────────────────
-    public static final RegistryObject<EnergyCard> ENERGY_CARD =
-            ITEMS.register("energy_card", EnergyCard::new);
+    public static final RegistryObject<EnergyCard> SUPER_ENERGY_CARD =
+            ITEMS.register("super_energy_card", EnergyCard::new);
 
     // ── 超速卡（单一等级）─────────────────────────────────────────
     public static final RegistryObject<OverclockCard> OVERCLOCK_CARD =
@@ -65,7 +65,7 @@ public class ModItems {
                         output.accept(PARALLEL_CARD_1024X.get());
                         output.accept(PARALLEL_CARD_MAX.get());
                         output.accept(CAPACITY_CARD.get());
-                        output.accept(ENERGY_CARD.get());
+                        output.accept(SUPER_ENERGY_CARD.get());
                         output.accept(OVERCLOCK_CARD.get());
                     })
                     .build());

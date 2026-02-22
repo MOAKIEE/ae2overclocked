@@ -1,12 +1,16 @@
 {
     "itemGroup.ae2_overclocked": "AE2 Overclocked",
     "item.ae2_overclocked.capacity_card": "Capacity Card",
-    "item.ae2_overclocked.energy_card": "Super Energy Card",
+    "item.ae2_overclocked.super_energy_card": "Super Energy Card",
     "item.ae2_overclocked.overclock_card": "Overclock Card",
     "item.ae2_overclocked.parallel_card": "Parallel Card (x2)",
     "item.ae2_overclocked.parallel_card_8x": "Parallel Card (x8)",
     "item.ae2_overclocked.parallel_card_64x": "Parallel Card (x64)",
     "item.ae2_overclocked.parallel_card_1024x": "Parallel Card (x1024)",
     "item.ae2_overclocked.parallel_card_max": "Parallel Card (Max)",
+    "tooltip.ae2_overclocked.capacity_card": "Increases internal slot stack limits for processing machines.",
+    "tooltip.ae2_overclocked.super_energy_card": "Increases the machine's internal energy buffer capacity.",
+    "tooltip.ae2_overclocked.overclock_card": "Compresses processing time to 1 tick.",
+    "tooltip.ae2_overclocked.parallel_card": "Processes recipes in parallel and outputs products directly to the ME network.",
     "message.ae2_overclocked.parallel_card_conflict": "Another parallel card is already installed. Only one parallel card per machine is allowed."
 }
