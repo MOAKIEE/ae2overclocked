@@ -1,8 +1,14 @@
 package moakiee;
 
 import com.mojang.logging.LogUtils;
+import moakiee.support.MachineBreakProtection;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.config.ModConfig;
@@ -37,5 +43,36 @@ public class Ae2Overclocked {
 
     private void commonSetup(final FMLCommonSetupEvent event) {
         ModUpgrades.register(event);
+    }
+
+    @SubscribeEvent
+    public void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (event == null || event.getPlayer() == null) {
+            return;
+        }
+
+        if (event.getPlayer().isShiftKeyDown()) {
+            return;
+        }
+
+        BlockEntity blockEntity = event.getLevel().getBlockEntity(event.getPos());
+        if (!MachineBreakProtection.isProtectedMachine(blockEntity)) {
+            return;
+        }
+
+        int totalItems = MachineBreakProtection.getInternalItemTotalCount(blockEntity);
+        int threshold = Ae2OcConfig.getBreakProtectionItemThreshold();
+        if (totalItems <= threshold) {
+            return;
+        }
+
+        event.setCanceled(true);
+
+        if (event.getPlayer() instanceof ServerPlayer serverPlayer) {
+            serverPlayer.displayClientMessage(
+                    Component.translatable("message.ae2_overclocked.break_block_too_many_items", threshold),
+                    true
+            );
+        }
     }
 }

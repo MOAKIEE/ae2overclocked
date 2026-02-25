@@ -20,5 +20,10 @@
     "config.ae2_overclocked.cards.superEnergyCardBufferFE": "Super Energy Card Buffer (FE)",
     "config.ae2_overclocked.cards.superEnergyCardBufferFE.tooltip": "Internal energy buffer limit in FE when Super Energy Card is installed. (Internally converted with 1 AE = 2 FE)",
     "config.ae2_overclocked.cards.parallelCardMaxMultiplier": "Parallel Card Max Multiplier",
-    "config.ae2_overclocked.cards.parallelCardMaxMultiplier.tooltip": "Parallel multiplier used by Parallel Card Max."
+    "config.ae2_overclocked.cards.parallelCardMaxMultiplier.tooltip": "Parallel multiplier used by Parallel Card Max.",
+    "config.ae2_overclocked.protection": "Protection Settings",
+    "config.ae2_overclocked.protection.tooltip": "Safety options to prevent accidental machine break.",
+    "config.ae2_overclocked.protection.breakProtectionItemThreshold": "Break Protection Item Threshold",
+    "config.ae2_overclocked.protection.breakProtectionItemThreshold.tooltip": "If total internal items are above this value, you must hold Shift to break the machine.",
+    "message.ae2_overclocked.break_block_too_many_items": "Too many items inside the machine (> %s). Hold Shift while breaking to force removal."
 }

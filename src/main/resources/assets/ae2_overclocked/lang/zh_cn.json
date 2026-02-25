@@ -20,5 +20,10 @@
     "config.ae2_overclocked.cards.superEnergyCardBufferFE": "超级能源卡缓存上限 (FE)",
     "config.ae2_overclocked.cards.superEnergyCardBufferFE.tooltip": "安装超级能源卡后，机器内部缓存上限（单位 FE，内部按 1 AE = 2 FE 换算）。",
     "config.ae2_overclocked.cards.parallelCardMaxMultiplier": "并行卡 Max 倍率",
-    "config.ae2_overclocked.cards.parallelCardMaxMultiplier.tooltip": "并行卡 Max 实际使用的并行倍率。"
+    "config.ae2_overclocked.cards.parallelCardMaxMultiplier.tooltip": "并行卡 Max 实际使用的并行倍率。",
+    "config.ae2_overclocked.protection": "防护配置",
+    "config.ae2_overclocked.protection.tooltip": "用于防止误拆机器的安全选项。",
+    "config.ae2_overclocked.protection.breakProtectionItemThreshold": "防误拆物品阈值",
+    "config.ae2_overclocked.protection.breakProtectionItemThreshold.tooltip": "当机器内部物品总数超过该值时，必须按住 Shift 才能拆除机器。",
+    "message.ae2_overclocked.break_block_too_many_items": "机器内物品过多（>%s），如要拆除请按住 Shift 再拆除。"
 }

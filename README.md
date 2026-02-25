@@ -43,6 +43,10 @@
 	- 说明：并行卡 Max 的并行倍率
 	- 默认：`2147483647`
 
+- `protection.breakProtectionItemThreshold`
+	- 说明：机器防误拆阈值；当机器内部物品总数超过该值时，必须按住 `Shift` 才能拆除
+	- 默认：`1000`
+
 ### 示例
 
 ```toml
@@ -50,4 +54,7 @@
 capacityCardSlotLimit = 2147483647
 superEnergyCardBufferFE = 2000000000.0
 parallelCardMaxMultiplier = 2147483647
+
+[protection]
+breakProtectionItemThreshold = 1000
 ```
