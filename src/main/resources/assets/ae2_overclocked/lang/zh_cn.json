@@ -12,5 +12,13 @@
     "tooltip.ae2_overclocked.super_energy_card": "提升机器内部能量缓存上限。",
     "tooltip.ae2_overclocked.overclock_card": "将处理时间压缩至 1 Tick。",
     "tooltip.ae2_overclocked.parallel_card": "并行处理配方，并将产物直接输出至 ME 网络。",
-    "message.ae2_overclocked.parallel_card_conflict": "已安装其他等级的并行卡，每台机器只允许安装一张并行卡"
+    "message.ae2_overclocked.parallel_card_conflict": "已安装其他等级的并行卡，每台机器只允许安装一张并行卡",
+    "config.ae2_overclocked.cards": "卡片配置",
+    "config.ae2_overclocked.cards.tooltip": "堆叠卡 / 超级能源卡 / 并行Max 的平衡参数。",
+    "config.ae2_overclocked.cards.capacityCardSlotLimit": "堆叠卡槽位上限",
+    "config.ae2_overclocked.cards.capacityCardSlotLimit.tooltip": "安装堆叠卡后，机器单槽可容纳的最大堆叠数。",
+    "config.ae2_overclocked.cards.superEnergyCardBufferFE": "超级能源卡缓存上限 (FE)",
+    "config.ae2_overclocked.cards.superEnergyCardBufferFE.tooltip": "安装超级能源卡后，机器内部缓存上限（单位 FE，内部按 1 AE = 2 FE 换算）。",
+    "config.ae2_overclocked.cards.parallelCardMaxMultiplier": "并行卡 Max 倍率",
+    "config.ae2_overclocked.cards.parallelCardMaxMultiplier.tooltip": "并行卡 Max 实际使用的并行倍率。"
 }

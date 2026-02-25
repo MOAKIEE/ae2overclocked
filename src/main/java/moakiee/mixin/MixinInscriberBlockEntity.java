@@ -46,7 +46,7 @@ public abstract class MixinInscriberBlockEntity {
         var inv = getInternalInventory();
         for (int i = 0; i < inv.size(); i++) {
             ItemStack stack = inv.getStackInSlot(i);
-            if (!stack.isEmpty() && stack.getCount() > 127) {
+            if (!stack.isEmpty() && stack.getCount() > 64) {
                 // 将真实数量存入临时 tag
                 CompoundTag tag = stack.getOrCreateTag();
                 tag.putInt(AE2OC_NET_COUNT, stack.getCount());

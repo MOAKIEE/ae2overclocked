@@ -40,7 +40,7 @@ public abstract class MixinInscriberThreadNetwork {
         AE2OC_LOGGER.info("[AE2OC] InscriberThread.writeToStream HEAD called");
         for (int i = 0; i < inv.size(); i++) {
             ItemStack stack = inv.getStackInSlot(i);
-            if (!stack.isEmpty() && stack.getCount() > 127) {
+            if (!stack.isEmpty() && stack.getCount() > 64) {
                 CompoundTag tag = stack.getOrCreateTag();
                 tag.putInt(AE2OC_NET_COUNT, stack.getCount());
                 AE2OC_LOGGER.info("[AE2OC] InscriberThread.writeToStream slot={} count={}", i, stack.getCount());

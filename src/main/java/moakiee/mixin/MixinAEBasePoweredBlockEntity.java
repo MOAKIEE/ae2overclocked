@@ -2,6 +2,7 @@ package moakiee.mixin;
 
 import appeng.api.config.Actionable;
 import appeng.me.energy.StoredEnergyAmount;
+import moakiee.Ae2OcConfig;
 import moakiee.support.EnergyCardRuntime;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -36,12 +37,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class MixinAEBasePoweredBlockEntity {
 
     /**
-     * 扩展后的最大能量存储（单位：AE）
-     * 设为 10 亿 AE，转换到 FE 后约 20 亿，不会溢出 int
-     */
-    private static final double AE2OC_MAX_POWER = 1_000_000_000.0;
-
-    /**
      * 缓存原版的最大能量值，用于拔卡时恢复
      */
     @Unique
@@ -65,7 +60,7 @@ public class MixinAEBasePoweredBlockEntity {
         ae2oc_updateStoredMaximum();
         
         if (EnergyCardRuntime.hasEnergyCard(this)) {
-            cir.setReturnValue(AE2OC_MAX_POWER);
+            cir.setReturnValue(Ae2OcConfig.getSuperEnergyBufferAE());
         }
     }
 
@@ -84,22 +79,23 @@ public class MixinAEBasePoweredBlockEntity {
     @Unique
     private void ae2oc_updateStoredMaximum() {
         double currentMax = stored.getMaximum();
+        double configuredMaxPower = Ae2OcConfig.getSuperEnergyBufferAE();
         
         if (EnergyCardRuntime.hasEnergyCard(this)) {
             // 安装了能源卡
             // 保存原版上限（只在第一次保存）
-            if (ae2oc$originalMaxPower < 0 || currentMax < AE2OC_MAX_POWER) {
+            if (ae2oc$originalMaxPower < 0 || currentMax < configuredMaxPower) {
                 ae2oc$originalMaxPower = currentMax;
             }
             
             // 更新 stored 的实际 maximum，这样 stored.insert() 才能正常充电
-            if (currentMax < AE2OC_MAX_POWER) {
-                stored.setMaximum(AE2OC_MAX_POWER);
+            if (currentMax < configuredMaxPower) {
+                stored.setMaximum(configuredMaxPower);
             }
         } else {
             // 没有能源卡
             // 如果之前有扩展过，恢复到原版上限
-            if (currentMax >= AE2OC_MAX_POWER && ae2oc$originalMaxPower > 0) {
+            if (currentMax > ae2oc$originalMaxPower && ae2oc$originalMaxPower > 0) {
                 stored.setMaximum(ae2oc$originalMaxPower);
                 // stored.setMaximum 会自动截断超额电量
             }
@@ -117,11 +113,12 @@ public class MixinAEBasePoweredBlockEntity {
     @Inject(method = "getInternalCurrentPower", at = @At("RETURN"), cancellable = true)
     private void ae2oc_getInternalCurrentPower(CallbackInfoReturnable<Double> cir) {
         double currentPower = cir.getReturnValue();
+        double configuredMaxPower = Ae2OcConfig.getSuperEnergyBufferAE();
         
         // 计算实际的最大能量上限
         double maxPower;
         if (EnergyCardRuntime.hasEnergyCard(this)) {
-            maxPower = AE2OC_MAX_POWER;
+            maxPower = configuredMaxPower;
         } else {
             // 没有能源卡时，使用原版上限
             maxPower = ae2oc$originalMaxPower > 0 ? ae2oc$originalMaxPower : stored.getMaximum();

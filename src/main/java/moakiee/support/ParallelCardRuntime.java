@@ -1,6 +1,7 @@
 package moakiee.support;
 
 import appeng.api.upgrades.IUpgradeableObject;
+import moakiee.Ae2OcConfig;
 import moakiee.ModItems;
 import moakiee.item.ParallelCard;
 import net.minecraft.world.item.ItemStack;
@@ -100,6 +101,9 @@ public final class ParallelCardRuntime {
         for (var cardSupplier : PARALLEL_CARDS_DESC) {
             ItemLike card = cardSupplier.get();
             if (upgrades.getInstalledUpgrades(card) > 0 && card instanceof ParallelCard pc) {
+                if (card == ModItems.PARALLEL_CARD_MAX.get()) {
+                    return Ae2OcConfig.getParallelCardMaxMultiplier();
+                }
                 return pc.getMultiplier();
             }
         }
@@ -124,6 +128,9 @@ public final class ParallelCardRuntime {
                 ItemLike card = cardSupplier.get();
                 Object result = getInstalled.invoke(upgradesInv, card);
                 if (result instanceof Integer count && count > 0 && card instanceof ParallelCard pc) {
+                    if (card == ModItems.PARALLEL_CARD_MAX.get()) {
+                        return Ae2OcConfig.getParallelCardMaxMultiplier();
+                    }
                     return pc.getMultiplier();
                 }
             }

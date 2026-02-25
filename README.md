@@ -22,3 +22,32 @@
 - 必选依赖：AE2 (`ae2`)
 - 可选兼容：ExtendedAE (`expatternprovider`)
 - 可选兼容：AdvancedAE (`advanced_ae`)
+
+## 配置文件
+
+- 配置文件类型：Forge Common Config
+- 文件位置：`config/ae2_overclocked-common.toml`
+- 首次启动游戏后会自动生成；未手动修改时使用默认值（即当前原版模组行为）
+
+### 可配置项
+
+- `cards.capacityCardSlotLimit`
+	- 说明：堆叠卡生效时的槽位上限
+	- 默认：`2147483647`
+
+- `cards.superEnergyCardBufferFE`
+	- 说明：超级能源卡生效时的能量缓存上限（单位 `FE`）
+	- 默认：`2000000000.0`（内部按 `1 AE = 2 FE` 换算）
+
+- `cards.parallelCardMaxMultiplier`
+	- 说明：并行卡 Max 的并行倍率
+	- 默认：`2147483647`
+
+### 示例
+
+```toml
+[cards]
+capacityCardSlotLimit = 2147483647
+superEnergyCardBufferFE = 2000000000.0
+parallelCardMaxMultiplier = 2147483647
+```

@@ -42,7 +42,7 @@ public abstract class MixinTileCircuitCutterNetwork {
         var inv = getInternalInventory();
         for (int i = 0; i < inv.size(); i++) {
             ItemStack stack = inv.getStackInSlot(i);
-            if (!stack.isEmpty() && stack.getCount() > 127) {
+            if (!stack.isEmpty() && stack.getCount() > 64) {
                 CompoundTag tag = stack.getOrCreateTag();
                 tag.putInt(AE2OC_NET_COUNT, stack.getCount());
                 AE2OC_LOGGER.info("[AE2OC] TileCircuitCutter.writeToStream slot={} count={}", i, stack.getCount());

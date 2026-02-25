@@ -5,6 +5,7 @@ import appeng.util.inv.AppEngInternalInventory;
 import appeng.util.inv.InternalInventoryHost;
 import com.google.common.base.Preconditions;
 import com.mojang.logging.LogUtils;
+import moakiee.Ae2OcConfig;
 import moakiee.ModItems;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -87,7 +88,7 @@ public class MixinAppEngInternalInventory {
         // 只有装了堆叠卡时才允许超过 64
         // 拔掉堆叠卡后返回 64，阻止继续放入（但已有物品不会被删除）
         if (getInstalledCapacityCards(host, 0) > 0) {
-            cir.setReturnValue(Integer.MAX_VALUE);
+            cir.setReturnValue(Ae2OcConfig.getCapacityCardSlotLimit());
         }
         // 不干预时让原版返回 64
     }

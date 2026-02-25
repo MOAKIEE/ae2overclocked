@@ -12,5 +12,13 @@
     "tooltip.ae2_overclocked.super_energy_card": "Increases the machine's internal energy buffer capacity.",
     "tooltip.ae2_overclocked.overclock_card": "Compresses processing time to 1 tick.",
     "tooltip.ae2_overclocked.parallel_card": "Processes recipes in parallel and outputs products directly to the ME network.",
-    "message.ae2_overclocked.parallel_card_conflict": "Another parallel card is already installed. Only one parallel card per machine is allowed."
+    "message.ae2_overclocked.parallel_card_conflict": "Another parallel card is already installed. Only one parallel card per machine is allowed.",
+    "config.ae2_overclocked.cards": "Card Settings",
+    "config.ae2_overclocked.cards.tooltip": "Balance settings for Capacity / Super Energy / Parallel Max cards.",
+    "config.ae2_overclocked.cards.capacityCardSlotLimit": "Capacity Card Slot Limit",
+    "config.ae2_overclocked.cards.capacityCardSlotLimit.tooltip": "Maximum stack size per machine slot when Capacity Card is installed.",
+    "config.ae2_overclocked.cards.superEnergyCardBufferFE": "Super Energy Card Buffer (FE)",
+    "config.ae2_overclocked.cards.superEnergyCardBufferFE.tooltip": "Internal energy buffer limit in FE when Super Energy Card is installed. (Internally converted with 1 AE = 2 FE)",
+    "config.ae2_overclocked.cards.parallelCardMaxMultiplier": "Parallel Card Max Multiplier",
+    "config.ae2_overclocked.cards.parallelCardMaxMultiplier.tooltip": "Parallel multiplier used by Parallel Card Max."
 }
