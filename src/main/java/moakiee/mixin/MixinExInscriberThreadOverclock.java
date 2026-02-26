@@ -275,8 +275,11 @@ public abstract class MixinExInscriberThreadOverclock {
             AEItemKey key = AEItemKey.of(stack);
             if (key == null) return;
             
-            long inserted = storageService.getInventory().insert(key, stack.getCount(), Actionable.MODULATE, null);
-            
+            // 获取 IActionSource 用于 ME 网络操作（修复 AE2 Additions 超级存储元件兼容性问题）
+            appeng.api.networking.security.IActionSource actionSource = ae2oc_getActionSource(host, mainNode);
+
+            long inserted = storageService.getInventory().insert(key, stack.getCount(), Actionable.MODULATE, actionSource);
+
             if (inserted > 0) {
                 // 从本地槽取出已转移的数量
                 extractItem.invoke(sideHandler, 1, (int) inserted, false);
@@ -285,6 +288,29 @@ public abstract class MixinExInscriberThreadOverclock {
         } catch (Exception e) {
             // 忽略
         }
+    }
+
+    /**
+     * 获取有效的 IActionSource 用于 ME 网络操作
+     * 修复 AE2 Additions 超级存储元件因 null 参数导致的兼容性问题
+     */
+    @Unique
+    private appeng.api.networking.security.IActionSource ae2oc_getActionSource(Object host, Object mainNode) {
+        try {
+            if (mainNode != null) {
+                Method getNode = mainNode.getClass().getMethod("getNode");
+                Object node = getNode.invoke(mainNode);
+                if (node instanceof appeng.api.networking.IGridNode gridNode) {
+                    Object owner = gridNode.getOwner();
+                    if (owner instanceof appeng.api.networking.security.IActionHost actionHost) {
+                        return appeng.api.networking.security.IActionSource.ofMachine(actionHost);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // 忽略
+        }
+        return appeng.api.networking.security.IActionSource.empty();
     }
 
     @Unique
