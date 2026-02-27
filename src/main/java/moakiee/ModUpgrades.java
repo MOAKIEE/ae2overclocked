@@ -39,6 +39,14 @@ public class ModUpgrades {
             if (ModList.get().isLoaded("advanced_ae")) {
                 registerForMachineId("advanced_ae:reaction_chamber");
             }
+
+            // ── AE2 Crystal Science（可选）─────────────────────
+            if (ModList.get().isLoaded("ae2cs")) {
+                registerForMachineId("ae2cs:circuit_etcher");
+                registerForMachineId("ae2cs:crystal_pulverizer");
+                registerForMachineId("ae2cs:crystal_aggregator");
+                registerForMachineId("ae2cs:entropy_variation_reaction_chamber");
+            }
         });
     }
 

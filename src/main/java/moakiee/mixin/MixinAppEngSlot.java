@@ -17,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * 本 mixin 在 slot limit > 64 时，直接返回 slot limit。
  */
 @Mixin(value = AppEngSlot.class, remap = false)
-public class MixinAppEngSlot {
+public abstract class MixinAppEngSlot {
 
     // AE2 自有字段，不受 SRG 映射影响
     @Shadow
