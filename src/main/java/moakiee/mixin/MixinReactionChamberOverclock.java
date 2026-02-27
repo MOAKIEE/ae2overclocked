@@ -667,80 +667,9 @@ public abstract class MixinReactionChamberOverclock {
     @Unique
     private void ae2oc_consumeBatchWithRecipe(Object recipe, Object inputInv, Object fluidInv, int batchCount) {
         if (batchCount <= 0) return;
-        
         try {
-            Method getValidInputs = recipe.getClass().getMethod("getValidInputs");
-            @SuppressWarnings("unchecked")
-            java.util.List<Object> validInputs = (java.util.List<Object>) getValidInputs.invoke(recipe);
-
-            // 获取流体槽内容
-            Method getStack = fluidInv.getClass().getMethod("getStack", int.class);
-            Object gs = getStack.invoke(fluidInv, 1);
-            FluidStack fluidStack = null;
-            if (gs != null) {
-                Field whatField = gs.getClass().getDeclaredField("what");
-                whatField.setAccessible(true);
-                Object aeKey = whatField.get(gs);
-                if (aeKey instanceof AEFluidKey key) {
-                    Field amountField = gs.getClass().getDeclaredField("amount");
-                    amountField.setAccessible(true);
-                    long amount = amountField.getLong(gs);
-                    fluidStack = key.toStack((int) amount);
-                }
-            }
-
-            Method getSize = inputInv.getClass().getMethod("size");
-            int invSize = (int) getSize.invoke(inputInv);
-
-            // 处理每种输入要求
-            for (Object input : validInputs) {
-                // 获取单份消耗量
-                Method getAmount = input.getClass().getMethod("getAmount");
-                int singleConsumeAmount = (int) getAmount.invoke(input);
-                if (singleConsumeAmount <= 0) singleConsumeAmount = 1;
-                
-                // 计算总消耗量
-                int totalConsumeAmount = singleConsumeAmount * batchCount;
-                int remainingToConsume = totalConsumeAmount;
-                
-                // 从物品槽消耗
-                for (int x = 0; x < invSize && remainingToConsume > 0; x++) {
-                    Method getStackInSlot = inputInv.getClass().getMethod("getStackInSlot", int.class);
-                    ItemStack stack = (ItemStack) getStackInSlot.invoke(inputInv, x);
-                    
-                    if (stack.isEmpty()) continue;
-
-                    Method checkType = input.getClass().getMethod("checkType", Object.class);
-                    if ((boolean) checkType.invoke(input, stack)) {
-                        int consumeFromSlot = Math.min(stack.getCount(), remainingToConsume);
-                        stack.shrink(consumeFromSlot);
-                        remainingToConsume -= consumeFromSlot;
-
-                        Method setItemDirect = inputInv.getClass().getMethod("setItemDirect",
-                                int.class, ItemStack.class);
-                        setItemDirect.invoke(inputInv, x, stack);
-                    }
-                }
-                
-                // 从流体槽消耗（如果还有剩余）
-                if (fluidStack != null && remainingToConsume > 0) {
-                    Method checkType = input.getClass().getMethod("checkType", Object.class);
-                    if ((boolean) checkType.invoke(input, fluidStack)) {
-                        int consumeFromFluid = Math.min(fluidStack.getAmount(), remainingToConsume);
-                        fluidStack.shrink(consumeFromFluid);
-                    }
-                }
-            }
-
-            // 更新流体槽
-            if (fluidStack != null) {
-                Method setStack = fluidInv.getClass().getMethod("setStack", int.class, GenericStack.class);
-                if (fluidStack.isEmpty()) {
-                    setStack.invoke(fluidInv, 1, null);
-                } else {
-                    setStack.invoke(fluidInv, 1, new GenericStack(
-                            Objects.requireNonNull(AEFluidKey.of(fluidStack)), fluidStack.getAmount()));
-                }
+            for (int i = 0; i < batchCount; i++) {
+                ae2oc_consumeOnceWithRecipe(recipe, inputInv, fluidInv);
             }
         } catch (Exception ignored) {
         }
