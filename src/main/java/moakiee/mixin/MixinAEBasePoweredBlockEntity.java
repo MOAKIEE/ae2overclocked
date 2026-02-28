@@ -13,38 +13,15 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * 超级能源卡功能注入：当机器装有能源卡时，将能量缓存上限提升到超大值。
- *
- * 目标机器（均继承自 AEBasePoweredBlockEntity）：
- * - AE2 压印器 (InscriberBlockEntity)
- * - ExtendedAE 扩展压印器 (TileExInscriber)
- * - ExtendedAE 电路切片器 (TileCircuitCutter)
- * - AdvancedAE 反应仓 (ReactionChamberEntity)
- *
- * 实现原理：
- * - 拦截 getInternalMaxPower() 方法
- * - 检测机器升级槽是否安装了能源卡
- * - 如果安装，返回 10 亿 AE（约 20 亿 FE，不会溢出 int）
- * - 同时更新 stored.maximum 以确保充电逻辑正常工作
- *
- * 安全说明：
- * - getAEMaxPower() 调用 getInternalMaxPower()，自动继承修改
- * - ForgeEnergyAdapter 使用 getAEMaxPower()，FE 上限也会自动扩展
- * - 转换比例默认 1 AE = 2 FE，10 亿 AE = 20 亿 FE < Integer.MAX_VALUE
- * - 拔卡时多余电量直接截断（void），防止刷电量 Bug
+ * 超级能源卡功能注入：装有能源卡时，将能量缓存上限提升到超大值。
+ * 拦截 getInternalMaxPower()，同时更新 stored.maximum。
  */
 @Mixin(targets = "appeng.blockentity.powersink.AEBasePoweredBlockEntity", remap = false)
 public class MixinAEBasePoweredBlockEntity {
 
-    /**
-     * 缓存原版的最大能量值，用于拔卡时恢复
-     */
     @Unique
     private double ae2oc$originalMaxPower = -1;
 
-    /**
-     * Shadow 访问原版的能量存储对象
-     */
     @Shadow
     @Final
     private StoredEnergyAmount stored;

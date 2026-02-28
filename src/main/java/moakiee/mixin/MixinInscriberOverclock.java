@@ -114,8 +114,8 @@ public abstract class MixinInscriberOverclock {
             ae2oc_markForUpdate(self);
             cir.setReturnValue(TickRateModulation.URGENT);
         } else {
-            // === 仅并行模式（无超频卡）：正常推进度条，完工时多倍结算 ===
-            ae2oc_normalTickWithParallel(self, node, recipe, actualParallel, cir);
+            // 仅并行模式：让原版正常推进度条， smash 触发时用 pendingParallel 多倍结算
+            this.ae2oc_pendingParallel = actualParallel;
         }
     }
 
@@ -210,42 +210,8 @@ public abstract class MixinInscriberOverclock {
     }
 
     /**
-     * 仅并行（无超频卡）模式：正常推进度条
-     * 进度完成时执行多倍结算
-     */
-    @Unique
-    private void ae2oc_normalTickWithParallel(InscriberBlockEntity self, IGridNode node,
-                                               InscriberRecipe recipe, int parallel,
-                                               CallbackInfoReturnable<TickRateModulation> cir) {
-        // 模仿原版进度推进逻辑，但在进度完成时执行多倍结算
-        // 不取消原版逻辑，让原版正常推进度条
-        // 但我们需要在 smash 触发时注入多倍结算
-
-        // 缓存并行数，在 smash 动画结算时使用
-        this.ae2oc_pendingParallel = parallel;
-
-        // 不 cancel，让原版正常推进度条
-        // 当原版触发 smash=true → finalStep 到 8 时，
-        // 我们的 smash 处理器会用 pendingParallel 执行多倍结算
-
-        // 但是：原版在 finalStep==8 时只结算 1 次
-        // 所以我们需要拦截 —— 确保我们的 HEAD 注入在 smash 阶段能接管
-
-        // 实际上，因为是 HEAD 注入，只要 smash=true 且 pendingParallel>1，
-        // ae2oc_handleSmashAnimation 就会接管多倍结算
-        // 原版的 smash 处理会被跳过（cir.cancel）
-
-        // 不做任何事，让原版走自己的进度条
-        // 当 smash 被原版触发时，我们的 HEAD 会拦截
-    }
-
-    /**
-     * 原子化执行多倍配方结算
-     * 
-     * 在同一方法内完成：扣材料 → 出产物
-     * （能量已在触发 smash 前预扣）
-     * 
-     * 产物先输出到本地槽，再转移到 ME 网络（如果有并行卡）
+     * 原子化执行多倍配方结算。
+     * 产物先输出到本地槽，再转移到 ME 网络。
      */
     @Unique
     private void ae2oc_finishCraftParallel(InscriberBlockEntity self, int parallel) {
@@ -314,7 +280,7 @@ public abstract class MixinInscriberOverclock {
             }
 
         } catch (Exception e) {
-            e.printStackTrace();
+            // ignored
         }
 
         ae2oc_saveChanges(self);

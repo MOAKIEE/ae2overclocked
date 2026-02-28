@@ -5,7 +5,7 @@ import appeng.api.networking.IGridNode;
 import appeng.api.networking.security.IActionSource;
 import appeng.api.networking.storage.IStorageService;
 import appeng.api.stacks.AEItemKey;
-import com.mojang.logging.LogUtils;
+import appeng.api.stacks.AEKey;
 import moakiee.support.ParallelCardRuntime;
 import moakiee.support.OverclockCardRuntime;
 import net.minecraft.world.item.ItemStack;
@@ -29,9 +29,6 @@ import java.util.List;
         "io.github.lounode.ae2cs.common.block.entity.EntropyVariationReactionChamberBlockEntity"
 }, remap = false)
 public class MixinAE2CSOverclock {
-
-    @Unique
-    private static final org.slf4j.Logger AE2OC_LOGGER = LogUtils.getLogger();
 
     @Unique
     private int ae2oc_prevProgress = -1;
@@ -84,11 +81,6 @@ public class MixinAE2CSOverclock {
         int pending = ae2oc_calculateParallel(recipe, parallelMultiplier, hasOverclock, total);
         this.ae2oc_pendingParallel = Math.max(pending, 1);
         this.ae2oc_overclockArmed = hasOverclock && progress < total;
-
-        if (parallelMultiplier > 1) {
-            AE2OC_LOGGER.info("[AE2OC][AE2CS] machine={} parallelCard={} actualParallel={} overclock={}",
-                this.getClass().getSimpleName(), parallelMultiplier, this.ae2oc_pendingParallel, hasOverclock);
-        }
     }
 
     @Inject(method = "serverTick", at = @At("RETURN"))
@@ -112,12 +104,9 @@ public class MixinAE2CSOverclock {
             return;
         }
 
-        AE2OC_LOGGER.info("[AE2OC][AE2CS] machine={} apply extra rounds={}",
-                this.getClass().getSimpleName(), extraRounds);
-
         ae2oc_doExtraRounds(extraRounds);
 
-        // 额外回合结束后，尝试将本地输出槽中的产物转移到 ME 网络（释放空间）
+        // 额外回合结束后，将本地输出槽产物转移到 ME 网络
         ae2oc_flushOutputToMENetwork();
     }
 
@@ -380,9 +369,6 @@ public class MixinAE2CSOverclock {
             }
 
             if (machine.endsWith("EntropyVariationReactionChamberBlockEntity")) {
-                Object outputInv = ae2oc_invokeNoArg(this, "getOutputInv");
-                Object actionSource = ae2oc_getFieldRecursive(this, "actionSource");
-
                 Method getRecipeOutput = this.getClass().getDeclaredMethod("getRecipeOutput", recipe.getClass());
                 getRecipeOutput.setAccessible(true);
                 @SuppressWarnings("unchecked")
@@ -391,19 +377,56 @@ public class MixinAE2CSOverclock {
                     return false;
                 }
 
-                Method insert = outputInv.getClass().getMethod("insert", Class.forName("appeng.api.stacks.AEKey"), long.class, Actionable.class, Class.forName("appeng.api.networking.security.IActionSource"));
+                // 获取 ME 网络存储（额外轮次优先直接输出到 ME 网络）
+                Object mainNode = ae2oc_invokeNoArg(this, "getMainNode");
+                Object gridNodeObj = mainNode != null ? ae2oc_invokeNoArg(mainNode, "getNode") : null;
+                IStorageService storageService = null;
+                if (gridNodeObj instanceof IGridNode gridNode) {
+                    var grid = gridNode.getGrid();
+                    if (grid != null) {
+                        storageService = grid.getService(IStorageService.class);
+                    }
+                }
 
+                // 同时准备本地 outputInv 作为回落
+                Object outputInv = ae2oc_invokeNoArg(this, "getOutputInv");
+                Object actionSource = ae2oc_getFieldRecursive(this, "actionSource");
+                Method localInsert = null;
+                if (outputInv != null) {
+                    localInsert = outputInv.getClass().getMethod("insert",
+                            Class.forName("appeng.api.stacks.AEKey"), long.class, Actionable.class,
+                            Class.forName("appeng.api.networking.security.IActionSource"));
+                }
+
+                // 模拟检查：优先 ME 网络，回落本地缓存
                 for (Object gs : outputs) {
                     Method what = gs.getClass().getMethod("what");
                     Method amount = gs.getClass().getMethod("amount");
                     Object key = what.invoke(gs);
                     long amt = ((Number) amount.invoke(gs)).longValue();
-                    long accepted = ((Number) insert.invoke(outputInv, key, amt, Actionable.SIMULATE, actionSource)).longValue();
-                    if (accepted < amt) {
+                    if (storageService != null) {
+                        long accepted = storageService.getInventory().insert(
+                                (AEKey) key, amt, Actionable.SIMULATE, IActionSource.empty());
+                        if (accepted < amt) {
+                            // ME 网络放不下，尝试本地缓存
+                            if (localInsert != null) {
+                                long localAccepted = ((Number) localInsert.invoke(
+                                        outputInv, key, amt, Actionable.SIMULATE, actionSource)).longValue();
+                                if (localAccepted < amt) return false;
+                            } else {
+                                return false;
+                            }
+                        }
+                    } else if (localInsert != null) {
+                        long accepted = ((Number) localInsert.invoke(
+                                outputInv, key, amt, Actionable.SIMULATE, actionSource)).longValue();
+                        if (accepted < amt) return false;
+                    } else {
                         return false;
                     }
                 }
 
+                // 扣减输入
                 Method consume = this.getClass().getDeclaredMethod("consumeInputs", recipe.getClass());
                 consume.setAccessible(true);
                 Object consumed = consume.invoke(this, recipe);
@@ -411,12 +434,23 @@ public class MixinAE2CSOverclock {
                     return false;
                 }
 
+                // 实际输出：优先 ME 网络，回落本地
                 for (Object gs : outputs) {
                     Method what = gs.getClass().getMethod("what");
                     Method amount = gs.getClass().getMethod("amount");
                     Object key = what.invoke(gs);
                     long amt = ((Number) amount.invoke(gs)).longValue();
-                    insert.invoke(outputInv, key, amt, Actionable.MODULATE, actionSource);
+                    if (storageService != null) {
+                        long accepted = storageService.getInventory().insert(
+                                (AEKey) key, amt, Actionable.MODULATE, IActionSource.empty());
+                        if (accepted < amt && localInsert != null) {
+                            // 部分插入 ME 网络失败，剩余放本地
+                            long remain = amt - accepted;
+                            localInsert.invoke(outputInv, key, remain, Actionable.MODULATE, actionSource);
+                        }
+                    } else if (localInsert != null) {
+                        localInsert.invoke(outputInv, key, amt, Actionable.MODULATE, actionSource);
+                    }
                 }
                 return true;
             }
@@ -517,17 +551,13 @@ public class MixinAE2CSOverclock {
     }
 
     /**
-     * 将本地输出槽中的物品转移到 ME 网络（清空输出槽释放空间）。
-     * 仅对 CircuitEtcher、CrystalPulverizer、CrystalAggregator 生效。
-     * 熵变反应器的输出本身就是 ME 存储，无需额外处理。
+     * 将本地输出槽中的物品/流体转移到 ME 网络（清空输出槽释放空间）。
+     * 对所有 4 台 AE2CS 机器生效，包括熵变反应器（其 ConfigInventory 也需要 flush）。
      */
     @Unique
     private void ae2oc_flushOutputToMENetwork() {
         try {
             String machine = this.getClass().getName();
-            if (machine.endsWith("EntropyVariationReactionChamberBlockEntity")) {
-                return; // 熵变反应器已通过 MEStorage 输出
-            }
 
             Object outputInv = ae2oc_invokeNoArg(this, "getOutputInv");
             if (outputInv == null) return;
@@ -576,6 +606,32 @@ public class MixinAE2CSOverclock {
                     setItemDirect.invoke(outputInv, 0, ItemStack.EMPTY);
                 } else if (inserted > 0) {
                     stack.shrink((int) inserted);
+                }
+            }
+
+            // EntropyVariationReactor 使用 ConfigInventory (GenericInternalInventory)，支持 AEKey（物品/流体）
+            if (machine.endsWith("EntropyVariationReactionChamberBlockEntity")) {
+                Method sizeMethod = outputInv.getClass().getMethod("size");
+                int size = ((Number) sizeMethod.invoke(outputInv)).intValue();
+                Method getStack = outputInv.getClass().getMethod("getStack", int.class);
+                Method extractMethod = outputInv.getClass().getMethod("extract",
+                        int.class, Class.forName("appeng.api.stacks.AEKey"), long.class, Actionable.class);
+
+                for (int slot = 0; slot < size; slot++) {
+                    Object gs = getStack.invoke(outputInv, slot);
+                    if (gs == null) continue;
+                    Method what = gs.getClass().getMethod("what");
+                    Method amount = gs.getClass().getMethod("amount");
+                    Object key = what.invoke(gs);
+                    if (key == null) continue;
+                    long amt = ((Number) amount.invoke(gs)).longValue();
+                    if (amt <= 0) continue;
+
+                    long inserted = storageService.getInventory().insert(
+                            (AEKey) key, amt, Actionable.MODULATE, IActionSource.empty());
+                    if (inserted > 0) {
+                        extractMethod.invoke(outputInv, slot, key, inserted, Actionable.MODULATE);
+                    }
                 }
             }
         } catch (Throwable ignored) {

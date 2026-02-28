@@ -1,7 +1,6 @@
 package moakiee.mixin;
 
 import appeng.api.inventories.InternalInventory;
-import com.mojang.logging.LogUtils;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
 
@@ -12,27 +11,20 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * 修复 AE2 机器 (继承自 AEBaseInvBlockEntity) 的超量堆叠 NBT 持久化问题。
- *
- * 原版问题：
- * - saveAdditional: is.save(item) → ItemStack.save() 将 Count 存为 byte，超过 127 会溢出
- * - loadTag: ItemStack.of(item) → 只能读取 byte 范围的 Count
- *
- * 解决方案：
- * - saveAdditional TAIL: 检测超量堆叠，重新写入正确的 inventory 数据
- * - loadTag TAIL: 检测 ae2ocCount 标记，恢复真实数量
+ * 修复 AE2 机器超量堆叠 NBT 持久化问题。
+ * saveAdditional TAIL: 重写超过 64 的槽位数据，加入 ae2ocCount 标记。
+ * loadTag TAIL: 从 ae2ocCount 标记恢复真实数量。
  */
 @Mixin(targets = "appeng.blockentity.AEBaseInvBlockEntity", remap = false)
 public abstract class MixinAEBaseInvBlockEntity {
 
     private static final String AE2OC_COUNT_KEY = "ae2ocCount";
-    private static final org.slf4j.Logger AE2OC_LOGGER = LogUtils.getLogger();
 
     @Shadow
     public abstract InternalInventory getInternalInventory();
 
     /**
-     * 在原版 saveAdditional 完成后，检查并修复超量堆叠的保存。
+     * saveAdditional TAIL: 重写超过 64 的槽位数据。
      */
     @Inject(
             method = {
@@ -58,12 +50,12 @@ public abstract class MixinAEBaseInvBlockEntity {
         }
 
         if (!hasOversized) {
-            return; // 没有超量堆叠，原版保存已经正确
+            return;
         }
 
         // 有超量堆叠：重新写入 inventory 数据，覆盖原版写入的数据
         if (!data.contains("inv")) {
-            return; // 原版没有写入 inv，说明 inventory 为空
+            return;
         }
 
         var opt = data.getCompound("inv");
@@ -77,16 +69,15 @@ public abstract class MixinAEBaseInvBlockEntity {
                 oneCopy.save(item);
                 item.putInt(AE2OC_COUNT_KEY, is.getCount());
                 opt.put("item" + x, item);
-                AE2OC_LOGGER.info("[AE2OC] saveAdditional slot={} count={}", x, is.getCount());
             }
         }
     }
 
-    // 旧版网络同步 Mixin 遗留的标签名（需要清理）
+    // 旧版网络同步遗留标签名
     private static final String AE2OC_NET_COUNT_LEGACY = "ae2ocNetCount";
 
     /**
-     * 在原版 loadTag 完成后，检查并恢复超量堆叠。
+     * loadTag TAIL: 从 ae2ocCount 标记恢复超量堆叠，并清理遗留标签。
      */
     @Inject(
             method = {
@@ -113,24 +104,18 @@ public abstract class MixinAEBaseInvBlockEntity {
             if (item.contains(AE2OC_COUNT_KEY)) {
                 int restoredCount = item.getInt(AE2OC_COUNT_KEY);
                 if (restoredCount > 0) {
-                    // 获取原版加载的物品（此时 count 可能是错的）
-                    // 注意：getStackInSlot 返回 inventory 中的实际引用，
-                    // 直接修改 count 即可，不要调用 setItemDirect，
-                    // 否则会触发 notifyContentsChanged → wakeDevice → 世界加载卡死
+                    // 直接修改 count，不调用 setItemDirect 避免触发 wakeDevice
                     ItemStack stack = inv.getStackInSlot(x);
                     if (!stack.isEmpty()) {
                         stack.setCount(restoredCount);
-                        AE2OC_LOGGER.info("[AE2OC] loadTag slot={} count={}", x, restoredCount);
                     }
                 }
             }
-            
-            // 清理旧版网络同步 Mixin 遗留的标签（可能导致问题）
+            // 清理旧版遗留标签
             ItemStack stack = inv.getStackInSlot(x);
             if (!stack.isEmpty()) {
                 CompoundTag tag = stack.getTag();
                 if (tag != null && tag.contains(AE2OC_NET_COUNT_LEGACY)) {
-                    AE2OC_LOGGER.info("[AE2OC] Cleaning legacy ae2ocNetCount tag from slot={}", x);
                     tag.remove(AE2OC_NET_COUNT_LEGACY);
                     if (tag.isEmpty()) {
                         stack.setTag(null);

@@ -184,7 +184,6 @@ public abstract class MixinAEBaseMenu {
             clickSlot.set(ItemStack.EMPTY);
             destination.setChanged();
             menu.broadcastChanges();
-            menu.broadcastChanges();
             return true;
         }
 

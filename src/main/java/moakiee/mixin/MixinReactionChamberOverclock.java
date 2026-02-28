@@ -314,7 +314,6 @@ public abstract class MixinReactionChamberOverclock {
             Object fluidInv = fluidInvField.get(self);
 
             // 消耗额外能量
-            double extraEnergy = extraRounds * this.ae2oc_cachedUnitEnergy;
             double available = ae2oc_getAvailableEnergy(self, node);
             if (this.ae2oc_cachedUnitEnergy > 0.001) {
                 int affordableRounds = (int) (available / this.ae2oc_cachedUnitEnergy);
@@ -322,7 +321,7 @@ public abstract class MixinReactionChamberOverclock {
             }
             if (extraRounds <= 0) return;
 
-            extraEnergy = extraRounds * this.ae2oc_cachedUnitEnergy;
+            double extraEnergy = extraRounds * this.ae2oc_cachedUnitEnergy;
             if (!ae2oc_tryConsumePower(self, node, extraEnergy)) return;
 
             if (this.ae2oc_cachedIsItemOutput) {

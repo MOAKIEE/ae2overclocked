@@ -12,9 +12,7 @@ import org.slf4j.Logger;
 
 /**
  * 将所有升级卡注册到对应机器的升级槽。
- * 在 FMLCommonSetupEvent 中调用，确保所有 mod 已完成各自注册。
- * 可选 mod（ExtendedAE / AdvancedAE）使用 ModList 动态判断是否注册，
- * 这样 Tooltip 中显示的支持机器列表会根据已安装的 mod 自动变化。
+ * 可选 mod 使用 ModList 动态判断是否注册。
  */
 public class ModUpgrades {
 
@@ -59,12 +57,11 @@ public class ModUpgrades {
 
         Block block = ForgeRegistries.BLOCKS.getValue(key);
         if (block == null || block == net.minecraft.world.level.block.Blocks.AIR) {
-            LOGGER.info("[AE2OC] Skip upgrade registration, machine not found: {}", id);
+            LOGGER.info("[AE2OC] Skip machine not found: {}", id);
             return;
         }
 
         registerForMachine(block);
-        LOGGER.info("[AE2OC] Registered upgrades for machine: {}", id);
     }
 
     private static void registerForMachine(net.minecraft.world.level.ItemLike machine) {

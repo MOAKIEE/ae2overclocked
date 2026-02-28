@@ -3,7 +3,6 @@ package moakiee.mixin;
 import appeng.api.upgrades.IUpgradeableObject;
 import appeng.util.inv.AppEngInternalInventory;
 import appeng.util.inv.InternalInventoryHost;
-import com.mojang.logging.LogUtils;
 import moakiee.Ae2OcConfig;
 import moakiee.ModItems;
 import net.minecraft.nbt.CompoundTag;
@@ -24,18 +23,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * 堆叠卡功能注入：当机器装有堆叠卡时，将所有内部槽位的上限改为 Integer.MAX_VALUE。
- *
- * 安全分析：
- * - NBT 加载：readFromNBT 直接调用 stacks.set()，绕过 maxStack 检查，无截断风险
- * - 拔卡保护：无需额外代码，拔卡后 getSlotLimit() 即恢复 64，insertItem 自动拒绝超限新物品
- * - 溢出喷射：不在此编写，依赖 IItemHandler 的"只出不进"天然安全状态
+ * 堆叠卡功能注入：装有堆叠卡时，提升槽位上限。
+ * NBT 读写时通过 ae2ocCount 字段保存/恢复超量堆叠。
  */
 @Mixin(value = AppEngInternalInventory.class, remap = false)
 public class MixinAppEngInternalInventory {
 
     private static final String AE2OC_COUNT_KEY = "ae2ocCount";
-    private static final org.slf4j.Logger AE2OC_LOGGER = LogUtils.getLogger();
 
     @Shadow
     @Final
@@ -49,7 +43,6 @@ public class MixinAppEngInternalInventory {
         InternalInventoryHost host = inventory.getHost();
 
         // 只有装了堆叠卡时才允许超过 64
-        // 拔掉堆叠卡后返回 64，阻止继续放入（但已有物品不会被删除）
         if (getInstalledCapacityCards(host, 0) > 0) {
             cir.setReturnValue(Ae2OcConfig.getCapacityCardSlotLimit());
         }
@@ -58,8 +51,6 @@ public class MixinAppEngInternalInventory {
 
     /**
      * 修复 extractItem 中 stack.getMaxStackSize() 封顶 64 的问题。
-     * 原版: toExtract = Math.min(stack.getCount(), Math.min(amount, stack.getMaxStackSize()))
-     * 修复: 当 slot 内有超过 64 的堆叠时，允许一次性取出所有物品。
      */
     @Inject(method = "extractItem", at = @At("HEAD"), cancellable = true)
     private void ae2oc_extractItem(int slot, int amount, boolean simulate, CallbackInfoReturnable<ItemStack> cir) {
@@ -70,13 +61,12 @@ public class MixinAppEngInternalInventory {
         }
 
         var stack = this.stacks.get(slot);
-        // 只在超过 64 时介入 —— 正常堆叠不改变原有行为
+        // 只在超过 64 时介入
         if (stack.isEmpty() || stack.getCount() <= stack.getMaxStackSize()) {
             return;
         }
 
-        // 超过 64 的堆叠：直接使用 stack.getCount() 作为上限，不受 getSlotLimit 影响
-        // 这样即使拔掉堆叠卡（getSlotLimit 返回 64），也能正常取出所有物品
+        // 超过 64 的堆叠：直接用 stack.getCount() 做上限
         int toExtract = Math.min(stack.getCount(), amount);
         if (toExtract <= 0) {
             cir.setReturnValue(ItemStack.EMPTY);
@@ -140,7 +130,6 @@ public class MixinAppEngInternalInventory {
                 oneCopy.setCount(1);
                 oneCopy.save(itemTag);
                 itemTag.putInt(AE2OC_COUNT_KEY, realCount);
-                AE2OC_LOGGER.info("[AE2OC] writeToNBT slot={} count={} tag={}", slot, realCount, name);
             } else {
                 // ≤ 64：正常保存，不添加 ae2ocCount，与原版完全兼容
                 stack.save(itemTag);
@@ -202,9 +191,6 @@ public class MixinAppEngInternalInventory {
                     restoredCount = 1;
                 }
                 stack.setCount(restoredCount);
-                if (restoredCount > 64) {
-                    AE2OC_LOGGER.info("[AE2OC] readFromNBT slot={} count={} tag={}", slot, restoredCount, name);
-                }
             } else {
                 // 正常条目：原版逻辑
                 stack = ItemStack.of(itemTag);
