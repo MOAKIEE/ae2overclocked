@@ -66,8 +66,10 @@ public class ParallelCard extends UpgradeCardItem {
     }
 
     /**
-     * 重写右键安装逻辑，添加并行卡互斥检测
-     * 如果机器中已有任何等级的并行卡，拒绝安装新的并行卡
+     * 重写右键安装逻辑：
+     * 1. 如果目标机器不通过 Upgrades API 支持并行卡（如 AE2CS 机器），返回 PASS 让玩家正常打开 GUI
+     * 2. 如果机器中已有任何等级的并行卡，拒绝安装新的并行卡
+     * 3. 否则交给父类处理正常的安装逻辑
      */
     @Override
     public InteractionResult onItemUseFirst(net.minecraft.world.item.ItemStack stack, UseOnContext context) {
@@ -89,15 +91,25 @@ public class ParallelCard extends UpgradeCardItem {
                 upgrades = ((IUpgradeableObject) te).getUpgrades();
             }
 
-            // 检测是否已安装任何等级的并行卡
-            if (upgrades != null && hasAnyParallelCard(upgrades)) {
-                if (!context.getLevel().isClientSide()) {
-                    player.displayClientMessage(
-                            Component.translatable("message.ae2_overclocked.parallel_card_conflict"), 
-                            true
-                    );
+            if (upgrades != null) {
+                // 检查升级槽是否真正支持并行卡
+                // 通过检测并行卡自身的 getMaxInstalled 来判断
+                int maxAllowed = upgrades.getMaxInstalled(this);
+                if (maxAllowed <= 0) {
+                    // 升级槽不支持并行卡，直接放行让玩家打开 GUI
+                    return InteractionResult.PASS;
                 }
-                return InteractionResult.FAIL;
+
+                // 检测是否已安装任何等级的并行卡
+                if (hasAnyParallelCard(upgrades)) {
+                    if (!context.getLevel().isClientSide()) {
+                        player.displayClientMessage(
+                                Component.translatable("message.ae2_overclocked.parallel_card_conflict"), 
+                                true
+                        );
+                    }
+                    return InteractionResult.FAIL;
+                }
             }
         }
 
