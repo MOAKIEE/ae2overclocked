@@ -4,7 +4,6 @@ import appeng.api.config.Actionable;
 import appeng.api.config.PowerMultiplier;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.energy.IEnergyService;
-import appeng.api.networking.energy.IEnergySource;
 import appeng.api.networking.storage.IStorageService;
 import appeng.api.networking.ticking.TickRateModulation;
 import appeng.api.stacks.AEItemKey;

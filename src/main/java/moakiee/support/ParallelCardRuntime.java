@@ -4,7 +4,6 @@ import appeng.api.upgrades.IUpgradeableObject;
 import moakiee.Ae2OcConfig;
 import moakiee.ModItems;
 import moakiee.item.ParallelCard;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ItemLike;
 import org.jetbrains.annotations.Nullable;
 

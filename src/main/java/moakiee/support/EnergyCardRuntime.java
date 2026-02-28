@@ -37,24 +37,6 @@ public final class EnergyCardRuntime {
     }
 
     /**
-     * 获取扩展后的最大能量存储
-     * 当安装能源卡时返回超大值，否则返回原版值
-     *
-     * @param host         机器 BlockEntity
-     * @param defaultPower 原版默认的最大能量
-     * @return 扩展后的最大能量（单位：AE）
-     */
-    public static double getExpandedMaxPower(@Nullable Object host, double defaultPower) {
-        if (hasEnergyCard(host)) {
-            // 返回 1_000_000_000 AE (10亿 AE)
-            // 转换到 FE 后大约是 20 亿 FE（默认比率 1 AE = 2 FE）
-            // 不会溢出 int (最大值约 21.4 亿)
-            return 1_000_000_000.0;
-        }
-        return defaultPower;
-    }
-
-    /**
      * 递归检测能源卡安装数量
      */
     private static int getInstalledEnergyCards(@Nullable Object target, int depth) {

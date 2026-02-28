@@ -47,38 +47,6 @@ public final class OverclockCardRuntime {
     }
 
     /**
-     * 获取压印器的配方总能量消耗
-     * 
-     * 原版压印器规则：
-     * - MAX_PROCESSING_STEPS = 200
-     * - 每 tick 能耗 = 10 * speedFactor
-     * - 每 tick 进度 = speedFactor
-     * - 总 tick 数 ≈ 200 / speedFactor (向上取整)
-     * - 总能耗 ≈ 10 * 200 = 2000 AE (与速度卡无关)
-     * 
-     * @return 压印器配方总能量消耗（单位：AE）
-     */
-    public static double getInscriberRecipeEnergy() {
-        // 固定为 2000 AE
-        // 这是标准压印器配方的能量消耗
-        return 2000.0;
-    }
-
-    /**
-     * 获取电路切片器的配方总能量消耗
-     * 
-     * ExtendedAE 电路切片器规则：
-     * - MAX_PROGRESS = 200
-     * - 能耗计算与压印器类似
-     * 
-     * @return 电路切片器配方总能量消耗（单位：AE）
-     */
-    public static double getCircuitCutterRecipeEnergy() {
-        // 固定为 2000 AE
-        return 2000.0;
-    }
-
-    /**
      * 递归检测超频卡安装数量
      */
     private static int getInstalledOverclockCards(@Nullable Object target, int depth) {

@@ -16,6 +16,7 @@
     "MixinTileCircuitCutterCapacity",
     "MixinAE2CSItemMachinesCapacity",
     "MixinAE2CSEntropyVariationReactionChamberCapacity",
+    "MixinAE2CSEnergyComponent",
     "MixinAEBasePoweredBlockEntity",
     "MixinInscriberOverclock",
     "MixinExInscriberThreadOverclock",

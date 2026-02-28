@@ -3,7 +3,6 @@ package moakiee.mixin;
 import appeng.api.upgrades.IUpgradeableObject;
 import appeng.util.inv.AppEngInternalInventory;
 import appeng.util.inv.InternalInventoryHost;
-import com.google.common.base.Preconditions;
 import com.mojang.logging.LogUtils;
 import moakiee.Ae2OcConfig;
 import moakiee.ModItems;
@@ -41,42 +40,6 @@ public class MixinAppEngInternalInventory {
     @Shadow
     @Final
     private NonNullList<ItemStack> stacks;
-
-    public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
-        AppEngInternalInventory inventory = (AppEngInternalInventory) (Object) this;
-
-        Preconditions.checkArgument(slot >= 0 && slot < inventory.size(), "slot out of range");
-
-        if (stack.isEmpty() || !inventory.isItemValid(slot, stack)) {
-            return stack;
-        }
-
-        var inSlot = inventory.getStackInSlot(slot);
-        int maxSpace = inventory.getSlotLimit(slot);
-        int freeSpace = maxSpace - inSlot.getCount();
-        if (freeSpace <= 0) {
-            return stack;
-        }
-
-        if (!inSlot.isEmpty() && !ItemStack.isSameItemSameTags(inSlot, stack)) {
-            return stack;
-        }
-
-        int insertAmount = Math.min(stack.getCount(), freeSpace);
-        if (!simulate) {
-            var newItem = inSlot.isEmpty() ? stack.copy() : inSlot.copy();
-            newItem.setCount(inSlot.getCount() + insertAmount);
-            inventory.setItemDirect(slot, newItem);
-        }
-
-        if (freeSpace >= stack.getCount()) {
-            return ItemStack.EMPTY;
-        } else {
-            var remainder = stack.copy();
-            remainder.shrink(insertAmount);
-            return remainder;
-        }
-    }
 
     @Inject(method = "getSlotLimit", at = @At("HEAD"), cancellable = true)
     private void ae2oc_getSlotLimit(int slot, CallbackInfoReturnable<Integer> cir) {

@@ -38,10 +38,4 @@ public class OverstackingRegistry {
         return inventory != null && OVERSTACKING_INVENTORIES.contains(inventory);
     }
     
-    /**
-     * 清空所有注册
-     */
-    public static void clear() {
-        OVERSTACKING_INVENTORIES.clear();
-    }
 }

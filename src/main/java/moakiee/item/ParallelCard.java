@@ -74,7 +74,7 @@ public class ParallelCard extends UpgradeCardItem {
         Player player = context.getPlayer();
         InteractionHand hand = context.getHand();
 
-        if (player != null && net.minecraft.world.InteractionHand.MAIN_HAND.equals(hand) || 
+        if (player != null && InteractionHand.MAIN_HAND.equals(hand) || 
             (player != null && player.isShiftKeyDown())) {
             
             final BlockEntity te = context.getLevel().getBlockEntity(context.getClickedPos());
