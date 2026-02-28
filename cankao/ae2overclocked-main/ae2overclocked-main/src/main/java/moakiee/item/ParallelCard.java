@@ -1,0 +1,44 @@
+package moakiee.item;
+
+import appeng.items.materials.UpgradeCardItem;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.level.Level;
+
+import java.util.List;
+
+/**
+ * 并行卡 - 在单次工作周期内批量处理配方
+ * 通过 multiplier 区分不同等级（×2 / ×8 / ×64 / ×1024 / Max）
+ * MAX_PARALLEL 代表无上限（仅受材料和电量约束）
+ * 
+ * 互斥规则：所有等级的并行卡共享一个槽位，只能插入一张（由 MixinUpgradeInventory 统一拦截）
+ */
+public class ParallelCard extends UpgradeCardItem {
+
+    public static final int MAX_PARALLEL = Integer.MAX_VALUE;
+
+    private final int multiplier;
+
+    public ParallelCard(int multiplier) {
+        super(new Item.Properties().stacksTo(64));
+        this.multiplier = multiplier;
+    }
+
+    /**
+     * 返回该卡片的并行倍数。
+     * Max 级别返回 Integer.MAX_VALUE，实际运算时由木桶效应算法裁剪。
+     */
+    public int getMultiplier() {
+        return multiplier;
+    }
+
+    @Override
+    public void appendHoverText(ItemStack stack, Level level, List<Component> tooltip, TooltipFlag flag) {
+        tooltip.add(Component.translatable("tooltip.ae2_overclocked.parallel_card").withStyle(ChatFormatting.GRAY));
+        super.appendHoverText(stack, level, tooltip, flag);
+    }
+}

@@ -1,0 +1,61 @@
+{
+  "type": "forge:conditional",
+  "recipes": [
+    {
+      "conditions": [
+        {
+          "type": "forge:mod_loaded",
+          "modid": "advanced_ae"
+        }
+      ],
+      "recipe": {
+        "type": "minecraft:crafting_shaped",
+        "pattern": [
+          "ACA",
+          "BDB",
+          "ABA"
+        ],
+        "key": {
+          "A": {
+            "item": "advanced_ae:shattered_singularity"
+          },
+          "B": {
+            "item": "ae2_overclocked:parallel_card_1024x"
+          },
+          "C": {
+            "item": "advanced_ae:quantum_processor"
+          },
+          "D": {
+            "item": "advanced_ae:quantum_core"
+          }
+        },
+        "result": {
+          "item": "ae2_overclocked:parallel_card_max"
+        }
+      }
+    },
+    {
+      "conditions": [
+        {
+          "type": "forge:true"
+        }
+      ],
+      "recipe": {
+        "type": "minecraft:crafting_shaped",
+        "pattern": [
+          "AAA",
+          "AAA",
+          "AAA"
+        ],
+        "key": {
+          "A": {
+            "item": "ae2_overclocked:parallel_card_1024x"
+          }
+        },
+        "result": {
+          "item": "ae2_overclocked:parallel_card_max"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "moakiee.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "MixinInternalInventory",
+    "MixinAppEngInternalInventory",
+    "MixinAEBaseInvBlockEntity",
+    "MixinAppEngSlot",
+    "MixinAEBaseMenu",
+    "MixinConfigInventory",
+    "MixinConfigMenuInventory",
+    "MixinGenericStackInv",
+    "MixinReactionChamberEntityCapacity",
+    "MixinTileCircuitCutterCapacity",
+    "MixinAE2CSItemMachinesCapacity",
+    "MixinAE2CSEntropyVariationReactionChamberCapacity",
+    "MixinAE2CSEnergyComponent",
+    "MixinAE2CSOverclock",
+    "MixinAEBasePoweredBlockEntity",
+    "MixinInscriberOverclock",
+    "MixinExInscriberThreadOverclock",
+    "MixinCircuitCutterOverclock",
+    "MixinReactionChamberOverclock",
+    "MixinInscriberBlockEntity",
+    "MixinTileCircuitCutterNetwork",
+    "MixinReactionChamberEntityNetwork",
+    "MixinInscriberThreadNetwork",
+    "MixinFriendlyByteBuf",
+    "MixinUpgradeInventory"
+  ],
+  "client": [
+    "MixinAEBaseScreen",
+    "MixinReactionChamberScreen",
+    "MixinGuiCircuitCutter"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

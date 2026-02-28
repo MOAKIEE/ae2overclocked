@@ -1,0 +1,23 @@
+{
+  "itemGroup.ae2_overclocked": "AE2 Overclocked",
+  "item.ae2_overclocked.capacity_card": "Capacity Card",
+  "item.ae2_overclocked.super_energy_card": "Super Energy Card",
+  "item.ae2_overclocked.overclock_card": "Overclock Card",
+  "item.ae2_overclocked.parallel_card": "Parallel Card (x2)",
+  "item.ae2_overclocked.parallel_card_8x": "Parallel Card (x8)",
+  "item.ae2_overclocked.parallel_card_64x": "Parallel Card (x64)",
+  "item.ae2_overclocked.parallel_card_1024x": "Parallel Card (x1024)",
+  "item.ae2_overclocked.parallel_card_max": "Parallel Card (Max)",
+  "tooltip.ae2_overclocked.capacity_card": "Increases internal slot stack limits for processing machines.",
+  "tooltip.ae2_overclocked.super_energy_card": "Increases the machine's internal energy buffer capacity.",
+  "tooltip.ae2_overclocked.overclock_card": "Compresses processing time to 1 tick.",
+  "tooltip.ae2_overclocked.parallel_card": "Processes recipes in parallel and can output overflow to the ME network.",
+  "message.ae2_overclocked.parallel_card_conflict": "Another parallel card is already installed. Only one parallel card per machine is allowed.",
+  "message.ae2_overclocked.break_block_too_many_items": "Too many items inside the machine (> %s). Hold Shift while breaking to force removal.",
+  "config.ae2_overclocked.cards": "Card Settings",
+  "config.ae2_overclocked.cards.capacityCardSlotLimit": "Capacity Card Slot Limit",
+  "config.ae2_overclocked.cards.superEnergyCardBufferFE": "Super Energy Card Buffer (FE)",
+  "config.ae2_overclocked.cards.parallelCardMaxMultiplier": "Parallel Card Max Multiplier",
+  "config.ae2_overclocked.protection": "Protection Settings",
+  "config.ae2_overclocked.protection.breakProtectionItemThreshold": "Break Protection Item Threshold"
+}
