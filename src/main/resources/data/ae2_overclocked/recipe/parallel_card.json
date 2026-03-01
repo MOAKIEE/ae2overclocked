@@ -1,0 +1,32 @@
+{
+    "neoforge:conditions":  [
+                                {
+                                    "type":  "neoforge:not",
+                                    "value":  {
+                                                  "type":  "neoforge:mod_loaded",
+                                                  "modid":  "advanced_ae"
+                                              }
+                                }
+                            ],
+    "type":  "minecraft:crafting_shaped",
+    "pattern":  [
+                    "ABA",
+                    "BCB",
+                    "ABA"
+                ],
+    "key":  {
+                "A":  {
+                          "item":  "ae2:calculation_processor"
+                      },
+                "B":  {
+                          "item":  "ae2:crafting_accelerator"
+                      },
+                "C":  {
+                          "item":  "ae2:advanced_card"
+                      }
+            },
+    "result":  {
+                   "id":  "ae2_overclocked:parallel_card",
+                   "count":  1
+               }
+}

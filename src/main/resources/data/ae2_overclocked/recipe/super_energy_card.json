@@ -1,0 +1,20 @@
+{
+    "type":  "minecraft:crafting_shaped",
+    "pattern":  [
+                    "AAA",
+                    "ABA",
+                    "AAA"
+                ],
+    "key":  {
+                "A":  {
+                          "item":  "ae2:energy_card"
+                      },
+                "B":  {
+                          "item":  "ae2:advanced_card"
+                      }
+            },
+    "result":  {
+                   "id":  "ae2_overclocked:super_energy_card",
+                   "count":  1
+               }
+}

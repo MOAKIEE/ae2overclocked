@@ -1,0 +1,32 @@
+{
+    "neoforge:conditions":  [
+                                {
+                                    "type":  "neoforge:not",
+                                    "value":  {
+                                                  "type":  "neoforge:mod_loaded",
+                                                  "modid":  "advanced_ae"
+                                              }
+                                }
+                            ],
+    "type":  "minecraft:crafting_shaped",
+    "pattern":  [
+                    "ABA",
+                    "BCB",
+                    "ABA"
+                ],
+    "key":  {
+                "A":  {
+                          "item":  "minecraft:netherite_block"
+                      },
+                "B":  {
+                          "item":  "ae2:cell_component_256k"
+                      },
+                "C":  {
+                          "item":  "minecraft:nether_star"
+                      }
+            },
+    "result":  {
+                   "id":  "ae2_overclocked:capacity_card",
+                   "count":  1
+               }
+}

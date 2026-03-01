@@ -1,0 +1,32 @@
+{
+    "neoforge:conditions":  [
+                                {
+                                    "type":  "neoforge:mod_loaded",
+                                    "modid":  "advanced_ae"
+                                }
+                            ],
+    "type":  "minecraft:crafting_shaped",
+    "pattern":  [
+                    "ACA",
+                    "BDB",
+                    "ABA"
+                ],
+    "key":  {
+                "A":  {
+                          "item":  "advanced_ae:shattered_singularity"
+                      },
+                "B":  {
+                          "item":  "ae2_overclocked:parallel_card_8x"
+                      },
+                "C":  {
+                          "item":  "advanced_ae:quantum_processor"
+                      },
+                "D":  {
+                          "item":  "minecraft:nether_star"
+                      }
+            },
+    "result":  {
+                   "id":  "ae2_overclocked:parallel_card_64x",
+                   "count":  1
+               }
+}
