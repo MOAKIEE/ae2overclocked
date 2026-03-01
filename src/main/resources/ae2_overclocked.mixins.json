@@ -4,8 +4,29 @@
   "package": "xyz.moakiee.ae2_overclocked.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "MixinAEBaseInvBlockEntity",
+    "MixinAEBasePoweredBlockEntity",
+    "MixinAEBaseMenu",
+    "MixinAppEngInternalInventory",
+    "MixinAppEngSlot",
+    "MixinInscriberOverclock",
+    "MixinUpgradeInventory",
+    "MixinExInscriberThreadOverclock",
+    "MixinCircuitCutterOverclock",
+    "MixinInscriberThreadNetwork",
+    "MixinTileCircuitCutterNetwork",
+    "MixinTileCircuitCutterCapacity",
+    "MixinCrystalAssemblerOverclock",
+    "MixinTileCrystalAssemblerCapacity",
+    "MixinContainerCrystalAssemblerTooltip",
+    "MixinReactionChamberOverclock",
+    "MixinReactionChamberEntityNetwork",
+    "MixinReactionChamberEntityCapacity"
   ],
   "client": [
+    "MixinReactionChamberScreen",
+    "MixinFluidTankSlotRender",
+    "MixinGuiCrystalAssemblerTooltip"
   ],
   "injectors": {
     "defaultRequire": 1

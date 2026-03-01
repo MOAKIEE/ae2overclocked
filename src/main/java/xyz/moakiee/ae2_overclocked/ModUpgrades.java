@@ -24,9 +24,12 @@ public final class ModUpgrades {
         event.enqueueWork(() -> {
             registerForMachine(AEBlocks.INSCRIBER);
 
-            if (ModList.get().isLoaded("expatternprovider")) {
-                registerForMachineId("expatternprovider:ex_inscriber");
-                registerForMachineId("expatternprovider:circuit_cutter");
+            if (ModList.get().isLoaded("extendedae") || ModList.get().isLoaded("expatternprovider")) {
+                // ExtendedAE uses `extendedae` on 1.21.1; keep legacy fallback for older forks.
+                String eaeModId = ModList.get().isLoaded("extendedae") ? "extendedae" : "expatternprovider";
+                registerForMachineId(eaeModId + ":ex_inscriber");
+                registerForMachineId(eaeModId + ":circuit_cutter");
+                registerForMachineId(eaeModId + ":crystal_assembler");
             }
 
             if (ModList.get().isLoaded("advanced_ae")) {

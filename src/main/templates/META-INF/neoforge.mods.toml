@@ -83,9 +83,9 @@ ordering = "AFTER"
 side = "BOTH"
 
 [[dependencies."${mod_id}"]]
-modId = "expatternprovider"
+modId = "extendedae"
 type = "optional"
-versionRange = "[2.2.29,)"
+versionRange = "[1.21-2.2.29-neoforge,)"
 ordering = "AFTER"
 side = "BOTH"
 
