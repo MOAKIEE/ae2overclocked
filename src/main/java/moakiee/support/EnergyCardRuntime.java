@@ -1,6 +1,7 @@
 package moakiee.support;
 
 import appeng.api.upgrades.IUpgradeableObject;
+import moakiee.Ae2OcConfig;
 import moakiee.ModItems;
 import org.jetbrains.annotations.Nullable;
 
@@ -23,6 +24,9 @@ public final class EnergyCardRuntime {
      * @return 安装的能源卡数量（通常为 0 或 1）
      */
     public static int getInstalledEnergyCards(@Nullable Object host) {
+        if (Ae2OcConfig.isMachineDisabled(host)) {
+            return 0;
+        }
         return getInstalledEnergyCards(host, 0);
     }
 

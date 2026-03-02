@@ -236,9 +236,10 @@ public abstract class MixinExInscriberThreadOverclock {
                 sideExtract.invoke(sideHandler, 0, actualParallel, false);
             }
             
-            // 如果有并行卡，把本地输出槽的产物转移到 ME 网络
+            // 有并行卡或超频卡时，把本地输出槽的产物转移到 ME 网络
             int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(host);
-            if (parallelMultiplier > 1) {
+            boolean hasOverclock = OverclockCardRuntime.hasOverclockCard(host);
+            if (parallelMultiplier > 1 || hasOverclock) {
                 ae2oc_transferOutputToNetwork(host, sideHandler);
             }
 

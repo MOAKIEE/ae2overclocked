@@ -245,8 +245,8 @@ public abstract class MixinReactionChamberOverclock {
             outputStack.setCount(totalOutput);
             insertItem.invoke(outputInv, 0, outputStack, false);
             
-            // 如果有并行卡，把本地输出槽的产物转移到 ME 网络
-            if (parallelMultiplier > 1) {
+            // 有并行卡或超频卡时，把本地输出槽的产物转移到 ME 网络
+            if (parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self)) {
                 ae2oc_transferItemOutputToNetwork(node, outputInv);
             }
         } else {
@@ -275,8 +275,8 @@ public abstract class MixinReactionChamberOverclock {
             Method addMethod = fluidInv.getClass().getMethod("add", int.class, AEFluidKey.class, int.class);
             addMethod.invoke(fluidInv, 0, fluidKey, totalFluidAmount);
             
-            // 如果有并行卡，把本地槽的流体转移到 ME 网络
-            if (parallelMultiplier > 1) {
+            // 有并行卡或超频卡时，把本地槽的流体转移到 ME 网络
+            if (parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self)) {
                 ae2oc_transferFluidOutputToNetwork(node, fluidInv);
             }
         }
@@ -350,9 +350,9 @@ public abstract class MixinReactionChamberOverclock {
                     ae2oc_consumeBatchWithRecipe(this.ae2oc_cachedRecipe, inputInv, fluidInv, actualExtra);
                 }
                 
-                // 如果有并行卡，把本地槽的产物转移到 ME 网络
+                // 有并行卡或超频卡时，把本地槽的产物转移到 ME 网络
                 int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
-                if (parallelMultiplier > 1) {
+                if (parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self)) {
                     ae2oc_transferItemOutputToNetwork(node, outputInv);
                 }
             } else {
@@ -380,9 +380,9 @@ public abstract class MixinReactionChamberOverclock {
                     ae2oc_consumeBatchWithRecipe(this.ae2oc_cachedRecipe, inputInv, fluidInv, actualExtra);
                 }
                 
-                // 如果有并行卡，把本地槽的流体转移到 ME 网络
+                // 有并行卡或超频卡时，把本地槽的流体转移到 ME 网络
                 int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
-                if (parallelMultiplier > 1) {
+                if (parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self)) {
                     ae2oc_transferFluidOutputToNetwork(node, fluidInv);
                 }
             }

@@ -3,6 +3,7 @@ package moakiee.support;
 import appeng.api.stacks.AEKeyType;
 import appeng.api.upgrades.IUpgradeableObject;
 import appeng.helpers.externalstorage.GenericStackInv;
+import moakiee.Ae2OcConfig;
 import moakiee.ModItems;
 import org.jetbrains.annotations.Nullable;
 
@@ -15,6 +16,9 @@ public final class CapacityCardRuntime {
     }
 
     public static int getInstalledCapacityCards(@Nullable Object host) {
+        if (Ae2OcConfig.isMachineDisabled(host)) {
+            return 0;
+        }
         return getInstalledCapacityCards(host, 0);
     }
 
@@ -28,7 +32,9 @@ public final class CapacityCardRuntime {
             return;
         }
 
-        long targetCapacity = getInstalledCapacityCards(host) > 0 ? upgradedCapacity : defaultCapacity;
+        long targetCapacity = Ae2OcConfig.isMachineDisabled(host)
+            ? defaultCapacity
+            : (getInstalledCapacityCards(host) > 0 ? upgradedCapacity : defaultCapacity);
         inv.setCapacity(AEKeyType.fluids(), targetCapacity);
     }
 

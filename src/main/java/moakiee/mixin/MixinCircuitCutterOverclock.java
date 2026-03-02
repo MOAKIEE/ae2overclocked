@@ -234,9 +234,10 @@ public abstract class MixinCircuitCutterOverclock {
         double availableEnergy = ae2oc_getAvailableEnergy(self, node);
 
         // 计算实际并行数
-        // 当有并行卡时，产物优先输出到ME网络，不受本地槽限制
+        // 当有并行卡或超频卡时，产物优先输出到ME网络，不受本地槽限制
         ParallelEngine.ParallelResult result;
-        if (parallelMultiplier > 1) {
+        boolean directToNetwork = parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self);
+        if (directToNetwork) {
             result = ParallelEngine.calculateSimple(
                     parallelMultiplier, inputCount, 1,
                     Integer.MAX_VALUE, // 输出空间不限制，因为会输出到ME网络
@@ -267,7 +268,6 @@ public abstract class MixinCircuitCutterOverclock {
         // 真正产物写入需要额外调用 output.insertItem(..., false)
         Method runRecipe = ctx.getClass().getMethod("runRecipe", Recipe.class);
         int crafted = 0;
-        boolean directToNetwork = parallelMultiplier > 1;
         for (int i = 0; i < actualParallel; i++) {
             ItemStack singleOutput = recipeOutput.copy();
             
@@ -393,11 +393,11 @@ public abstract class MixinCircuitCutterOverclock {
                 if (!ae2oc_tryConsumePower(self, node, extraEnergy)) return;
             }
 
-            // 检查是否有并行卡
+            // 检查是否有并行卡或超频卡
             int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
-            boolean directToNetwork = parallelMultiplier > 1;
+            boolean directToNetwork = parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self);
             
-            // 有并行卡时，先把原版留在本地槽的1份也转移到ME网络
+            // 有并行卡或超频卡时，先把原版留在本地槽的1份也转移到ME网络
             if (directToNetwork) {
                 ae2oc_transferOutputToNetwork(node, outputInv);
             }

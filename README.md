@@ -16,12 +16,17 @@
 - ExtendedAE 扩展压印器
 - ExtendedAE 电路切片器
 - AdvancedAE 反应仓
+- AE2 Crystal Science 电路蚀刻器（Circuit Etcher）
+- AE2 Crystal Science 晶能粉碎机（Crystal Pulverizer）
+- AE2 Crystal Science 晶能聚合器（Crystal Aggregator）
+- AE2 Crystal Science 熵变反应器（Entropy Variation Reaction Chamber）
 
 ## 依赖与兼容
 
 - 必选依赖：AE2 (`ae2`)
 - 可选兼容：ExtendedAE (`expatternprovider`)
 - 可选兼容：AdvancedAE (`advanced_ae`)
+- 可选兼容：AE2 Crystal Science (`ae2cs`)
 
 ## 配置文件
 
@@ -47,6 +52,11 @@
 	- 说明：机器防误拆阈值；当机器内部物品总数超过该值时，必须按住 `Shift` 才能拆除
 	- 默认：`1000`
 
+- `machines.disabledMachineIds`
+	- 说明：禁用指定机器的超频/并行/堆叠/能源效果（仅支持方块ID，`namespace:path`）
+	- 示例：`["ae2:inscriber", "ae2cs:crystal_pulverizer"]`
+	- 默认：`[]`
+
 ### 示例
 
 ```toml
@@ -57,4 +67,7 @@ parallelCardMaxMultiplier = 2147483647
 
 [protection]
 breakProtectionItemThreshold = 1000
+
+[machines]
+disabledMachineIds = ["ae2:inscriber", "ae2cs:crystal_pulverizer"]
 ```

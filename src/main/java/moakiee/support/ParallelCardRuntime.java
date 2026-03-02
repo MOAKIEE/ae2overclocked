@@ -44,6 +44,9 @@ public final class ParallelCardRuntime {
      * @return 并行倍数（>=1）
      */
     public static int getParallelMultiplier(@Nullable Object host) {
+        if (Ae2OcConfig.isMachineDisabled(host)) {
+            return 1;
+        }
         return getParallelMultiplier(host, 0);
     }
 

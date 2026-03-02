@@ -10,7 +10,7 @@
     "item.ae2_overclocked.parallel_card_max": "并行卡 (Max)",
     "tooltip.ae2_overclocked.capacity_card": "提升机器内部槽位堆叠上限。",
     "tooltip.ae2_overclocked.super_energy_card": "提升机器内部能量缓存上限。",
-    "tooltip.ae2_overclocked.overclock_card": "将处理时间压缩至 1 Tick。",
+    "tooltip.ae2_overclocked.overclock_card": "将处理时间压缩至 1 Tick，并将产物直接输出至 ME 网络。",
     "tooltip.ae2_overclocked.parallel_card": "并行处理配方，并将产物直接输出至 ME 网络。",
     "message.ae2_overclocked.parallel_card_conflict": "已安装其他等级的并行卡，每台机器只允许安装一张并行卡",
     "config.ae2_overclocked.cards": "卡片配置",
@@ -25,5 +25,9 @@
     "config.ae2_overclocked.protection.tooltip": "用于防止误拆机器的安全选项。",
     "config.ae2_overclocked.protection.breakProtectionItemThreshold": "防误拆物品阈值",
     "config.ae2_overclocked.protection.breakProtectionItemThreshold.tooltip": "当机器内部物品总数超过该值时，必须按住 Shift 才能拆除机器。",
+    "config.ae2_overclocked.machines": "机器禁用配置",
+    "config.ae2_overclocked.machines.tooltip": "可按方块ID禁用指定机器的超频/并行/容量/能源效果。",
+    "config.ae2_overclocked.machines.disabledMachineIds": "禁用机器方块ID列表",
+    "config.ae2_overclocked.machines.disabledMachineIds.tooltip": "填写方块ID（namespace:path），例如 ae2:inscriber、ae2cs:crystal_pulverizer。",
     "message.ae2_overclocked.break_block_too_many_items": "机器内物品过多（>%s），如要拆除请按住 Shift 再拆除。"
 }

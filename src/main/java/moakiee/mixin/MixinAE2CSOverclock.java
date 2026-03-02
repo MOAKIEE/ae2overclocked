@@ -85,7 +85,7 @@ public class MixinAE2CSOverclock {
 
     @Inject(method = "serverTick", at = @At("RETURN"))
     private void ae2oc_afterServerTick(CallbackInfo ci) {
-        if (this.ae2oc_pendingParallel <= 1 || this.ae2oc_cachedRecipe == null) {
+        if (this.ae2oc_cachedRecipe == null) {
             return;
         }
 
@@ -100,14 +100,14 @@ public class MixinAE2CSOverclock {
         }
 
         int extraRounds = this.ae2oc_pendingParallel - 1;
-        if (extraRounds <= 0) {
-            return;
+        if (extraRounds > 0) {
+            ae2oc_doExtraRounds(extraRounds);
         }
 
-        ae2oc_doExtraRounds(extraRounds);
-
-        // 额外回合结束后，将本地输出槽产物转移到 ME 网络
-        ae2oc_flushOutputToMENetwork();
+        // 超频或并行完成后，都将本地输出槽产物转移到 ME 网络
+        if (this.ae2oc_hasOverclock || this.ae2oc_pendingParallel > 1) {
+            ae2oc_flushOutputToMENetwork();
+        }
     }
 
     @Inject(method = "getEnergyPerTick", at = @At("HEAD"), cancellable = true, require = 0)

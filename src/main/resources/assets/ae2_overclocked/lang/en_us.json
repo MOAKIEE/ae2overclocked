@@ -10,7 +10,7 @@
     "item.ae2_overclocked.parallel_card_max": "Parallel Card (Max)",
     "tooltip.ae2_overclocked.capacity_card": "Increases internal slot stack limits for processing machines.",
     "tooltip.ae2_overclocked.super_energy_card": "Increases the machine's internal energy buffer capacity.",
-    "tooltip.ae2_overclocked.overclock_card": "Compresses processing time to 1 tick.",
+    "tooltip.ae2_overclocked.overclock_card": "Compresses processing time to 1 tick and outputs products directly to the ME network.",
     "tooltip.ae2_overclocked.parallel_card": "Processes recipes in parallel and outputs products directly to the ME network.",
     "message.ae2_overclocked.parallel_card_conflict": "Another parallel card is already installed. Only one parallel card per machine is allowed.",
     "config.ae2_overclocked.cards": "Card Settings",
@@ -25,5 +25,9 @@
     "config.ae2_overclocked.protection.tooltip": "Safety options to prevent accidental machine break.",
     "config.ae2_overclocked.protection.breakProtectionItemThreshold": "Break Protection Item Threshold",
     "config.ae2_overclocked.protection.breakProtectionItemThreshold.tooltip": "If total internal items are above this value, you must hold Shift to break the machine.",
+    "config.ae2_overclocked.machines": "Machine Disable Settings",
+    "config.ae2_overclocked.machines.tooltip": "Disable overclock/parallel/capacity/energy effects for specific machines by block ID.",
+    "config.ae2_overclocked.machines.disabledMachineIds": "Disabled Machine Block ID List",
+    "config.ae2_overclocked.machines.disabledMachineIds.tooltip": "Use block IDs in namespace:path format, e.g. ae2:inscriber, ae2cs:crystal_pulverizer.",
     "message.ae2_overclocked.break_block_too_many_items": "Too many items inside the machine (> %s). Hold Shift while breaking to force removal."
 }

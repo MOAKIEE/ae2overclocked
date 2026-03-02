@@ -1,6 +1,7 @@
 package moakiee.support;
 
 import appeng.api.upgrades.IUpgradeableObject;
+import moakiee.Ae2OcConfig;
 import moakiee.ModItems;
 import org.jetbrains.annotations.Nullable;
 
@@ -33,6 +34,9 @@ public final class OverclockCardRuntime {
      * @return 安装的超频卡数量（通常为 0 或 1）
      */
     public static int getInstalledOverclockCards(@Nullable Object host) {
+        if (Ae2OcConfig.isMachineDisabled(host)) {
+            return 0;
+        }
         return getInstalledOverclockCards(host, 0);
     }
 
