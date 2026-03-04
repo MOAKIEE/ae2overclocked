@@ -90,9 +90,12 @@ public abstract class MixinCircuitCutterOverclock {
 
             if (recipe != null) {
                 this.ae2oc_cachedRecipe = recipe;
-                Field outputFieldInRecipe = ae2oc_getField(recipe.getClass(), "output");
+                // recipe is RecipeHolder, need to get the actual recipe value
+                Method valueMethod = recipe.getClass().getMethod("value");
+                Object recipeValue = valueMethod.invoke(recipe);
+                Field outputFieldInRecipe = ae2oc_getField(recipeValue.getClass(), "output");
                 outputFieldInRecipe.setAccessible(true);
-                this.ae2oc_cachedOutput = ((ItemStack) outputFieldInRecipe.get(recipe)).copy();
+                this.ae2oc_cachedOutput = ((ItemStack) outputFieldInRecipe.get(recipeValue)).copy();
                 this.ae2oc_pendingParallel = ae2oc_calculateParallel(self, node, recipe, parallelMultiplier);
             } else {
                 this.ae2oc_pendingParallel = 0;
@@ -173,9 +176,12 @@ public abstract class MixinCircuitCutterOverclock {
         outputField.setAccessible(true);
         Object outputInv = outputField.get(self);
 
-        Field recipeOutputField = ae2oc_getField(currentRecipe.getClass(), "output");
+        // currentRecipe is RecipeHolder, need to get the actual recipe value
+        Method recipeValueMethod = currentRecipe.getClass().getMethod("value");
+        Object recipeValue = recipeValueMethod.invoke(currentRecipe);
+        Field recipeOutputField = ae2oc_getField(recipeValue.getClass(), "output");
         recipeOutputField.setAccessible(true);
-        ItemStack recipeOutput = ((ItemStack) recipeOutputField.get(currentRecipe)).copy();
+        ItemStack recipeOutput = ((ItemStack) recipeOutputField.get(recipeValue)).copy();
 
         Method getStackInSlot = inputInv.getClass().getMethod("getStackInSlot", int.class);
         ItemStack inputStack = (ItemStack) getStackInSlot.invoke(inputInv, 0);
@@ -263,9 +269,12 @@ public abstract class MixinCircuitCutterOverclock {
             ItemStack inputStack = (ItemStack) getStackInSlot.invoke(inputInv, 0);
             int inputCount = inputStack.getCount();
 
-            Field recipeOutputField = ae2oc_getField(recipe.getClass(), "output");
+            // recipe is RecipeHolder, need to get the actual recipe value
+            Method recipeValueMethod = recipe.getClass().getMethod("value");
+            Object recipeValue = recipeValueMethod.invoke(recipe);
+            Field recipeOutputField = ae2oc_getField(recipeValue.getClass(), "output");
             recipeOutputField.setAccessible(true);
-            ItemStack recipeOutput = ((ItemStack) recipeOutputField.get(recipe)).copy();
+            ItemStack recipeOutput = ((ItemStack) recipeOutputField.get(recipeValue)).copy();
 
             double availableEnergy = ae2oc_getAvailableEnergy(self, node);
             if (cardMultiplier > 1) {

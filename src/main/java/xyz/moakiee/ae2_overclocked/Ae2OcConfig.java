@@ -24,7 +24,7 @@ public final class Ae2OcConfig {
 
         CAPACITY_SLOT_LIMIT = builder
                 .translation("config.ae2_overclocked.cards.capacityCardSlotLimit")
-                .comment("Maximum slot stack size when Capacity Card is installed.")
+                .comment("Maximum slot stack size (items) and fluid tank capacity (mB) when Capacity Card is installed.")
                 .defineInRange("capacityCardSlotLimit", DEFAULT_CAPACITY_SLOT_LIMIT, 64, Integer.MAX_VALUE);
 
         SUPER_ENERGY_BUFFER_FE = builder

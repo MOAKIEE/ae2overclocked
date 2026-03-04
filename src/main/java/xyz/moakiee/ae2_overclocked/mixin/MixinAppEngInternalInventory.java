@@ -1,6 +1,8 @@
 package xyz.moakiee.ae2_overclocked.mixin;
 
+import appeng.api.inventories.InternalInventory;
 import appeng.util.inv.AppEngInternalInventory;
+import com.google.common.base.Preconditions;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.CompoundTag;
@@ -10,6 +12,7 @@ import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -31,6 +34,102 @@ public abstract class MixinAppEngInternalInventory {
         AppEngInternalInventory inventory = (AppEngInternalInventory) (Object) this;
         if (CapacityCardRuntime.getInstalledCapacityCards(inventory.getHost()) > 0) {
             cir.setReturnValue(Ae2OcConfig.getCapacityCardSlotLimit());
+        }
+    }
+
+    /**
+     * Override insertItem to bypass vanilla's getMaxStackSize() cap (default 64) when a
+     * Capacity Card is installed. The original InternalInventory.insertItem() default
+     * implementation computes free space as:
+     *   Math.min(getSlotLimit(slot), stack.getMaxStackSize())
+     * which always caps at 64 regardless of our boosted getSlotLimit(). When a capacity
+     * card is present, we use getSlotLimit(slot) directly as the per-slot capacity.
+     *
+     * This method directly overrides the interface default because Mixin @Inject cannot
+     * target interface default methods that are not overridden by the target class.
+     */
+    public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
+        AppEngInternalInventory inventory = (AppEngInternalInventory) (Object) this;
+
+        // When no capacity card is installed, delegate to the original interface default logic
+        if (CapacityCardRuntime.getInstalledCapacityCards(inventory.getHost()) <= 0) {
+            return ae2oc_originalInsertItem(inventory, slot, stack, simulate);
+        }
+
+        // Bounds check
+        Preconditions.checkArgument(slot >= 0 && slot < inventory.size(), "slot out of range");
+
+        if (stack.isEmpty() || !inventory.isItemValid(slot, stack)) {
+            return stack;
+        }
+
+        ItemStack inSlot = this.stacks.get(slot);
+
+        // Use getSlotLimit (boosted by capacity card) instead of Math.min(getSlotLimit, maxStackSize)
+        int maxSpace = inventory.getSlotLimit(slot);
+        int freeSpace = maxSpace - inSlot.getCount();
+        if (freeSpace <= 0) {
+            return stack;
+        }
+
+        // Ensure item compatibility for non-empty slots
+        if (!inSlot.isEmpty() && !ItemStack.isSameItemSameComponents(inSlot, stack)) {
+            return stack;
+        }
+
+        int insertAmount = Math.min(stack.getCount(), freeSpace);
+        if (!simulate) {
+            ItemStack newItem = inSlot.isEmpty() ? stack.copy() : inSlot.copy();
+            newItem.setCount(inSlot.getCount() + insertAmount);
+            inventory.setItemDirect(slot, newItem);
+        }
+
+        if (freeSpace >= stack.getCount()) {
+            return ItemStack.EMPTY;
+        } else {
+            ItemStack remainder = stack.copy();
+            remainder.shrink(insertAmount);
+            return remainder;
+        }
+    }
+
+    /**
+     * Reproduce the original InternalInventory.insertItem() default logic for
+     * the case when no capacity card is installed.
+     */
+    @Unique
+    private ItemStack ae2oc_originalInsertItem(InternalInventory inventory, int slot, ItemStack stack, boolean simulate) {
+        Preconditions.checkArgument(slot >= 0 && slot < inventory.size(), "slot out of range");
+
+        if (stack.isEmpty() || !inventory.isItemValid(slot, stack)) {
+            return stack;
+        }
+
+        ItemStack inSlot = inventory.getStackInSlot(slot);
+
+        int maxSpace = Math.min(inventory.getSlotLimit(slot), stack.getMaxStackSize());
+        int freeSpace = maxSpace - inSlot.getCount();
+        if (freeSpace <= 0) {
+            return stack;
+        }
+
+        if (!inSlot.isEmpty() && !ItemStack.isSameItemSameComponents(inSlot, stack)) {
+            return stack;
+        }
+
+        int insertAmount = Math.min(stack.getCount(), freeSpace);
+        if (!simulate) {
+            ItemStack newItem = inSlot.isEmpty() ? stack.copy() : inSlot.copy();
+            newItem.setCount(inSlot.getCount() + insertAmount);
+            inventory.setItemDirect(slot, newItem);
+        }
+
+        if (freeSpace >= stack.getCount()) {
+            return ItemStack.EMPTY;
+        } else {
+            ItemStack remainder = stack.copy();
+            remainder.shrink(insertAmount);
+            return remainder;
         }
     }
 

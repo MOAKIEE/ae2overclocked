@@ -214,9 +214,12 @@ public abstract class MixinCrystalAssemblerOverclock {
         Method testRecipe = ctx.getClass().getMethod("testRecipe", RecipeHolder.class);
         Method runRecipe = ctx.getClass().getMethod("runRecipe", RecipeHolder.class);
 
-        Field recipeOutputField = ae2oc_getField(recipe.getClass(), "output");
+        // recipe is RecipeHolder, need to get the actual recipe value
+        Method recipeValueMethod = recipe.getClass().getMethod("value");
+        Object recipeValue = recipeValueMethod.invoke(recipe);
+        Field recipeOutputField = ae2oc_getField(recipeValue.getClass(), "output");
         recipeOutputField.setAccessible(true);
-        ItemStack recipeOutput = ((ItemStack) recipeOutputField.get(recipe)).copy();
+        ItemStack recipeOutput = ((ItemStack) recipeOutputField.get(recipeValue)).copy();
         if (recipeOutput.isEmpty()) {
             return 0;
         }

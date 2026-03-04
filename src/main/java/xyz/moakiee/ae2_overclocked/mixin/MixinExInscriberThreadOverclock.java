@@ -139,6 +139,15 @@ public abstract class MixinExInscriberThreadOverclock {
 
             double availableEnergy = ae2oc_getAvailableEnergy(host);
 
+            // When parallel card is present, output goes to ME network, bypass local slot limit
+            if (cardMultiplier > 1) {
+                return ParallelEngine.calculateSimple(
+                        cardMultiplier, inputCount, 1,
+                        Integer.MAX_VALUE,
+                        availableEnergy, AE2OC_THREAD_RECIPE_ENERGY
+                ).actualParallel();
+            }
+
             ParallelEngine.ParallelResult result = ParallelEngine.calculate(
                     cardMultiplier, inputCount, 1, outputStack,
                     (stack, simulate) -> {

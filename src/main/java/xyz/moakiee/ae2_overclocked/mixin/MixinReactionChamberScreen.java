@@ -7,6 +7,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import xyz.moakiee.ae2_overclocked.Ae2OcConfig;
 import xyz.moakiee.ae2_overclocked.support.CapacityCardRuntime;
 
 import java.lang.reflect.Field;
@@ -19,8 +20,7 @@ public class MixinReactionChamberScreen {
     @Unique
     private static final int AE2OC_DEFAULT_BUCKETS = 16;
 
-    @Unique
-    private static final int AE2OC_UPGRADED_BUCKETS = Integer.MAX_VALUE;
+
 
     @Unique
     private int ae2ocLastInputMax = Integer.MIN_VALUE;
@@ -58,7 +58,8 @@ public class MixinReactionChamberScreen {
             }
 
             boolean upgraded = CapacityCardRuntime.getInstalledCapacityCards(host) > 0;
-            int targetMax = upgraded ? AE2OC_UPGRADED_BUCKETS : AE2OC_DEFAULT_BUCKETS;
+            // Config value is in mB, convert to buckets for FluidTankSlot maxLevel
+            int targetMax = upgraded ? (int) Math.min((long) Ae2OcConfig.getCapacityCardSlotLimit() / 1000L, Integer.MAX_VALUE) : AE2OC_DEFAULT_BUCKETS;
 
             Object inputSlot = ae2oc_getFieldValue(this, "inputSlot");
             Object outputSlot = ae2oc_getFieldValue(this, "outputSlot");
