@@ -25,6 +25,9 @@ public final class ParallelCardRuntime {
     }
 
     public static int getParallelMultiplier(Object host) {
+        if (Ae2OcConfig.isMachineDisabled(host)) {
+            return 1;
+        }
         return getParallelMultiplier(host, 0);
     }
 

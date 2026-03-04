@@ -1,7 +1,22 @@
 package xyz.moakiee.ae2_overclocked;
 
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * AE2 Overclocked common configuration.
+ *
+ * Notes:
+ * - NeoForge will automatically write the default values defined here if the config file does not exist.
+ * - All defaults preserve the original mod behaviour.
+ */
 public final class Ae2OcConfig {
 
     public static final int DEFAULT_CAPACITY_SLOT_LIMIT = Integer.MAX_VALUE;
@@ -16,6 +31,7 @@ public final class Ae2OcConfig {
     private static final ModConfigSpec.DoubleValue SUPER_ENERGY_BUFFER_FE;
     private static final ModConfigSpec.IntValue PARALLEL_MAX_MULTIPLIER;
     private static final ModConfigSpec.IntValue BREAK_PROTECTION_ITEM_THRESHOLD;
+    private static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED_MACHINE_IDS;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -24,17 +40,17 @@ public final class Ae2OcConfig {
 
         CAPACITY_SLOT_LIMIT = builder
                 .translation("config.ae2_overclocked.cards.capacityCardSlotLimit")
-                .comment("Maximum slot stack size (items) and fluid tank capacity (mB) when Capacity Card is installed.")
+                .comment("Maximum slot capacity (item count and fluid amount in mB) when a Capacity Card is installed. Default: Integer.MAX_VALUE.")
                 .defineInRange("capacityCardSlotLimit", DEFAULT_CAPACITY_SLOT_LIMIT, 64, Integer.MAX_VALUE);
 
         SUPER_ENERGY_BUFFER_FE = builder
                 .translation("config.ae2_overclocked.cards.superEnergyCardBufferFE")
-                .comment("Internal energy buffer limit in FE when Super Energy Card is installed.")
+                .comment("Internal energy buffer limit (in FE) when a Super Energy Card is installed. Default: 2,000,000,000 FE.")
                 .defineInRange("superEnergyCardBufferFE", DEFAULT_SUPER_ENERGY_BUFFER_FE, 2.0, Double.MAX_VALUE);
 
         PARALLEL_MAX_MULTIPLIER = builder
                 .translation("config.ae2_overclocked.cards.parallelCardMaxMultiplier")
-                .comment("Parallel multiplier used by Parallel Card Max.")
+                .comment("Multiplier applied by the Parallel Card (Max tier). Default: Integer.MAX_VALUE.")
                 .defineInRange("parallelCardMaxMultiplier", DEFAULT_PARALLEL_MAX_MULTIPLIER, 2, Integer.MAX_VALUE);
 
         builder.pop();
@@ -42,8 +58,20 @@ public final class Ae2OcConfig {
 
         BREAK_PROTECTION_ITEM_THRESHOLD = builder
                 .translation("config.ae2_overclocked.protection.breakProtectionItemThreshold")
-                .comment("If internal item count is above this value, Shift is required to break machine.")
+                .comment("Break-protection threshold. When the total item count inside a machine exceeds this value, Shift must be held to break it.")
                 .defineInRange("breakProtectionItemThreshold", DEFAULT_BREAK_PROTECTION_ITEM_THRESHOLD, 1, Integer.MAX_VALUE);
+
+        builder.pop();
+        builder.translation("config.ae2_overclocked.machines").push("machines");
+
+        DISABLED_MACHINE_IDS = builder
+                .translation("config.ae2_overclocked.machines.disabledMachineIds")
+                .comment("List of block IDs (namespace:path) whose machines should be excluded from all upgrade card effects,\ne.g. ae2:inscriber or ae2cs:crystal_pulverizer.")
+                .defineListAllowEmpty(
+                        List.of("disabledMachineIds"),
+                        List::of,
+                        entry -> entry instanceof String
+                );
 
         builder.pop();
         SPEC = builder.build();
@@ -67,5 +95,109 @@ public final class Ae2OcConfig {
 
     public static int getBreakProtectionItemThreshold() {
         return Math.max(BREAK_PROTECTION_ITEM_THRESHOLD.get(), 1);
+    }
+
+    /**
+     * Returns whether the machine hosting the given object (or the object itself) is on the disabled list.
+     *
+     * @param hostOrMachine a machine {@link net.minecraft.world.level.block.entity.BlockEntity} or its host object
+     * @return {@code true} if the machine's block ID is found in the disabled list
+     */
+    public static boolean isMachineDisabled(Object hostOrMachine) {
+        Object machine = resolveMachine(hostOrMachine, 0);
+        if (machine == null) {
+            return false;
+        }
+        return isBlockIdDisabled(machine);
+    }
+
+    private static boolean isBlockIdDisabled(Object machine) {
+        ResourceLocation blockId = resolveBlockId(machine);
+        if (blockId == null) {
+            return false;
+        }
+        String normalizedId = blockId.toString().toLowerCase(Locale.ROOT);
+        for (String entry : DISABLED_MACHINE_IDS.get()) {
+            if (entry == null) {
+                continue;
+            }
+            String value = entry.trim().toLowerCase(Locale.ROOT);
+            if (!value.isEmpty() && value.equals(normalizedId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static ResourceLocation resolveBlockId(Object machine) {
+        if (machine instanceof BlockEntity blockEntity) {
+            return BuiltInRegistries.BLOCK.getKey(blockEntity.getBlockState().getBlock());
+        }
+
+        Object byGetBlockEntity = tryInvokeNoArg(machine, "getBlockEntity");
+        if (byGetBlockEntity instanceof BlockEntity blockEntity) {
+            return BuiltInRegistries.BLOCK.getKey(blockEntity.getBlockState().getBlock());
+        }
+
+        Object byField = tryGetField(machine, "blockEntity");
+        if (byField instanceof BlockEntity blockEntity) {
+            return BuiltInRegistries.BLOCK.getKey(blockEntity.getBlockState().getBlock());
+        }
+
+        return null;
+    }
+
+    private static Object resolveMachine(Object target, int depth) {
+        if (target == null || depth > 6) {
+            return null;
+        }
+        if (target instanceof BlockEntity) {
+            return target;
+        }
+
+        Object byGetBlockEntity = tryInvokeNoArg(target, "getBlockEntity");
+        if (byGetBlockEntity != null) {
+            Object resolved = resolveMachine(byGetBlockEntity, depth + 1);
+            if (resolved != null) {
+                return resolved;
+            }
+        }
+
+        Object byGetHost = tryInvokeNoArg(target, "getHost");
+        if (byGetHost != null && byGetHost != target) {
+            Object resolved = resolveMachine(byGetHost, depth + 1);
+            if (resolved != null) {
+                return resolved;
+            }
+        }
+
+        Object byHostField = tryGetField(target, "host");
+        if (byHostField != null && byHostField != target) {
+            Object resolved = resolveMachine(byHostField, depth + 1);
+            if (resolved != null) {
+                return resolved;
+            }
+        }
+
+        return target;
+    }
+
+    private static Object tryInvokeNoArg(Object target, String methodName) {
+        try {
+            Method method = target.getClass().getMethod(methodName);
+            return method.invoke(target);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static Object tryGetField(Object target, String fieldName) {
+        try {
+            Field field = target.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 }

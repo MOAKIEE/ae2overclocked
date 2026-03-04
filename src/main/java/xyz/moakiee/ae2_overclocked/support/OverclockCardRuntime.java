@@ -1,6 +1,7 @@
 package xyz.moakiee.ae2_overclocked.support;
 
 import appeng.api.upgrades.IUpgradeableObject;
+import xyz.moakiee.ae2_overclocked.Ae2OcConfig;
 import xyz.moakiee.ae2_overclocked.ModItems;
 
 import java.lang.reflect.Field;
@@ -12,6 +13,9 @@ public final class OverclockCardRuntime {
     }
 
     public static int getInstalledOverclockCards(Object host) {
+        if (Ae2OcConfig.isMachineDisabled(host)) {
+            return 0;
+        }
         return getInstalledOverclockCards(host, 0);
     }
 
