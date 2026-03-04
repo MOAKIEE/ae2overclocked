@@ -29,5 +29,7 @@
     "config.ae2_overclocked.machines.tooltip": "可按方块ID禁用指定机器的超频/并行/容量/能源效果。",
     "config.ae2_overclocked.machines.disabledMachineIds": "禁用机器方块ID列表",
     "config.ae2_overclocked.machines.disabledMachineIds.tooltip": "填写方块ID（namespace:path），例如 ae2:inscriber、ae2cs:crystal_pulverizer。",
-    "message.ae2_overclocked.break_block_too_many_items": "机器内物品过多（>%s），如要拆除请按住 Shift 再拆除。"
+    "message.ae2_overclocked.break_block_too_many_items": "机器内物品过多（>%s），如要拆除请按住 Shift 再拆除。",
+    "pack.ae2_overclocked.dynamic_1211.name": "AE2 Overclocked 1.21.1动态材质包",
+    "pack.ae2_overclocked.dynamic_1211.desc": "AE2 Overclocked 1.21.1 并行卡动态纹理"
 }

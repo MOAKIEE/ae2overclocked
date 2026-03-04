@@ -29,5 +29,7 @@
     "config.ae2_overclocked.machines.tooltip": "Disable overclock/parallel/capacity/energy effects for specific machines by block ID.",
     "config.ae2_overclocked.machines.disabledMachineIds": "Disabled Machine Block ID List",
     "config.ae2_overclocked.machines.disabledMachineIds.tooltip": "Use block IDs in namespace:path format, e.g. ae2:inscriber, ae2cs:crystal_pulverizer.",
-    "message.ae2_overclocked.break_block_too_many_items": "Too many items inside the machine (> %s). Hold Shift while breaking to force removal."
+    "message.ae2_overclocked.break_block_too_many_items": "Too many items inside the machine (> %s). Hold Shift while breaking to force removal.",
+    "pack.ae2_overclocked.dynamic_1211.name": "AE2 Overclocked 1.21.1 Dynamic Texture Pack",
+    "pack.ae2_overclocked.dynamic_1211.desc": "Dynamic textures for AE2 Overclocked 1.21.1 parallel cards"
 }
