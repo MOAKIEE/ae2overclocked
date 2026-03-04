@@ -11,11 +11,11 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * AE2 Overclocked 通用配置（common）。
+ * AE2 Overclocked common configuration.
  *
- * 说明：
- * - 不填写时，Forge 会自动写入这里定义的默认值。
- * - 三项默认值保持当前项目原有行为。
+ * Notes:
+ * - Forge will automatically write the default values defined here if the config file does not exist.
+ * - All defaults preserve the original mod behaviour.
  */
 public final class Ae2OcConfig {
 
@@ -40,17 +40,17 @@ public final class Ae2OcConfig {
 
         CAPACITY_SLOT_LIMIT = builder
             .translation("config.ae2_overclocked.cards.capacityCardSlotLimit")
-                .comment("堆叠卡生效时的槽位上限。默认 Integer.MAX_VALUE。")
+                .comment("Maximum slot capacity (item count and fluid amount in mB) when a Capacity Card is installed. Default: Integer.MAX_VALUE.")
                 .defineInRange("capacityCardSlotLimit", DEFAULT_CAPACITY_SLOT_LIMIT, 64, Integer.MAX_VALUE);
 
         SUPER_ENERGY_BUFFER_FE = builder
             .translation("config.ae2_overclocked.cards.superEnergyCardBufferFE")
-            .comment("超级能源卡生效时的内部能量缓存上限（单位 FE）。默认 2,000,000,000 FE。")
+            .comment("Internal energy buffer limit (in FE) when a Super Energy Card is installed. Default: 2,000,000,000 FE.")
             .defineInRange("superEnergyCardBufferFE", DEFAULT_SUPER_ENERGY_BUFFER_FE, 2.0, Double.MAX_VALUE);
 
         PARALLEL_MAX_MULTIPLIER = builder
             .translation("config.ae2_overclocked.cards.parallelCardMaxMultiplier")
-                .comment("并行卡Max的倍率。默认 Integer.MAX_VALUE。")
+                .comment("Multiplier applied by the Parallel Card (Max tier). Default: Integer.MAX_VALUE.")
                 .defineInRange("parallelCardMaxMultiplier", DEFAULT_PARALLEL_MAX_MULTIPLIER, 2, Integer.MAX_VALUE);
 
         builder.pop();
@@ -59,7 +59,7 @@ public final class Ae2OcConfig {
 
         BREAK_PROTECTION_ITEM_THRESHOLD = builder
             .translation("config.ae2_overclocked.protection.breakProtectionItemThreshold")
-            .comment("机器防误拆阈值。机器内部物品总数大于该值时，必须按住Shift才能拆除。")
+            .comment("Break-protection threshold. When the total item count inside a machine exceeds this value, Shift must be held to break it.")
             .defineInRange("breakProtectionItemThreshold", DEFAULT_BREAK_PROTECTION_ITEM_THRESHOLD, 1, Integer.MAX_VALUE);
 
         builder.pop();
@@ -68,7 +68,7 @@ public final class Ae2OcConfig {
 
         DISABLED_MACHINE_IDS = builder
             .translation("config.ae2_overclocked.machines.disabledMachineIds")
-            .comment("禁用机器方块ID列表（namespace:path），如 ae2:inscriber、ae2cs:crystal_pulverizer。")
+            .comment("List of block IDs (namespace:path) whose machines should be excluded from all upgrade card effects,\ne.g. ae2:inscriber or ae2cs:crystal_pulverizer.")
             .defineListAllowEmpty(
                 List.of("disabledMachineIds"),
                 List::of,
