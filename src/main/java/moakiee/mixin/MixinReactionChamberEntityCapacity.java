@@ -7,6 +7,7 @@ import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Pseudo
 @Mixin(targets = "net.pedroksl.advanced_ae.common.entities.ReactionChamberEntity", remap = false)
@@ -25,7 +26,16 @@ public class MixinReactionChamberEntityCapacity {
         CapacityCardRuntime.applyFluidCapacity(this, AE2OC_DEFAULT_FLUID_CAPACITY, AE2OC_MAX_FLUID_CAPACITY);
     }
 
-    @Inject(method = "onChangeInventory", at = @At("TAIL"))
+    /**
+     * 升级栏的变更回调是 this::saveChanges（父类方法，@Pseudo 下不可直接注入）。
+     * 改为在每次 tickingRequest 时检查并修正容量，确保拔卡后流体立刻被截断。
+     */
+    @Inject(method = "tickingRequest", at = @At("HEAD"))
+    private void ae2oc_onTick(CallbackInfoReturnable<?> cir) {
+        CapacityCardRuntime.applyFluidCapacity(this, AE2OC_DEFAULT_FLUID_CAPACITY, AE2OC_MAX_FLUID_CAPACITY);
+    }
+
+    @Inject(method = "onChangeInventory()V", at = @At("TAIL"))
     private void ae2oc_onUpgradeChange(CallbackInfo ci) {
         CapacityCardRuntime.applyFluidCapacity(this, AE2OC_DEFAULT_FLUID_CAPACITY, AE2OC_MAX_FLUID_CAPACITY);
     }

@@ -6,7 +6,6 @@
  */
 package moakiee.mixin;
 
-import appeng.api.networking.IGrid;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.ticking.TickRateModulation;
 import appeng.api.storage.StorageCells;
@@ -16,8 +15,6 @@ import appeng.core.definitions.AEItems;
 import appeng.util.inv.AppEngInternalInventory;
 import moakiee.ModItems;
 import moakiee.support.SuperSpeedNumberUtil;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
@@ -28,7 +25,7 @@ import org.spongepowered.asm.mixin.Unique;
 import java.lang.reflect.Method;
 
 @Mixin(IOPortBlockEntity.class)
-public abstract class MixinIOPortSuperSpeed extends IOPortBlockEntity implements IUpgradeableObject {
+public abstract class MixinIOPortSuperSpeed implements IUpgradeableObject {
 
     @Mutable
     @Final
@@ -39,13 +36,14 @@ public abstract class MixinIOPortSuperSpeed extends IOPortBlockEntity implements
     @Shadow(remap = false)
     private static int NUMBER_OF_CELL_SLOTS;
 
-    public MixinIOPortSuperSpeed(BlockPos pos, BlockState blockState) {
-        super(null, pos, blockState);
-    }
-
+    /**
+     * @author ae2overclocked
+     * @reason Add super speed card support to IO Port
+     */
     @Overwrite(remap = false)
     public TickRateModulation tickingRequest(IGridNode node, int ticksSinceLastCall) {
-        if (!this.getMainNode().isActive()) {
+        IOPortBlockEntity self = (IOPortBlockEntity)(Object)this;
+        if (!self.getMainNode().isActive()) {
             return TickRateModulation.IDLE;
         }
 
@@ -55,7 +53,7 @@ public abstract class MixinIOPortSuperSpeed extends IOPortBlockEntity implements
         int superSpeedUpgrades = this.getUpgrades().getInstalledUpgrades(ModItems.SUPER_SPEED_CARD.get());
         long itemsToMove = ae2oc_getItemsToMove(speedUpgrades, superSpeedUpgrades);
 
-        var grid = getMainNode().getGrid();
+        var grid = self.getMainNode().getGrid();
         if (grid == null) {
             return TickRateModulation.IDLE;
         }
@@ -64,16 +62,16 @@ public abstract class MixinIOPortSuperSpeed extends IOPortBlockEntity implements
             var cell = this.inputCells.getStackInSlot(x);
             var cellInv = StorageCells.getCellInventory(cell, null);
             if (cellInv == null) {
-                ae2oc_moveSlotInCell(this, x);
+                ae2oc_moveSlot(this, x);
                 continue;
             }
 
             if (itemsToMove > 0L) {
-                itemsToMove = ae2oc_transferItemsFromCell(this, grid, cellInv, itemsToMove);
+                itemsToMove = ae2oc_transferContents(this, grid, cellInv, itemsToMove);
                 ret = itemsToMove > 0L ? TickRateModulation.IDLE : TickRateModulation.URGENT;
             }
 
-            if (itemsToMove > 0L && matchesFullnessMode(cellInv) && ae2oc_moveSlotInCell(this, x)) {
+            if (itemsToMove > 0L && ae2oc_matchesFullnessMode(self, cellInv) && ae2oc_moveSlot(this, x)) {
                 ret = TickRateModulation.URGENT;
             }
         }
@@ -101,9 +99,9 @@ public abstract class MixinIOPortSuperSpeed extends IOPortBlockEntity implements
     }
 
     @Unique
-    private static boolean ae2oc_moveSlotInCell(Object self, int slot) {
+    private static boolean ae2oc_moveSlot(Object self, int slot) {
         try {
-            Method method = ae2oc_findMethod(self.getClass(), "moveSlotInCell", 1);
+            Method method = ae2oc_findMethod(self.getClass(), "moveSlot", 1);
             if (method == null) {
                 return false;
             }
@@ -116,9 +114,9 @@ public abstract class MixinIOPortSuperSpeed extends IOPortBlockEntity implements
     }
 
     @Unique
-    private static long ae2oc_transferItemsFromCell(Object self, IGrid grid, Object cellInv, long itemsToMove) {
+    private static long ae2oc_transferContents(Object self, Object grid, Object cellInv, long itemsToMove) {
         try {
-            Method method = ae2oc_findMethod(self.getClass(), "transferItemsFromCell", 3);
+            Method method = ae2oc_findMethod(self.getClass(), "transferContents", 3);
             if (method == null) {
                 return itemsToMove;
             }
@@ -147,5 +145,20 @@ public abstract class MixinIOPortSuperSpeed extends IOPortBlockEntity implements
             current = current.getSuperclass();
         }
         return null;
+    }
+
+    @Unique
+    private static boolean ae2oc_matchesFullnessMode(Object self, Object cellInv) {
+        try {
+            Method method = ae2oc_findMethod(self.getClass(), "matchesFullnessMode", 1);
+            if (method == null) {
+                return true;
+            }
+            method.setAccessible(true);
+            Object value = method.invoke(self, cellInv);
+            return value instanceof Boolean ok && ok;
+        } catch (Throwable ignored) {
+            return true;
+        }
     }
 }
