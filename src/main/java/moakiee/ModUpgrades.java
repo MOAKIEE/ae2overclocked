@@ -2,6 +2,9 @@ package moakiee;
 
 import appeng.api.upgrades.Upgrades;
 import appeng.core.definitions.AEBlocks;
+import appeng.core.definitions.AEParts;
+import appeng.core.localization.GuiText;
+import com.glodblock.github.extendedae.common.EPPItemAndBlock;
 import com.mojang.logging.LogUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.Block;
@@ -23,12 +26,23 @@ public class ModUpgrades {
 
     public static void register(FMLCommonSetupEvent event) {
         event.enqueueWork(() -> {
+            String itemIoBusGroup = GuiText.IOBuses.getTranslationKey();
+
+            // ── AE2 I/O Port & I/O Bus（超速卡）─────────────────────
+            Upgrades.add(ModItems.SUPER_SPEED_CARD.get(), AEBlocks.IO_PORT, 1);
+            Upgrades.add(ModItems.SUPER_SPEED_CARD.get(), AEParts.IMPORT_BUS, 1, itemIoBusGroup);
+            Upgrades.add(ModItems.SUPER_SPEED_CARD.get(), AEParts.EXPORT_BUS, 1, itemIoBusGroup);
 
             // ── AE2 压印器（必选）────────────────────────────────────
             registerForMachine(AEBlocks.INSCRIBER);
 
             // ── ExtendedAE（可选）─────────────────────
             if (ModList.get().isLoaded("expatternprovider")) {
+                Upgrades.add(ModItems.SUPER_SPEED_CARD.get(), EPPItemAndBlock.EX_IO_PORT, 1);
+                Upgrades.add(ModItems.SUPER_SPEED_CARD.get(), EPPItemAndBlock.TAG_EXPORT_BUS, 1);
+                Upgrades.add(ModItems.SUPER_SPEED_CARD.get(), EPPItemAndBlock.EX_IMPORT_BUS, 1, "group.ex_io_bus_part");
+                Upgrades.add(ModItems.SUPER_SPEED_CARD.get(), EPPItemAndBlock.EX_EXPORT_BUS, 1, "group.ex_io_bus_part");
+
                 registerForMachineId("expatternprovider:ex_inscriber");
                 registerForMachineId("expatternprovider:circuit_cutter");
             }
@@ -76,7 +90,7 @@ public class ModUpgrades {
         Upgrades.add(ModItems.CAPACITY_CARD.get(),   machine, MAX_CARDS);
         // 超级能源卡（限 1 张）
         Upgrades.add(ModItems.SUPER_ENERGY_CARD.get(),     machine, MAX_CARDS);
-        // 超速卡（限 1 张）
+        // 超频卡（限 1 张）
         Upgrades.add(ModItems.OVERCLOCK_CARD.get(),  machine, MAX_CARDS);
     }
 }

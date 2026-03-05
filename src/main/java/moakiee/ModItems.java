@@ -4,6 +4,7 @@ import moakiee.item.CapacityCard;
 import moakiee.item.EnergyCard;
 import moakiee.item.OverclockCard;
 import moakiee.item.ParallelCard;
+import moakiee.item.SuperSpeedCard;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
@@ -28,9 +29,13 @@ public class ModItems {
     public static final RegistryObject<EnergyCard> SUPER_ENERGY_CARD =
             ITEMS.register("super_energy_card", EnergyCard::new);
 
-    // ── 超速卡（单一等级）─────────────────────────────────────────
+    // ── 超频卡（单一等级）─────────────────────────────────────────
     public static final RegistryObject<OverclockCard> OVERCLOCK_CARD =
             ITEMS.register("overclock_card", OverclockCard::new);
+
+    // ── 超速卡（单一等级）─────────────────────────────────────────
+    public static final RegistryObject<SuperSpeedCard> SUPER_SPEED_CARD =
+            ITEMS.register("super_speed_card", SuperSpeedCard::new);
 
     // ── 并行卡（阶梯分级）─────────────────────────────────────────
     /** 并行卡 - 基础 ×2 */
@@ -67,6 +72,7 @@ public class ModItems {
                         output.accept(CAPACITY_CARD.get());
                         output.accept(SUPER_ENERGY_CARD.get());
                         output.accept(OVERCLOCK_CARD.get());
+                                                output.accept(SUPER_SPEED_CARD.get());
                     })
                     .build());
 }
