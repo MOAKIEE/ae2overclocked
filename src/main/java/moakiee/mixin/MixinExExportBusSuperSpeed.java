@@ -8,6 +8,7 @@ package moakiee.mixin;
 
 import appeng.api.parts.IPartItem;
 import appeng.parts.automation.ExportBusPart;
+import moakiee.ModItems;
 import moakiee.support.SuperSpeedNumberUtil;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -28,6 +29,9 @@ public abstract class MixinExExportBusSuperSpeed extends ExportBusPart {
     @Overwrite(remap = false)
     public int getOperationsPerTick() {
         int result = super.getOperationsPerTick();
+        if (getInstalledUpgrades(ModItems.SUPER_SPEED_CARD.get()) <= 0) {
+            return result;
+        }
         return SuperSpeedNumberUtil.convertLongToIntSaturating(result);
     }
 }

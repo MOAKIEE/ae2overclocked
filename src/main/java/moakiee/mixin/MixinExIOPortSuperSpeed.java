@@ -69,11 +69,11 @@ public abstract class MixinExIOPortSuperSpeed extends IOPortBlockEntity implemen
                 var cell = this.inputCells.getStackInSlot(x);
                 var cellInv = StorageCells.getCellInventory(cell, null);
                 if (cellInv == null) {
-                    ae2oc_moveSlotInCell(this, x);
+                    ae2oc_moveSlot(this, x);
                     continue;
                 }
                 if (itemsToMove > 0) {
-                    itemsToMove = ae2oc_transferItemsFromCell(this, grid, cellInv, itemsToMove);
+                    itemsToMove = ae2oc_transferContents(this, grid, cellInv, itemsToMove);
 
                     if (itemsToMove > 0) {
                         ret = TickRateModulation.IDLE;
@@ -81,7 +81,7 @@ public abstract class MixinExIOPortSuperSpeed extends IOPortBlockEntity implemen
                         ret = TickRateModulation.URGENT;
                     }
                 }
-                if (itemsToMove > 0 && matchesFullnessMode(cellInv) && ae2oc_moveSlotInCell(this, x)) {
+                if (itemsToMove > 0 && matchesFullnessMode(cellInv) && ae2oc_moveSlot(this, x)) {
                     ret = TickRateModulation.URGENT;
                 }
             }
@@ -91,18 +91,16 @@ public abstract class MixinExIOPortSuperSpeed extends IOPortBlockEntity implemen
 
     @Unique
     private static long ae2oc_getItemsToMove(int speedUpgrades, int superSpeedUpgrades) {
-        int result = 1;
-        int speed = 16;
-
+        long baseItemsToMove = 2048L;
         switch (speedUpgrades) {
-            case 1 -> result = 2;
-            case 2 -> result = 3;
-            case 3 -> result = 4;
-            case 4 -> result = 5;
-            case 5 -> result = 6;
+            case 1 -> baseItemsToMove *= 2L;
+            case 2 -> baseItemsToMove *= 4L;
+            case 3 -> baseItemsToMove *= 8L;
+            case 4 -> baseItemsToMove *= 16L;
+            case 5 -> baseItemsToMove *= 32L;
+            default -> {
+            }
         }
-
-        long baseItemsToMove = (long) Math.pow(speed, result);
         if (superSpeedUpgrades <= 0) {
             return baseItemsToMove;
         }
@@ -110,9 +108,9 @@ public abstract class MixinExIOPortSuperSpeed extends IOPortBlockEntity implemen
     }
 
     @Unique
-    private static boolean ae2oc_moveSlotInCell(Object self, int slot) {
+    private static boolean ae2oc_moveSlot(Object self, int slot) {
         try {
-            Method method = ae2oc_findMethod(self.getClass(), "moveSlotInCell", 1);
+            Method method = ae2oc_findMethod(self.getClass(), "moveSlot", 1);
             if (method == null) {
                 return false;
             }
@@ -125,9 +123,9 @@ public abstract class MixinExIOPortSuperSpeed extends IOPortBlockEntity implemen
     }
 
     @Unique
-    private static long ae2oc_transferItemsFromCell(Object self, IGrid grid, Object cellInv, long itemsToMove) {
+    private static long ae2oc_transferContents(Object self, IGrid grid, Object cellInv, long itemsToMove) {
         try {
-            Method method = ae2oc_findMethod(self.getClass(), "transferItemsFromCell", 3);
+            Method method = ae2oc_findMethod(self.getClass(), "transferContents", 3);
             if (method == null) {
                 return itemsToMove;
             }

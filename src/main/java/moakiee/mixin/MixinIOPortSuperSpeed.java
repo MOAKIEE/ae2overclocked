@@ -80,18 +80,14 @@ public abstract class MixinIOPortSuperSpeed implements IUpgradeableObject {
 
     @Unique
     private static long ae2oc_getItemsToMove(int speedUpgrades, int superSpeedUpgrades) {
-        int result = 1;
-        int speed = 16;
-
+        long baseItemsToMove = 256L;
         switch (speedUpgrades) {
-            case 1 -> result = 2;
-            case 2 -> result = 3;
-            case 3 -> result = 4;
-            case 4 -> result = 5;
-            case 5 -> result = 6;
+            case 1 -> baseItemsToMove *= 2L;
+            case 2 -> baseItemsToMove *= 4L;
+            case 3 -> baseItemsToMove *= 8L;
+            default -> {
+            }
         }
-
-        long baseItemsToMove = (long) Math.pow(speed, result);
         if (superSpeedUpgrades <= 0) {
             return baseItemsToMove;
         }
