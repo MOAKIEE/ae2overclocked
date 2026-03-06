@@ -224,7 +224,7 @@ public abstract class MixinCrystalAssemblerOverclock {
             return 0;
         }
 
-        boolean directToNetwork = ParallelCardRuntime.getParallelMultiplier(self) > 1;
+        boolean directToNetwork = ParallelCardRuntime.getParallelMultiplier(self) > 1 || OverclockCardRuntime.hasOverclockCard(self);
         int crafted = 0;
         for (int i = 0; i < maxRounds; i++) {
             if (!(boolean) testRecipe.invoke(ctx, recipe)) {

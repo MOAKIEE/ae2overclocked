@@ -21,7 +21,16 @@
     "MixinContainerCrystalAssemblerTooltip",
     "MixinReactionChamberOverclock",
     "MixinReactionChamberEntityNetwork",
-    "MixinReactionChamberEntityCapacity"
+    "MixinReactionChamberEntityCapacity",
+    "MixinAECSCircuitEtcherOverclock",
+    "MixinAECSCrystalAggregatorOverclock",
+    "MixinAECSCrystalPulverizerOverclock",
+    "MixinAECSEntropyVariationReactionChamberOverclock",
+    "MixinAECSEntropyVariationReactionChamberCapacity",
+    "MixinAECSEnergyComponent",
+    "MixinGenericStackInv",
+    "MixinConfigInventory",
+    "MixinConfigMenuInventory"
   ],
   "client": [
     "MixinReactionChamberScreen",

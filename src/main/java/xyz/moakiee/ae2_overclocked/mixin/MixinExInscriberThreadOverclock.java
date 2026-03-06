@@ -139,8 +139,8 @@ public abstract class MixinExInscriberThreadOverclock {
 
             double availableEnergy = ae2oc_getAvailableEnergy(host);
 
-            // When parallel card is present, output goes to ME network, bypass local slot limit
-            if (cardMultiplier > 1) {
+            // When parallel/overclock card is present, output goes to ME network, bypass local slot limit
+            if (cardMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(host)) {
                 return ParallelEngine.calculateSimple(
                         cardMultiplier, inputCount, 1,
                         Integer.MAX_VALUE,
@@ -198,7 +198,7 @@ public abstract class MixinExInscriberThreadOverclock {
                     int.class, ItemStack.class, boolean.class);
 
             int insertedTotal = 0;
-            boolean directToNetwork = ParallelCardRuntime.getParallelMultiplier(host) > 1;
+            boolean directToNetwork = ParallelCardRuntime.getParallelMultiplier(host) > 1 || OverclockCardRuntime.hasOverclockCard(host);
             if (directToNetwork) {
                 int insertedToNetwork = ae2oc_insertStackToNetwork(host, outputCopy.copy(), Actionable.MODULATE);
                 insertedTotal += insertedToNetwork;

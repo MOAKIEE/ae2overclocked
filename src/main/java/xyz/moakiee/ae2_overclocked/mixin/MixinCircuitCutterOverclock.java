@@ -191,8 +191,9 @@ public abstract class MixinCircuitCutterOverclock {
                 int.class, ItemStack.class, boolean.class);
 
         double availableEnergy = ae2oc_getAvailableEnergy(self, node);
+        boolean directToNetwork = parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self);
         ParallelEngine.ParallelResult result;
-        if (parallelMultiplier > 1) {
+        if (directToNetwork) {
             result = ParallelEngine.calculateSimple(
                     parallelMultiplier, inputCount, 1,
                     Integer.MAX_VALUE, // ??????????????ME??
@@ -219,7 +220,7 @@ public abstract class MixinCircuitCutterOverclock {
         if (!ae2oc_tryConsumePower(self, node, totalEnergy)) return;
         Method runRecipe = ctx.getClass().getMethod("runRecipe", RecipeHolder.class);
         int crafted = 0;
-        boolean directToNetwork = parallelMultiplier > 1;
+        // reuse directToNetwork already computed above
         for (int i = 0; i < actualParallel; i++) {
             ItemStack singleOutput = recipeOutput.copy();
             
@@ -277,7 +278,7 @@ public abstract class MixinCircuitCutterOverclock {
             ItemStack recipeOutput = ((ItemStack) recipeOutputField.get(recipeValue)).copy();
 
             double availableEnergy = ae2oc_getAvailableEnergy(self, node);
-            if (cardMultiplier > 1) {
+            if (cardMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self)) {
                 return ParallelEngine.calculateSimple(
                         cardMultiplier, inputCount, 1,
                         Integer.MAX_VALUE, // ??????????????ME??
@@ -329,7 +330,7 @@ public abstract class MixinCircuitCutterOverclock {
                 if (!ae2oc_tryConsumePower(self, node, extraEnergy)) return;
             }
             int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
-            boolean directToNetwork = parallelMultiplier > 1;
+            boolean directToNetwork = parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self);
             if (directToNetwork) {
                 ae2oc_transferOutputToNetwork(node, outputInv);
             }

@@ -203,7 +203,7 @@ public abstract class MixinInscriberOverclock {
             this.sideItemHandler.extractItem(0, actualParallel, false);
         }
 
-        if (ParallelCardRuntime.getParallelMultiplier(self) > 1) {
+        if (ParallelCardRuntime.getParallelMultiplier(self) > 1 || OverclockCardRuntime.hasOverclockCard(self)) {
             ae2oc_transferOutputToNetwork(self);
         }
 

@@ -208,7 +208,7 @@ public abstract class MixinReactionChamberOverclock {
             int totalOutput = outputStack.getCount() * actualParallel;
             outputStack.setCount(totalOutput);
             insertItem.invoke(outputInv, 0, outputStack, false);
-            if (parallelMultiplier > 1) {
+            if (parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self)) {
                 ae2oc_transferItemOutputToNetwork(node, outputInv);
             }
         } else {
@@ -232,7 +232,7 @@ public abstract class MixinReactionChamberOverclock {
             int totalFluidAmount = outputFluid.getAmount() * actualParallel;
             Method addMethod = fluidInv.getClass().getMethod("add", int.class, AEFluidKey.class, int.class);
             addMethod.invoke(fluidInv, 0, fluidKey, totalFluidAmount);
-            if (parallelMultiplier > 1) {
+            if (parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self)) {
                 ae2oc_transferFluidOutputToNetwork(node, fluidInv);
             }
         }
@@ -291,7 +291,7 @@ public abstract class MixinReactionChamberOverclock {
                     ae2oc_consumeBatchWithRecipe(this.ae2oc_cachedRecipe, inputInv, fluidInv, actualExtra);
                 }
                 int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
-                if (parallelMultiplier > 1) {
+                if (parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self)) {
                     ae2oc_transferItemOutputToNetwork(node, outputInv);
                 }
             } else {
@@ -310,7 +310,7 @@ public abstract class MixinReactionChamberOverclock {
                     ae2oc_consumeBatchWithRecipe(this.ae2oc_cachedRecipe, inputInv, fluidInv, actualExtra);
                 }
                 int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
-                if (parallelMultiplier > 1) {
+                if (parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self)) {
                     ae2oc_transferFluidOutputToNetwork(node, fluidInv);
                 }
             }

@@ -20,6 +20,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import xyz.moakiee.ae2_overclocked.Ae2OcConfig;
 import xyz.moakiee.ae2_overclocked.support.CapacityCardRuntime;
 
+import java.lang.reflect.Field;
+
 @Mixin(value = AppEngInternalInventory.class, remap = false)
 public abstract class MixinAppEngInternalInventory {
 
@@ -32,7 +34,7 @@ public abstract class MixinAppEngInternalInventory {
     @Inject(method = "getSlotLimit", at = @At("HEAD"), cancellable = true)
     private void ae2oc_getSlotLimit(int slot, CallbackInfoReturnable<Integer> cir) {
         AppEngInternalInventory inventory = (AppEngInternalInventory) (Object) this;
-        if (CapacityCardRuntime.getInstalledCapacityCards(inventory.getHost()) > 0) {
+        if (CapacityCardRuntime.getInstalledCapacityCards(ae2oc_resolveHost(inventory)) > 0) {
             cir.setReturnValue(Ae2OcConfig.getCapacityCardSlotLimit());
         }
     }
@@ -52,7 +54,7 @@ public abstract class MixinAppEngInternalInventory {
         AppEngInternalInventory inventory = (AppEngInternalInventory) (Object) this;
 
         // When no capacity card is installed, delegate to the original interface default logic
-        if (CapacityCardRuntime.getInstalledCapacityCards(inventory.getHost()) <= 0) {
+        if (CapacityCardRuntime.getInstalledCapacityCards(ae2oc_resolveHost(inventory)) <= 0) {
             return ae2oc_originalInsertItem(inventory, slot, stack, simulate);
         }
 
@@ -94,13 +96,37 @@ public abstract class MixinAppEngInternalInventory {
     }
 
     /**
+     * Resolve the host (typically a BlockEntity) for the given inventory.
+     * <p>
+     * For AE2's own machines, getHost() returns the InternalInventoryHost directly.
+     * For AE2CS machines, the inventory is created as an anonymous inner class inside the
+     * BlockEntity constructor (e.g. {@code new AppEngInternalInventory(3) { ... }}), so
+     * getHost() returns null. In that case, we fall back to reading the synthetic
+     * {@code this$0} field that Java generates for inner classes, which points to the
+     * enclosing BlockEntity.
+     */
+    @Unique
+    private static Object ae2oc_resolveHost(AppEngInternalInventory inventory) {
+        Object host = inventory.getHost();
+        if (host != null) return host;
+
+        // Fallback: anonymous inner class → this$0 → enclosing BlockEntity
+        try {
+            Field outer = inventory.getClass().getDeclaredField("this$0");
+            outer.setAccessible(true);
+            return outer.get(inventory);
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    /**
      * Reproduce the original InternalInventory.insertItem() default logic for
      * the case when no capacity card is installed.
      */
     @Unique
     private ItemStack ae2oc_originalInsertItem(InternalInventory inventory, int slot, ItemStack stack, boolean simulate) {
         Preconditions.checkArgument(slot >= 0 && slot < inventory.size(), "slot out of range");
-
         if (stack.isEmpty() || !inventory.isItemValid(slot, stack)) {
             return stack;
         }
