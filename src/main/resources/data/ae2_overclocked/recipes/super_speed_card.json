@@ -1,0 +1,60 @@
+{
+  "type": "forge:conditional",
+  "recipes": [
+    {
+      "conditions": [
+        {
+          "type": "forge:mod_loaded",
+          "modid": "advanced_ae"
+        }
+      ],
+      "recipe": {
+        "type": "ae2:transform",
+        "circumstance": {
+          "type": "explosion"
+        },
+        "ingredients": [
+          {
+            "item": "ae2:speed_card"
+          },
+          {
+            "item": "minecraft:dragon_breath"
+          },
+          {
+            "item": "advanced_ae:quantum_alloy_plate"
+          }
+        ],
+        "result": {
+          "item": "ae2_overclocked:super_speed_card"
+        }
+      }
+    },
+    {
+      "conditions": [
+        {
+          "type": "forge:true"
+        }
+      ],
+      "recipe": {
+        "type": "ae2:transform",
+        "circumstance": {
+          "type": "explosion"
+        },
+        "ingredients": [
+          {
+            "item": "ae2:speed_card"
+          },
+          {
+            "item": "minecraft:dragon_breath"
+          },
+          {
+            "item": "ae2:singularity"
+          }
+        ],
+        "result": {
+          "item": "ae2_overclocked:super_speed_card"
+        }
+      }
+    }
+  ]
+}

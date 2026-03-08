@@ -23,7 +23,7 @@
             "item": "minecraft:dragon_breath"
           },
           "C": {
-            "item": "ae2:speed_card"
+            "item": "ae2_overclocked:super_speed_card"
           }
         },
         "result": {
@@ -52,7 +52,7 @@
             "item": "minecraft:dragon_breath"
           },
           "C": {
-            "item": "ae2:speed_card"
+            "item": "ae2_overclocked:super_speed_card"
           }
         },
         "result": {
