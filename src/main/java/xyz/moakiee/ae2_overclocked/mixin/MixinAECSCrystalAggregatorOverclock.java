@@ -62,10 +62,13 @@ public abstract class MixinAECSCrystalAggregatorOverclock implements IUpgradeabl
 
         try {
             if (hasOverclock) {
-                // Must run super.serverTick() first so EnergyComponent pulls power from the ME network.
-                ae2oc_runSuperServerTick();
+                // Set processing flag BEFORE calling runSuperServerTick to prevent
+                // infinite recursion: invoke(this) dispatches to the mixin-injected
+                // serverTick which would re-enter ae2oc_headTick.
                 ae2oc_processing = true;
                 try {
+                    // Must run super.serverTick() first so EnergyComponent pulls power from the ME network.
+                    ae2oc_runSuperServerTick();
                     ae2oc_instantCraft(Math.max(parallelMultiplier, 1));
                 } finally {
                     ae2oc_processing = false;
@@ -405,14 +408,43 @@ public abstract class MixinAECSCrystalAggregatorOverclock implements IUpgradeabl
     }
 
     /**
-     * Invoke the parent class's serverTick() so that EnergyComponent can pull power from the ME network.
+     * Directly invoke machineComponents.onServerTick() to let EnergyComponent pull power
+     * from the ME network and SideConfigComponent push outputs.
+     * <p>
+     * We must NOT use reflective serverTick() because Method.invoke uses virtual dispatch,
+     * which would call the mixin-injected serverTick() and either cause infinite recursion
+     * or execute the full original method body unintentionally.
      */
     @Unique
     private void ae2oc_runSuperServerTick() {
         try {
-            Method m = ae2oc_findMethod(this.getClass().getSuperclass(), "serverTick");
-            m.setAccessible(true);
-            m.invoke(this);
+            // Get machineComponents field from AENetworkedComponentBlockEntity
+            Method getMC = ae2oc_findMethod(this.getClass(), "getMachineComponents");
+            getMC.setAccessible(true);
+            Object machineComponents = getMC.invoke(this);
+            if (machineComponents == null) return;
+
+            // Build MachineContext(this, level, worldPosition, getBlockState())
+            Method getLevel = this.getClass().getMethod("getLevel");
+            Object level = getLevel.invoke(this);
+            if (level == null) return;
+
+            Field wpField = ae2oc_findField(this.getClass(), "worldPosition");
+            wpField.setAccessible(true);
+            Object worldPosition = wpField.get(this);
+
+            Method getBlockState = this.getClass().getMethod("getBlockState");
+            Object blockState = getBlockState.invoke(this);
+
+            // Create MachineContext
+            Class<?> ctxClass = Class.forName("io.github.lounode.ae2cs.common.machine.MachineContext");
+            Class<?> hostClass = Class.forName("io.github.lounode.ae2cs.common.machine.IMachineHost");
+            Object ctx = ctxClass.getConstructors()[0].newInstance(
+                    hostClass.cast(this), level, worldPosition, blockState);
+
+            // Call machineComponents.onServerTick(ctx)
+            Method onServerTick = machineComponents.getClass().getMethod("onServerTick", ctxClass);
+            onServerTick.invoke(machineComponents, ctx);
         } catch (Exception ignored) {
         }
     }

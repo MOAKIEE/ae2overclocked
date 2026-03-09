@@ -6,9 +6,11 @@
  */
 package xyz.moakiee.ae2_overclocked.mixin;
 
+import appeng.api.networking.IGrid;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.ticking.TickRateModulation;
 import appeng.api.storage.StorageCells;
+import appeng.api.storage.cells.StorageCell;
 import appeng.api.upgrades.IUpgradeableObject;
 import appeng.blockentity.storage.IOPortBlockEntity;
 import appeng.core.definitions.AEItems;
@@ -17,17 +19,15 @@ import xyz.moakiee.ae2_overclocked.ModItems;
 import xyz.moakiee.ae2_overclocked.support.SuperSpeedNumberUtil;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Mutable;
-import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
-
-import java.lang.reflect.Method;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(IOPortBlockEntity.class)
 public abstract class MixinIOPortSuperSpeed implements IUpgradeableObject {
 
-    @Mutable
     @Final
     @Shadow(remap = false)
     private AppEngInternalInventory inputCells;
@@ -36,46 +36,61 @@ public abstract class MixinIOPortSuperSpeed implements IUpgradeableObject {
     @Shadow(remap = false)
     private static int NUMBER_OF_CELL_SLOTS;
 
-    /**
-     * @author ae2overclocked
-     * @reason Add super speed card support to IO Port
-     */
-    @Overwrite(remap = false)
-    public TickRateModulation tickingRequest(IGridNode node, int ticksSinceLastCall) {
+    @Shadow(remap = false)
+    private boolean moveSlot(int x) { throw new AbstractMethodError(); }
+
+    @Shadow(remap = false)
+    private long transferContents(IGrid grid, StorageCell cellInv, long itemsToMove) { throw new AbstractMethodError(); }
+
+    @Shadow(remap = false)
+    public abstract boolean matchesFullnessMode(StorageCell inv);
+
+    @Inject(method = "tickingRequest", at = @At("HEAD"), cancellable = true, remap = false)
+    private void ae2oc_tickingRequest(IGridNode node, int ticksSinceLastCall, CallbackInfoReturnable<TickRateModulation> cir) {
         IOPortBlockEntity self = (IOPortBlockEntity) (Object) this;
         if (!self.getMainNode().isActive()) {
-            return TickRateModulation.IDLE;
+            cir.setReturnValue(TickRateModulation.IDLE);
+            return;
         }
 
+        int superSpeedUpgrades = this.getUpgrades().getInstalledUpgrades(ModItems.SUPER_SPEED_CARD.get());
+        if (superSpeedUpgrades <= 0) {
+            // No super speed card installed, let the original method handle it
+            return;
+        }
+
+        // Super speed card is installed, override the entire logic
         TickRateModulation ret = TickRateModulation.SLEEP;
 
         int speedUpgrades = this.getUpgrades().getInstalledUpgrades(AEItems.SPEED_CARD);
-        int superSpeedUpgrades = this.getUpgrades().getInstalledUpgrades(ModItems.SUPER_SPEED_CARD.get());
         long itemsToMove = ae2oc_getItemsToMove(speedUpgrades, superSpeedUpgrades);
 
         var grid = self.getMainNode().getGrid();
         if (grid == null) {
-            return TickRateModulation.IDLE;
+            cir.setReturnValue(TickRateModulation.IDLE);
+            return;
         }
 
         for (int x = 0; x < NUMBER_OF_CELL_SLOTS; x++) {
             var cell = this.inputCells.getStackInSlot(x);
+            // Keep the original StorageCells.getCellInventory call so that other mods
+            // (e.g. neoecoae) can @WrapOperation on it
             var cellInv = StorageCells.getCellInventory(cell, null);
             if (cellInv == null) {
-                ae2oc_moveSlot(this, x);
+                moveSlot(x);
                 continue;
             }
 
             if (itemsToMove > 0L) {
-                itemsToMove = ae2oc_transferContents(this, grid, cellInv, itemsToMove);
+                itemsToMove = transferContents(grid, cellInv, itemsToMove);
                 ret = itemsToMove > 0L ? TickRateModulation.IDLE : TickRateModulation.URGENT;
             }
 
-            if (itemsToMove > 0L && ae2oc_matchesFullnessMode(self, cellInv) && ae2oc_moveSlot(this, x)) {
+            if (itemsToMove > 0L && matchesFullnessMode(cellInv) && moveSlot(x)) {
                 ret = TickRateModulation.URGENT;
             }
         }
-        return ret;
+        cir.setReturnValue(ret);
     }
 
     @Unique
@@ -88,73 +103,6 @@ public abstract class MixinIOPortSuperSpeed implements IUpgradeableObject {
             default -> {
             }
         }
-        if (superSpeedUpgrades <= 0) {
-            return baseItemsToMove;
-        }
         return SuperSpeedNumberUtil.boostLongSaturating(baseItemsToMove);
-    }
-
-    @Unique
-    private static boolean ae2oc_moveSlot(Object self, int slot) {
-        try {
-            Method method = ae2oc_findMethod(self.getClass(), "moveSlot", 1);
-            if (method == null) {
-                return false;
-            }
-            method.setAccessible(true);
-            Object value = method.invoke(self, slot);
-            return value instanceof Boolean ok && ok;
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    @Unique
-    private static long ae2oc_transferContents(Object self, Object grid, Object cellInv, long itemsToMove) {
-        try {
-            Method method = ae2oc_findMethod(self.getClass(), "transferContents", 3);
-            if (method == null) {
-                return itemsToMove;
-            }
-            method.setAccessible(true);
-            Object value = method.invoke(self, grid, cellInv, itemsToMove);
-            if (value instanceof Long moved) {
-                return moved;
-            }
-            if (value instanceof Integer movedInt) {
-                return movedInt.longValue();
-            }
-        } catch (Throwable ignored) {
-        }
-        return itemsToMove;
-    }
-
-    @Unique
-    private static boolean ae2oc_matchesFullnessMode(Object self, Object cellInv) {
-        try {
-            Method method = ae2oc_findMethod(self.getClass(), "matchesFullnessMode", 1);
-            if (method == null) {
-                return true;
-            }
-            method.setAccessible(true);
-            Object value = method.invoke(self, cellInv);
-            return value instanceof Boolean ok && ok;
-        } catch (Throwable ignored) {
-            return true;
-        }
-    }
-
-    @Unique
-    private static Method ae2oc_findMethod(Class<?> type, String name, int parameterCount) {
-        Class<?> current = type;
-        while (current != null) {
-            for (Method method : current.getDeclaredMethods()) {
-                if (method.getName().equals(name) && method.getParameterCount() == parameterCount) {
-                    return method;
-                }
-            }
-            current = current.getSuperclass();
-        }
-        return null;
     }
 }
