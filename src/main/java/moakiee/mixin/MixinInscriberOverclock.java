@@ -376,26 +376,32 @@ public abstract class MixinInscriberOverclock {
      */
     @Unique
     private boolean ae2oc_tryConsumePower(InscriberBlockEntity self, IGridNode node, double powerNeeded) {
-        // 先尝试内部缓存
-        double extracted = self.extractAEPower(powerNeeded, Actionable.SIMULATE, PowerMultiplier.CONFIG);
-        if (extracted >= powerNeeded - 0.01) {
-            self.extractAEPower(powerNeeded, Actionable.MODULATE, PowerMultiplier.CONFIG);
-            return true;
-        }
+        // 1. 模拟检查总可用能量（内部 + 网络）
+        double internalAvail = self.extractAEPower(powerNeeded, Actionable.SIMULATE, PowerMultiplier.CONFIG);
 
-        // 尝试网络
+        double networkAvail = 0;
+        IEnergyService energyService = null;
         var grid = node.getGrid();
         if (grid != null) {
-            IEnergyService energyService = grid.getEnergyService();
-            double networkExtracted = energyService.extractAEPower(powerNeeded, Actionable.SIMULATE,
+            energyService = grid.getEnergyService();
+            networkAvail = energyService.extractAEPower(powerNeeded, Actionable.SIMULATE,
                     PowerMultiplier.CONFIG);
-            if (networkExtracted >= powerNeeded - 0.01) {
-                energyService.extractAEPower(powerNeeded, Actionable.MODULATE, PowerMultiplier.CONFIG);
-                return true;
-            }
         }
 
-        return false;
+        if (internalAvail + networkAvail < powerNeeded - 0.01) {
+            return false; // 总量不够
+        }
+
+        // 2. 实际扣除：先扣内部，剩余扣网络
+        double remaining = powerNeeded;
+        double actualInternal = self.extractAEPower(remaining, Actionable.MODULATE, PowerMultiplier.CONFIG);
+        remaining -= actualInternal;
+
+        if (remaining > 0.01 && energyService != null) {
+            energyService.extractAEPower(remaining, Actionable.MODULATE, PowerMultiplier.CONFIG);
+        }
+
+        return true;
     }
 
     @Unique

@@ -1,7 +1,9 @@
 package moakiee.mixin;
 
 import appeng.api.config.Actionable;
+import appeng.api.config.PowerMultiplier;
 import appeng.api.networking.IGridNode;
+import appeng.api.networking.energy.IEnergyService;
 import appeng.api.networking.security.IActionSource;
 import appeng.api.networking.storage.IStorageService;
 import appeng.api.stacks.AEItemKey;
@@ -505,15 +507,32 @@ public class MixinAE2CSOverclock {
 
     @Unique
     private double ae2oc_getAvailableEnergy() {
+        double total = 0;
         try {
             Method extract = this.getClass().getMethod("extractAEPower", double.class, Actionable.class);
             Object v = extract.invoke(this, Double.MAX_VALUE, Actionable.SIMULATE);
             if (v instanceof Number n) {
-                return n.doubleValue();
+                total += n.doubleValue();
             }
         } catch (Throwable ignored) {
         }
-        return 0.0;
+
+        // 加上 ME 网络能量
+        try {
+            Object mainNode = ae2oc_invokeNoArg(this, "getMainNode");
+            if (mainNode != null) {
+                Object gridNodeObj = ae2oc_invokeNoArg(mainNode, "getNode");
+                if (gridNodeObj instanceof IGridNode gridNode) {
+                    var grid = gridNode.getGrid();
+                    if (grid != null) {
+                        IEnergyService energyService = grid.getEnergyService();
+                        total += energyService.extractAEPower(Double.MAX_VALUE, Actionable.SIMULATE, PowerMultiplier.CONFIG);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return total;
     }
 
     /**
@@ -641,11 +660,39 @@ public class MixinAE2CSOverclock {
     @Unique
     private boolean ae2oc_tryConsumeEnergy(double amount) {
         try {
+            // 1. 模拟检查总可用能量（内部 + 网络）
             Method extract = this.getClass().getMethod("extractAEPower", double.class, Actionable.class);
-            Object v = extract.invoke(this, amount, Actionable.MODULATE);
-            if (v instanceof Number n) {
-                return n.doubleValue() >= amount - 0.01;
+            Object simV = extract.invoke(this, amount, Actionable.SIMULATE);
+            double internalAvail = (simV instanceof Number n) ? n.doubleValue() : 0;
+
+            double networkAvail = 0;
+            IEnergyService energyService = null;
+            Object mainNode = ae2oc_invokeNoArg(this, "getMainNode");
+            if (mainNode != null) {
+                Object gridNodeObj = ae2oc_invokeNoArg(mainNode, "getNode");
+                if (gridNodeObj instanceof IGridNode gridNode) {
+                    var grid = gridNode.getGrid();
+                    if (grid != null) {
+                        energyService = grid.getEnergyService();
+                        networkAvail = energyService.extractAEPower(amount, Actionable.SIMULATE, PowerMultiplier.CONFIG);
+                    }
+                }
             }
+
+            if (internalAvail + networkAvail < amount - 0.01) {
+                return false; // 总量不够
+            }
+
+            // 2. 实际扣除：先扣内部，剩余扣网络
+            Object modV = extract.invoke(this, amount, Actionable.MODULATE);
+            double actualInternal = (modV instanceof Number n2) ? n2.doubleValue() : 0;
+            double remaining = amount - actualInternal;
+
+            if (remaining > 0.01 && energyService != null) {
+                energyService.extractAEPower(remaining, Actionable.MODULATE, PowerMultiplier.CONFIG);
+            }
+
+            return true;
         } catch (Throwable ignored) {
         }
         return false;

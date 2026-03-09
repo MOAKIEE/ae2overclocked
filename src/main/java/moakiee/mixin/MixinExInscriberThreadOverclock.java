@@ -346,13 +346,12 @@ public abstract class MixinExInscriberThreadOverclock {
             Method extractMethod = host.getClass().getMethod(
                     "extractAEPower", double.class, Actionable.class, PowerMultiplier.class);
 
-            double extracted = (double) extractMethod.invoke(host, powerNeeded,
+            // 1. 模拟检查总可用能量（内部 + 网络）
+            double internalAvail = (double) extractMethod.invoke(host, powerNeeded,
                     Actionable.SIMULATE, PowerMultiplier.CONFIG);
-            if (extracted >= powerNeeded - 0.01) {
-                extractMethod.invoke(host, powerNeeded, Actionable.MODULATE, PowerMultiplier.CONFIG);
-                return true;
-            }
 
+            double networkAvail = 0;
+            IEnergyService energyService = null;
             Method getMainNode = host.getClass().getMethod("getMainNode");
             Object mainNode = getMainNode.invoke(host);
             if (mainNode != null) {
@@ -360,15 +359,26 @@ public abstract class MixinExInscriberThreadOverclock {
                 Object grid = getGrid.invoke(mainNode);
                 if (grid != null) {
                     Method getEnergyService = grid.getClass().getMethod("getEnergyService");
-                    IEnergyService energyService = (IEnergyService) getEnergyService.invoke(grid);
-                    double networkExtracted = energyService.extractAEPower(powerNeeded, Actionable.SIMULATE,
-                            PowerMultiplier.CONFIG);
-                    if (networkExtracted >= powerNeeded - 0.01) {
-                        energyService.extractAEPower(powerNeeded, Actionable.MODULATE, PowerMultiplier.CONFIG);
-                        return true;
-                    }
+                    energyService = (IEnergyService) getEnergyService.invoke(grid);
+                    networkAvail = energyService.extractAEPower(powerNeeded, Actionable.SIMULATE, PowerMultiplier.CONFIG);
                 }
             }
+
+            if (internalAvail + networkAvail < powerNeeded - 0.01) {
+                return false; // 总量不够
+            }
+
+            // 2. 实际扣除：先扣内部，剩余扣网络
+            double remaining = powerNeeded;
+            double actualInternal = (double) extractMethod.invoke(host, remaining,
+                    Actionable.MODULATE, PowerMultiplier.CONFIG);
+            remaining -= actualInternal;
+
+            if (remaining > 0.01 && energyService != null) {
+                energyService.extractAEPower(remaining, Actionable.MODULATE, PowerMultiplier.CONFIG);
+            }
+
+            return true;
         } catch (Exception e) {
             // 反射失败
         }

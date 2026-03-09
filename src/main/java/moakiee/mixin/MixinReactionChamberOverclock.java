@@ -699,23 +699,34 @@ public abstract class MixinReactionChamberOverclock {
             Method extractMethod = self.getClass().getMethod(
                     "extractAEPower", double.class, Actionable.class, PowerMultiplier.class);
 
-            double extracted = (double) extractMethod.invoke(self, powerNeeded,
+            // 1. 模拟检查总可用能量（内部 + 网络）
+            double internalAvail = (double) extractMethod.invoke(self, powerNeeded,
                     Actionable.SIMULATE, PowerMultiplier.CONFIG);
-            if (extracted >= powerNeeded - 0.01) {
-                extractMethod.invoke(self, powerNeeded, Actionable.MODULATE, PowerMultiplier.CONFIG);
-                return true;
-            }
 
+            double networkAvail = 0;
+            IEnergyService energyService = null;
             var grid = node.getGrid();
             if (grid != null) {
-                IEnergyService energyService = grid.getEnergyService();
-                double networkExtracted = energyService.extractAEPower(powerNeeded, Actionable.SIMULATE,
+                energyService = grid.getEnergyService();
+                networkAvail = energyService.extractAEPower(powerNeeded, Actionable.SIMULATE,
                         PowerMultiplier.CONFIG);
-                if (networkExtracted >= powerNeeded - 0.01) {
-                    energyService.extractAEPower(powerNeeded, Actionable.MODULATE, PowerMultiplier.CONFIG);
-                    return true;
-                }
             }
+
+            if (internalAvail + networkAvail < powerNeeded - 0.01) {
+                return false; // 总量不够
+            }
+
+            // 2. 实际扣除：先扣内部，剩余扣网络
+            double remaining = powerNeeded;
+            double actualInternal = (double) extractMethod.invoke(self, remaining,
+                    Actionable.MODULATE, PowerMultiplier.CONFIG);
+            remaining -= actualInternal;
+
+            if (remaining > 0.01 && energyService != null) {
+                energyService.extractAEPower(remaining, Actionable.MODULATE, PowerMultiplier.CONFIG);
+            }
+
+            return true;
         } catch (Exception e) {
             // 反射失败
         }
