@@ -1,0 +1,30 @@
+{
+    "neoforge:conditions": [
+        {
+            "type": "neoforge:not",
+            "value": {
+                "type": "neoforge:mod_loaded",
+                "modid": "advanced_ae"
+            }
+        }
+    ],
+    "type": "ae2:transform",
+    "circumstance": {
+        "type": "explosion"
+    },
+    "ingredients": [
+        {
+            "item": "ae2:speed_card"
+        },
+        {
+            "item": "minecraft:dragon_breath"
+        },
+        {
+            "item": "ae2:singularity"
+        }
+    ],
+    "result": {
+        "id": "ae2_overclocked:super_speed_card",
+        "count": 1
+    }
+}

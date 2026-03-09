@@ -30,7 +30,12 @@
     "MixinAECSEnergyComponent",
     "MixinGenericStackInv",
     "MixinConfigInventory",
-    "MixinConfigMenuInventory"
+    "MixinConfigMenuInventory",
+    "MixinIOBusPartSuperSpeed",
+    "MixinExImportBusSuperSpeed",
+    "MixinExExportBusSuperSpeed",
+    "MixinIOPortSuperSpeed",
+    "MixinExIOPortSuperSpeed"
   ],
   "client": [
     "MixinReactionChamberScreen",

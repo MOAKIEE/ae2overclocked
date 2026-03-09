@@ -22,6 +22,7 @@ public final class Ae2OcConfig {
     public static final int DEFAULT_CAPACITY_SLOT_LIMIT = Integer.MAX_VALUE;
     public static final double DEFAULT_SUPER_ENERGY_BUFFER_FE = 2_000_000_000.0;
     public static final int DEFAULT_PARALLEL_MAX_MULTIPLIER = Integer.MAX_VALUE;
+    public static final int DEFAULT_SUPER_SPEED_CARD_MULTIPLIER = 512;
     public static final int DEFAULT_BREAK_PROTECTION_ITEM_THRESHOLD = 1000;
     public static final double DEFAULT_FE_PER_AE = 2.0;
 
@@ -30,6 +31,7 @@ public final class Ae2OcConfig {
     private static final ModConfigSpec.IntValue CAPACITY_SLOT_LIMIT;
     private static final ModConfigSpec.DoubleValue SUPER_ENERGY_BUFFER_FE;
     private static final ModConfigSpec.IntValue PARALLEL_MAX_MULTIPLIER;
+    private static final ModConfigSpec.IntValue SUPER_SPEED_CARD_MULTIPLIER;
     private static final ModConfigSpec.IntValue BREAK_PROTECTION_ITEM_THRESHOLD;
     private static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED_MACHINE_IDS;
 
@@ -52,6 +54,11 @@ public final class Ae2OcConfig {
                 .translation("config.ae2_overclocked.cards.parallelCardMaxMultiplier")
                 .comment("Multiplier applied by the Parallel Card (Max tier). Default: Integer.MAX_VALUE.")
                 .defineInRange("parallelCardMaxMultiplier", DEFAULT_PARALLEL_MAX_MULTIPLIER, 2, Integer.MAX_VALUE);
+
+        SUPER_SPEED_CARD_MULTIPLIER = builder
+                .translation("config.ae2_overclocked.cards.superSpeedCardMultiplier")
+                .comment("Multiplier applied when Super Speed Card is active on I/O buses and I/O ports. Default: 512.")
+                .defineInRange("superSpeedCardMultiplier", DEFAULT_SUPER_SPEED_CARD_MULTIPLIER, 1, Integer.MAX_VALUE);
 
         builder.pop();
         builder.translation("config.ae2_overclocked.protection").push("protection");
@@ -91,6 +98,10 @@ public final class Ae2OcConfig {
 
     public static int getParallelCardMaxMultiplier() {
         return Math.max(PARALLEL_MAX_MULTIPLIER.get(), 2);
+    }
+
+    public static int getSuperSpeedCardMultiplier() {
+        return Math.max(SUPER_SPEED_CARD_MULTIPLIER.get(), 1);
     }
 
     public static int getBreakProtectionItemThreshold() {

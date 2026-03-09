@@ -11,6 +11,7 @@ import xyz.moakiee.ae2_overclocked.item.CapacityCard;
 import xyz.moakiee.ae2_overclocked.item.EnergyCard;
 import xyz.moakiee.ae2_overclocked.item.OverclockCard;
 import xyz.moakiee.ae2_overclocked.item.ParallelCard;
+import xyz.moakiee.ae2_overclocked.item.SuperSpeedCard;
 
 public final class ModItems {
 
@@ -24,6 +25,10 @@ public final class ModItems {
             ITEMS.register("super_energy_card", EnergyCard::new);
     public static final DeferredItem<OverclockCard> OVERCLOCK_CARD =
             ITEMS.register("overclock_card", OverclockCard::new);
+
+    // ── 超速卡（单一等级）─────────────────────────────────────────
+    public static final DeferredItem<SuperSpeedCard> SUPER_SPEED_CARD =
+            ITEMS.register("super_speed_card", SuperSpeedCard::new);
 
     public static final DeferredItem<ParallelCard> PARALLEL_CARD =
             ITEMS.register("parallel_card", () -> new ParallelCard(2));
@@ -49,6 +54,7 @@ public final class ModItems {
                         output.accept(CAPACITY_CARD.get());
                         output.accept(SUPER_ENERGY_CARD.get());
                         output.accept(OVERCLOCK_CARD.get());
+                        output.accept(SUPER_SPEED_CARD.get());
                     })
                     .build());
 
