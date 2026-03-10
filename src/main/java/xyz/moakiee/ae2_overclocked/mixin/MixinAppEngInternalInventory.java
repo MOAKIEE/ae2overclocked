@@ -21,11 +21,17 @@ import xyz.moakiee.ae2_overclocked.Ae2OcConfig;
 import xyz.moakiee.ae2_overclocked.support.CapacityCardRuntime;
 
 import java.lang.reflect.Field;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Mixin(value = AppEngInternalInventory.class, remap = false)
 public abstract class MixinAppEngInternalInventory {
 
     private static final String AE2OC_COUNT_KEY = "ae2ocCount";
+
+    // Cache: for each class, the Optional<Field> for "this$0"
+    @Unique
+    private static final ConcurrentHashMap<Class<?>, Optional<Field>> ae2oc_outerFieldCache = new ConcurrentHashMap<>();
 
     @Shadow
     @Final
@@ -110,12 +116,23 @@ public abstract class MixinAppEngInternalInventory {
         Object host = inventory.getHost();
         if (host != null) return host;
 
-        // Fallback: anonymous inner class → this$0 → enclosing BlockEntity
-        try {
-            Field outer = inventory.getClass().getDeclaredField("this$0");
-            outer.setAccessible(true);
-            return outer.get(inventory);
-        } catch (Exception ignored) {
+        // Fallback: anonymous inner class → this$0 → enclosing BlockEntity (with cache)
+        Class<?> clazz = inventory.getClass();
+        Optional<Field> opt = ae2oc_outerFieldCache.computeIfAbsent(clazz, c -> {
+            try {
+                Field f = c.getDeclaredField("this$0");
+                f.setAccessible(true);
+                return Optional.of(f);
+            } catch (NoSuchFieldException e) {
+                return Optional.empty();
+            }
+        });
+
+        if (opt.isPresent()) {
+            try {
+                return opt.get().get(inventory);
+            } catch (Exception ignored) {
+            }
         }
         return null;
     }

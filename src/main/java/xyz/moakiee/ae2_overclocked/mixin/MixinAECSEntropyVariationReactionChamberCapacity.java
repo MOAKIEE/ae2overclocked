@@ -18,6 +18,8 @@ import xyz.moakiee.ae2_overclocked.support.CapacityCardRuntime;
 import xyz.moakiee.ae2_overclocked.support.OverstackingRegistry;
 
 import java.lang.reflect.Method;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Applies Capacity Card support to AE2CS EntropyVariationReactionChamberBlockEntity.
@@ -33,6 +35,9 @@ import java.lang.reflect.Method;
 @Mixin(targets = "io.github.lounode.ae2cs.common.block.entity.EntropyVariationReactionChamberBlockEntity",
         remap = false)
 public class MixinAECSEntropyVariationReactionChamberCapacity {
+
+    @Unique
+    private static final ConcurrentHashMap<String, Optional<Method>> ae2oc_methodCache = new ConcurrentHashMap<>();
 
     @Unique
     private long ae2oc_defaultInputItemCapacity = 64L;
@@ -100,8 +105,9 @@ public class MixinAECSEntropyVariationReactionChamberCapacity {
 
     @Unique
     private static long ae2oc_tryGetCapacity(GenericStackInv inv, AEKeyType keyType, long fallback) {
+        Method method = ae2oc_cachedGetMethod(inv.getClass(), "getCapacity", AEKeyType.class);
+        if (method == null) return fallback;
         try {
-            Method method = inv.getClass().getMethod("getCapacity", AEKeyType.class);
             Object result = method.invoke(inv, keyType);
             if (result instanceof Long value) {
                 return value;
@@ -113,11 +119,29 @@ public class MixinAECSEntropyVariationReactionChamberCapacity {
 
     @Unique
     private static Object ae2oc_tryInvokeNoArg(Object target, String methodName) {
+        Method method = ae2oc_cachedGetMethod(target.getClass(), methodName);
+        if (method == null) return null;
         try {
-            Method method = target.getClass().getMethod(methodName);
             return method.invoke(target);
         } catch (Throwable ignored) {
             return null;
         }
+    }
+
+    @Unique
+    private static Method ae2oc_cachedGetMethod(Class<?> clazz, String name, Class<?>... params) {
+        StringBuilder sb = new StringBuilder(clazz.getName()).append("#").append(name);
+        for (Class<?> p : params) sb.append(',').append(p.getName());
+        String key = sb.toString();
+        Optional<Method> opt = ae2oc_methodCache.computeIfAbsent(key, k -> {
+            try {
+                Method m = clazz.getMethod(name, params);
+                m.setAccessible(true);
+                return Optional.of(m);
+            } catch (NoSuchMethodException e) {
+                return Optional.empty();
+            }
+        });
+        return opt.orElse(null);
     }
 }

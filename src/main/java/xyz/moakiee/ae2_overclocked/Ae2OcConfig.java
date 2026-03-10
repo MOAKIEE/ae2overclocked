@@ -193,20 +193,61 @@ public final class Ae2OcConfig {
         return target;
     }
 
+    // ── Reflection caches for Ae2OcConfig ──────────────────────────────
+    private static final java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<Method>> CONFIG_CACHE_METHOD = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<Field>>  CONFIG_CACHE_FIELD  = new java.util.concurrent.ConcurrentHashMap<>();
+
     private static Object tryInvokeNoArg(Object target, String methodName) {
+        if (target == null) {
+            return null;
+        }
+        Class<?> clazz = target.getClass();
+        String cacheKey = clazz.getName() + "#" + methodName;
+
+        java.util.Optional<Method> opt = CONFIG_CACHE_METHOD.computeIfAbsent(cacheKey, k -> {
+            try {
+                Method m = clazz.getMethod(methodName);
+                m.setAccessible(true);
+                return java.util.Optional.of(m);
+            } catch (NoSuchMethodException e) {
+                return java.util.Optional.empty();
+            }
+        });
+
+        if (opt.isEmpty()) {
+            return null;
+        }
+
         try {
-            Method method = target.getClass().getMethod(methodName);
-            return method.invoke(target);
+            return opt.get().invoke(target);
         } catch (Throwable ignored) {
             return null;
         }
     }
 
     private static Object tryGetField(Object target, String fieldName) {
+        if (target == null) {
+            return null;
+        }
+        Class<?> clazz = target.getClass();
+        String cacheKey = clazz.getName() + "#" + fieldName;
+
+        java.util.Optional<Field> opt = CONFIG_CACHE_FIELD.computeIfAbsent(cacheKey, k -> {
+            try {
+                Field f = clazz.getDeclaredField(fieldName);
+                f.setAccessible(true);
+                return java.util.Optional.of(f);
+            } catch (NoSuchFieldException e) {
+                return java.util.Optional.empty();
+            }
+        });
+
+        if (opt.isEmpty()) {
+            return null;
+        }
+
         try {
-            Field field = target.getClass().getDeclaredField(fieldName);
-            field.setAccessible(true);
-            return field.get(target);
+            return opt.get().get(target);
         } catch (Throwable ignored) {
             return null;
         }

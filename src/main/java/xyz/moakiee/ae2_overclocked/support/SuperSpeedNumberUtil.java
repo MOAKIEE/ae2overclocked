@@ -37,12 +37,33 @@ public final class SuperSpeedNumberUtil {
         return value * multiplier;
     }
 
+    // Cached EPPConfig.busSpeed field lookup (done once, never repeated)
+    private static volatile boolean ae2oc_eppCacheTried = false;
+    private static volatile java.lang.reflect.Field ae2oc_eppBusSpeedField = null;
+
     private static int ae2oc_getExtendedAeBusSpeed() {
+        if (!ae2oc_eppCacheTried) {
+            synchronized (SuperSpeedNumberUtil.class) {
+                if (!ae2oc_eppCacheTried) {
+                    try {
+                        Class<?> eppConfigClass = Class.forName("com.glodblock.github.extendedae.config.EPPConfig");
+                        java.lang.reflect.Field f = eppConfigClass.getDeclaredField("busSpeed");
+                        f.setAccessible(true);
+                        ae2oc_eppBusSpeedField = f;
+                    } catch (Throwable ignored) {
+                        // ExtendedAE not present – field stays null
+                    }
+                    ae2oc_eppCacheTried = true;
+                }
+            }
+        }
+
+        if (ae2oc_eppBusSpeedField == null) {
+            return 1;
+        }
+
         try {
-            Class<?> eppConfigClass = Class.forName("com.glodblock.github.extendedae.config.EPPConfig");
-            Field busSpeedField = eppConfigClass.getDeclaredField("busSpeed");
-            busSpeedField.setAccessible(true);
-            int value = busSpeedField.getInt(null);
+            int value = ae2oc_eppBusSpeedField.getInt(null);
             return Math.max(value, 1);
         } catch (Throwable ignored) {
             return 1;

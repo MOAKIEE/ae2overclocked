@@ -21,6 +21,8 @@ import xyz.moakiee.ae2_overclocked.support.ParallelCardRuntime;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Adds Overclock Card and Parallel Card support to AE2CS CircuitEtcherBlockEntity.
@@ -46,6 +48,11 @@ public abstract class MixinAECSCircuitEtcherOverclock implements IUpgradeableObj
     public abstract IUpgradeInventory getUpgrades();
 
     // ── Unique state ─────────────────────────────────────────────────────────
+
+    @Unique
+    private static final ConcurrentHashMap<String, Optional<Field>>  ae2oc_fieldCache  = new ConcurrentHashMap<>();
+    @Unique
+    private static final ConcurrentHashMap<String, Optional<Method>> ae2oc_methodCache = new ConcurrentHashMap<>();
 
     /** Guard flag to prevent re-entrant injection calls inside serverTick. */
     @Unique
@@ -584,23 +591,43 @@ public abstract class MixinAECSCircuitEtcherOverclock implements IUpgradeableObj
 
     @Unique
     private static Field ae2oc_findField(Class<?> clazz, String name) throws NoSuchFieldException {
-        try {
-            return clazz.getDeclaredField(name);
-        } catch (NoSuchFieldException e) {
-            Class<?> parent = clazz.getSuperclass();
-            if (parent != null) return ae2oc_findField(parent, name);
-            throw e;
-        }
+        String key = clazz.getName() + "#F#" + name;
+        Optional<Field> opt = ae2oc_fieldCache.computeIfAbsent(key, k -> {
+            Class<?> c = clazz;
+            while (c != null) {
+                try {
+                    Field f = c.getDeclaredField(name);
+                    f.setAccessible(true);
+                    return Optional.of(f);
+                } catch (NoSuchFieldException e) {
+                    c = c.getSuperclass();
+                }
+            }
+            return Optional.empty();
+        });
+        if (opt.isPresent()) return opt.get();
+        throw new NoSuchFieldException(name);
     }
 
     @Unique
     private static Method ae2oc_findMethod(Class<?> clazz, String name, Class<?>... params) throws NoSuchMethodException {
-        try {
-            return clazz.getDeclaredMethod(name, params);
-        } catch (NoSuchMethodException e) {
-            Class<?> parent = clazz.getSuperclass();
-            if (parent != null) return ae2oc_findMethod(parent, name, params);
-            throw e;
-        }
+        StringBuilder sb = new StringBuilder(clazz.getName()).append("#M#").append(name);
+        for (Class<?> p : params) sb.append(',').append(p.getName());
+        String key = sb.toString();
+        Optional<Method> opt = ae2oc_methodCache.computeIfAbsent(key, k -> {
+            Class<?> c = clazz;
+            while (c != null) {
+                try {
+                    Method m = c.getDeclaredMethod(name, params);
+                    m.setAccessible(true);
+                    return Optional.of(m);
+                } catch (NoSuchMethodException e) {
+                    c = c.getSuperclass();
+                }
+            }
+            return Optional.empty();
+        });
+        if (opt.isPresent()) return opt.get();
+        throw new NoSuchMethodException(name);
     }
 }
