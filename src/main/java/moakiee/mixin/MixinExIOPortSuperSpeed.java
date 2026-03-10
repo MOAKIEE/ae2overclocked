@@ -21,10 +21,12 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
-import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.lang.reflect.Method;
 
@@ -46,13 +48,14 @@ public abstract class MixinExIOPortSuperSpeed extends IOPortBlockEntity implemen
     }
 
     /**
-     * @author ~
-     * @reason 统一为基础速度 + 超速倍率放大逻辑
+     * 使用 @Inject(HEAD) + cancellable 取代 @Overwrite，
+     * 避免与 GTLCore 的 @ModifyConstant 在同一方法上产生 Mixin 冲突。
      */
-    @Overwrite(remap = false)
-    public TickRateModulation tickingRequest(IGridNode node, int ticksSinceLastCall) {
+    @Inject(method = "tickingRequest", at = @At("HEAD"), cancellable = true, remap = false)
+    private void ae2oc_tickingRequest(IGridNode node, int ticksSinceLastCall, CallbackInfoReturnable<TickRateModulation> cir) {
         if (!this.getMainNode().isActive()) {
-            return TickRateModulation.IDLE;
+            cir.setReturnValue(TickRateModulation.IDLE);
+            return;
         }
 
         TickRateModulation ret = TickRateModulation.SLEEP;
@@ -63,7 +66,8 @@ public abstract class MixinExIOPortSuperSpeed extends IOPortBlockEntity implemen
 
         var grid = getMainNode().getGrid();
         if (grid == null) {
-            return TickRateModulation.IDLE;
+            cir.setReturnValue(TickRateModulation.IDLE);
+            return;
         } else {
             for (int x = 0; x < NUMBER_OF_CELL_SLOTS; x++) {
                 var cell = this.inputCells.getStackInSlot(x);
@@ -86,7 +90,7 @@ public abstract class MixinExIOPortSuperSpeed extends IOPortBlockEntity implemen
                 }
             }
         }
-        return ret;
+        cir.setReturnValue(ret);
     }
 
     @Unique
