@@ -32,8 +32,8 @@ public class Ae2Overclocked {
     public static final String MODID = "ae2_overclocked";
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    public Ae2Overclocked(FMLJavaModLoadingContext context) {
-        IEventBus modEventBus = context.getModEventBus();
+    public Ae2Overclocked() {
+        IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
 
         // 注册通用配置文件：ae2_overclocked-common.toml
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, Ae2OcConfig.SPEC);
