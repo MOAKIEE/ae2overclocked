@@ -11,7 +11,7 @@
     "item.ae2_overclocked.parallel_card_max": "并行卡 (Max)",
     "tooltip.ae2_overclocked.capacity_card": "提升机器内部槽位堆叠上限。",
     "tooltip.ae2_overclocked.super_energy_card": "提升机器内部能量缓存上限。",
-    "tooltip.ae2_overclocked.overclock_card": "将处理时间压缩至 1 Tick，并将产物直接输出至 ME 网络。",
+    "tooltip.ae2_overclocked.overclock_card": "将处理时间压缩至 5 Tick（可配置），并将产物直接输出至 ME 网络。",
     "tooltip.ae2_overclocked.super_speed_card": "提升 I/O 端口与输入输出总线的吞吐能力。",
     "tooltip.ae2_overclocked.parallel_card": "并行处理配方，并将产物直接输出至 ME 网络。",
     "message.ae2_overclocked.parallel_card_conflict": "已安装其他等级的并行卡，每台机器只允许安装一张并行卡",
@@ -34,6 +34,10 @@
     "config.ae2_overclocked.machines.disabledMachineIds": "禁用机器方块ID列表",
     "config.ae2_overclocked.machines.disabledMachineIds.tooltip": "填写方块ID（namespace:path），例如 ae2:inscriber、ae2cs:crystal_pulverizer。",
     "message.ae2_overclocked.break_block_too_many_items": "机器内物品过多（>%s），如要拆除请按住 Shift 再拆除。",
-    "pack.ae2_overclocked.dynamic_1211.name": "AE2 Overclocked 1.21.1动态材质包",
-    "pack.ae2_overclocked.dynamic_1211.desc": "AE2 Overclocked 1.21.1 并行卡动态纹理"
+    "pack.ae2_overclocked.dynamic_1211.name": "ae2 overlocked材质包",
+    "pack.ae2_overclocked.dynamic_1211.desc": "by 麦淇淋",
+    "pack.ae2_overclocked.dynamic_xingluo.name": "ae2 overlocked材质包",
+    "pack.ae2_overclocked.dynamic_xingluo.desc": "by xingluo",
+    "pack.ae2_overclocked.dynamic_xiabishilidie.name": "ae2 overlocked材质包",
+    "pack.ae2_overclocked.dynamic_xiabishilidie.desc": "by 虾比事李跌"
 }

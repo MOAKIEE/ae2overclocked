@@ -11,7 +11,7 @@
     "item.ae2_overclocked.parallel_card_max": "Parallel Card (Max)",
     "tooltip.ae2_overclocked.capacity_card": "Increases internal slot stack limits for processing machines.",
     "tooltip.ae2_overclocked.super_energy_card": "Increases the machine's internal energy buffer capacity.",
-    "tooltip.ae2_overclocked.overclock_card": "Compresses processing time to 1 tick and outputs products directly to the ME network.",
+    "tooltip.ae2_overclocked.overclock_card": "Compresses processing time to 5 ticks (configurable) and outputs products directly to the ME network.",
     "tooltip.ae2_overclocked.super_speed_card": "Boosts throughput for I/O Ports and import/export buses.",
     "tooltip.ae2_overclocked.parallel_card": "Processes recipes in parallel and outputs products directly to the ME network.",
     "message.ae2_overclocked.parallel_card_conflict": "Another parallel card is already installed. Only one parallel card per machine is allowed.",
@@ -34,6 +34,10 @@
     "config.ae2_overclocked.machines.disabledMachineIds": "Disabled Machine Block ID List",
     "config.ae2_overclocked.machines.disabledMachineIds.tooltip": "Use block IDs in namespace:path format, e.g. ae2:inscriber, ae2cs:crystal_pulverizer.",
     "message.ae2_overclocked.break_block_too_many_items": "Too many items inside the machine (> %s). Hold Shift while breaking to force removal.",
-    "pack.ae2_overclocked.dynamic_1211.name": "AE2 Overclocked 1.21.1 Dynamic Texture Pack",
-    "pack.ae2_overclocked.dynamic_1211.desc": "Dynamic textures for AE2 Overclocked 1.21.1 parallel cards"
+    "pack.ae2_overclocked.dynamic_1211.name": "ae2 overlocked材质包",
+    "pack.ae2_overclocked.dynamic_1211.desc": "by 麦淇淋",
+    "pack.ae2_overclocked.dynamic_xingluo.name": "ae2 overlocked材质包",
+    "pack.ae2_overclocked.dynamic_xingluo.desc": "by xingluo",
+    "pack.ae2_overclocked.dynamic_xiabishilidie.name": "ae2 overlocked材质包",
+    "pack.ae2_overclocked.dynamic_xiabishilidie.desc": "by 虾比事李跌"
 }

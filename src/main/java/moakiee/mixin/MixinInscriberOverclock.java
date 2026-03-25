@@ -42,6 +42,14 @@ public abstract class MixinInscriberOverclock {
     @Unique
     private int ae2oc_pendingParallel = 0;
 
+    /** 超频模式 tick 计数器 */
+    @Unique
+    private int ae2oc_tickCounter = 0;
+
+    /** 超频模式是否已激活（已扣电，正在等待 N tick） */
+    @Unique
+    private boolean ae2oc_overclockActive = false;
+
     // ========== Shadow 访问原版字段和方法 ==========
 
     @Shadow
@@ -78,6 +86,26 @@ public abstract class MixinInscriberOverclock {
             return;
         }
 
+        // 主动刷新：将输出槽残留物品转移到 ME 网络（防止死锁）
+        ae2oc_tryFlushOutputSlot(self);
+
+        // 超频模式正在计时中
+        if (this.ae2oc_overclockActive) {
+            this.ae2oc_tickCounter++;
+            int targetTicks = OverclockCardRuntime.getProcessTicks();
+
+            if (this.ae2oc_tickCounter >= targetTicks) {
+                // 到达 N tick，触发 smash 动画
+                this.ae2oc_overclockActive = false;
+                this.ae2oc_tickCounter = 0;
+                this.setSmash(true);
+                this.finalStep = 0;
+                ae2oc_markForUpdate(self);
+            }
+            cir.setReturnValue(TickRateModulation.URGENT);
+            return;
+        }
+
         // 正在播放 smash 动画
         if (this.smash) {
             ae2oc_handleSmashAnimation(self);
@@ -94,23 +122,19 @@ public abstract class MixinInscriberOverclock {
         // 计算并行数
         int actualParallel = ae2oc_calculateParallel(self, node, recipe, parallelMultiplier);
         if (actualParallel < 1) {
-            // 条件不满足（材料/输出/电量不够执行哪怕 1 次）
-            // 如果只有并行卡没有超频卡，回退原版让它慢慢充电/等材料
             return;
         }
 
         if (hasOverclock) {
-            // === 超频模式：一次性扣电，触发 smash 动画 ===
+            // === 超频模式：一次性扣电，开始计时 ===
             double totalEnergy = actualParallel * AE2OC_INSCRIBER_RECIPE_ENERGY;
             if (!ae2oc_tryConsumePower(self, node, totalEnergy)) {
-                // 电量不够超频的总消耗，回退原版慢速
                 return;
             }
 
-            // 记录待结算并行数
             this.ae2oc_pendingParallel = actualParallel;
-            this.setSmash(true);
-            this.finalStep = 0;
+            this.ae2oc_overclockActive = true;
+            this.ae2oc_tickCounter = 0;
             ae2oc_markForUpdate(self);
             cir.setReturnValue(TickRateModulation.URGENT);
         } else {
@@ -180,12 +204,23 @@ public abstract class MixinInscriberOverclock {
             // 产物
             ItemStack outputStack = recipe.getResultItem().copy();
 
-            // 使用 ParallelEngine 计算
-            java.lang.reflect.Method insertMethod = sideHandler.getClass().getMethod("insertItem",
-                    int.class, ItemStack.class, boolean.class);
-
             // 可用能量
             double availableEnergy = ae2oc_getAvailableEnergy(self, node);
+
+            // 有并行卡时，产物优先输出到ME网络，不受本地槽限制（与切片器行为一致）
+            if (cardMultiplier > 1) {
+                return ParallelEngine.calculateSimple(
+                        cardMultiplier,
+                        inputCount, recipeInputCount,
+                        Integer.MAX_VALUE,
+                        availableEnergy,
+                        AE2OC_INSCRIBER_RECIPE_ENERGY
+                ).actualParallel();
+            }
+
+            // 无并行卡时使用本地槽限制
+            java.lang.reflect.Method insertMethod = sideHandler.getClass().getMethod("insertItem",
+                    int.class, ItemStack.class, boolean.class);
 
             ParallelEngine.ParallelResult result = ParallelEngine.calculate(
                     cardMultiplier,
@@ -195,7 +230,7 @@ public abstract class MixinInscriberOverclock {
                         try {
                             return (ItemStack) insertMethod.invoke(sideHandler, 1, stack, simulate);
                         } catch (Exception e) {
-                            return stack; // 反射失败 → 无法插入
+                            return stack;
                         }
                     },
                     availableEnergy,
@@ -211,7 +246,7 @@ public abstract class MixinInscriberOverclock {
 
     /**
      * 原子化执行多倍配方结算。
-     * 产物先输出到本地槽，再转移到 ME 网络。
+     * 有并行卡/超频卡时，产物优先直出 ME 网络，剩余放本地槽。
      */
     @Unique
     private void ae2oc_finishCraftParallel(InscriberBlockEntity self, int parallel) {
@@ -236,15 +271,34 @@ public abstract class MixinInscriberOverclock {
             // 构造多倍产物
             ItemStack outputCopy = recipe.getResultItem().copy();
             int totalOutput = outputCopy.getCount() * parallel;
-            outputCopy.setCount(totalOutput);
-
             int singleOutputCount = recipe.getResultItem().getCount();
-            
-            // 先放入本地输出槽
-            java.lang.reflect.Method insertMethod = sideHandler.getClass().getMethod("insertItem",
-                    int.class, ItemStack.class, boolean.class);
-            ItemStack leftover = (ItemStack) insertMethod.invoke(sideHandler, 1, outputCopy, false);
-            int actualInserted = totalOutput - leftover.getCount();
+
+            int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
+            boolean hasOverclock = OverclockCardRuntime.hasOverclockCard(self);
+            boolean directToNetwork = parallelMultiplier > 1 || hasOverclock;
+
+            int actualInserted;
+            if (directToNetwork) {
+                // 有并行卡/超频卡：产物优先直出 ME 网络
+                int insertedToNetwork = ae2oc_tryDirectOutputToNetwork(self, outputCopy.copyWithCount(totalOutput));
+                int remaining = totalOutput - insertedToNetwork;
+                actualInserted = insertedToNetwork;
+                // 剩余放本地槽
+                if (remaining > 0) {
+                    java.lang.reflect.Method insertMethod = sideHandler.getClass().getMethod("insertItem",
+                            int.class, ItemStack.class, boolean.class);
+                    ItemStack leftover = (ItemStack) insertMethod.invoke(sideHandler, 1,
+                            outputCopy.copyWithCount(remaining), false);
+                    actualInserted += remaining - leftover.getCount();
+                }
+            } else {
+                // 无卡：放入本地输出槽
+                outputCopy.setCount(totalOutput);
+                java.lang.reflect.Method insertMethod = sideHandler.getClass().getMethod("insertItem",
+                        int.class, ItemStack.class, boolean.class);
+                ItemStack leftover = (ItemStack) insertMethod.invoke(sideHandler, 1, outputCopy, false);
+                actualInserted = totalOutput - leftover.getCount();
+            }
 
             // 计算实际成功放入的份数
             int actualParallel = singleOutputCount > 0 ? actualInserted / singleOutputCount : 0;
@@ -272,19 +326,40 @@ public abstract class MixinInscriberOverclock {
                         int.class, int.class, boolean.class);
                 extractSide.invoke(sideHandler, 0, actualParallel, false);
             }
-            
-            // 有并行卡或超频卡时，把本地输出槽的产物转移到 ME 网络
-            int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
-            boolean hasOverclock = OverclockCardRuntime.hasOverclockCard(self);
-            if (parallelMultiplier > 1 || hasOverclock) {
-                ae2oc_transferOutputToNetwork(self, sideHandler);
-            }
 
         } catch (Exception e) {
             // ignored
         }
 
         ae2oc_saveChanges(self);
+    }
+
+    /**
+     * 直接将产物输出到 ME 网络，返回实际插入数量
+     */
+    @Unique
+    private int ae2oc_tryDirectOutputToNetwork(InscriberBlockEntity self, ItemStack outputStack) {
+        try {
+            java.lang.reflect.Method getMainNode = self.getClass().getMethod("getMainNode");
+            Object mainNode = getMainNode.invoke(self);
+            if (mainNode == null) return 0;
+
+            java.lang.reflect.Method getGrid = mainNode.getClass().getMethod("getGrid");
+            Object grid = getGrid.invoke(mainNode);
+            if (grid == null) return 0;
+
+            IStorageService storageService = (IStorageService) ((appeng.api.networking.IGrid) grid).getService(IStorageService.class);
+            if (storageService == null) return 0;
+
+            AEItemKey key = AEItemKey.of(outputStack);
+            if (key == null) return 0;
+
+            appeng.api.networking.security.IActionSource actionSource = ae2oc_getActionSource(self, mainNode);
+            long inserted = storageService.getInventory().insert(key, outputStack.getCount(), Actionable.MODULATE, actionSource);
+            return (int) inserted;
+        } catch (Exception e) {
+            return 0;
+        }
     }
     
     /**
@@ -418,6 +493,25 @@ public abstract class MixinInscriberOverclock {
         try {
             java.lang.reflect.Method method = self.getClass().getMethod("saveChanges");
             method.invoke(self);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * 主动刷新输出槽到 ME 网络，防止 ME 短暂掉线后死锁
+     */
+    @Unique
+    private void ae2oc_tryFlushOutputSlot(InscriberBlockEntity self) {
+        try {
+            java.lang.reflect.Field sideField = InscriberBlockEntity.class.getDeclaredField("sideItemHandler");
+            sideField.setAccessible(true);
+            Object sideHandler = sideField.get(self);
+
+            java.lang.reflect.Method getStackInSlot = sideHandler.getClass().getMethod("getStackInSlot", int.class);
+            ItemStack stack = (ItemStack) getStackInSlot.invoke(sideHandler, 1);
+            if (stack.isEmpty()) return;
+
+            ae2oc_transferOutputToNetwork(self, sideHandler);
         } catch (Exception ignored) {
         }
     }

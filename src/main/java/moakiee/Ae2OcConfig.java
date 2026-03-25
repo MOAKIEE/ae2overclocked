@@ -23,6 +23,7 @@ public final class Ae2OcConfig {
     public static final double DEFAULT_SUPER_ENERGY_BUFFER_FE = 2_000_000_000.0;
     public static final int DEFAULT_PARALLEL_MAX_MULTIPLIER = Integer.MAX_VALUE;
     public static final int DEFAULT_SUPER_SPEED_CARD_MULTIPLIER = 512;
+    public static final int DEFAULT_OVERCLOCK_CARD_PROCESS_TICKS = 5;
     public static final int DEFAULT_BREAK_PROTECTION_ITEM_THRESHOLD = 1000;
     public static final double DEFAULT_FE_PER_AE = 2.0;
 
@@ -32,6 +33,7 @@ public final class Ae2OcConfig {
     private static final ForgeConfigSpec.DoubleValue SUPER_ENERGY_BUFFER_FE;
     private static final ForgeConfigSpec.IntValue PARALLEL_MAX_MULTIPLIER;
     private static final ForgeConfigSpec.IntValue SUPER_SPEED_CARD_MULTIPLIER;
+    private static final ForgeConfigSpec.IntValue OVERCLOCK_CARD_PROCESS_TICKS;
     private static final ForgeConfigSpec.IntValue BREAK_PROTECTION_ITEM_THRESHOLD;
     private static final ForgeConfigSpec.ConfigValue<List<? extends String>> DISABLED_MACHINE_IDS;
 
@@ -59,6 +61,11 @@ public final class Ae2OcConfig {
             .translation("config.ae2_overclocked.cards.superSpeedCardMultiplier")
             .comment("Multiplier applied when Super Speed Card is active on I/O buses and I/O ports. Default: 512.")
             .defineInRange("superSpeedCardMultiplier", DEFAULT_SUPER_SPEED_CARD_MULTIPLIER, 1, Integer.MAX_VALUE);
+
+        OVERCLOCK_CARD_PROCESS_TICKS = builder
+            .translation("config.ae2_overclocked.cards.overclockCardProcessTicks")
+            .comment("Number of ticks to complete a recipe when Overclock Card is installed. Lower = faster. Default: 5.")
+            .defineInRange("overclockCardProcessTicks", DEFAULT_OVERCLOCK_CARD_PROCESS_TICKS, 1, 200);
 
         builder.pop();
 
@@ -109,6 +116,11 @@ public final class Ae2OcConfig {
 
     public static int getSuperSpeedCardMultiplier() {
         int configured = SUPER_SPEED_CARD_MULTIPLIER.get();
+        return Math.max(configured, 1);
+    }
+
+    public static int getOverclockCardProcessTicks() {
+        int configured = OVERCLOCK_CARD_PROCESS_TICKS.get();
         return Math.max(configured, 1);
     }
 

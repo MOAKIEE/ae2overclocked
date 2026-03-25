@@ -67,6 +67,9 @@ public class MixinAE2CSOverclock {
             return;
         }
 
+        // 主动刷新：将输出槽残留物品转移到 ME 网络（防止死锁）
+        ae2oc_flushOutputToMENetwork();
+
         this.ae2oc_hasOverclock = hasOverclock;
 
         Integer progress = ae2oc_getIntField(this, "recipeProgress");
@@ -126,7 +129,10 @@ public class MixinAE2CSOverclock {
 
         int remaining = total - progress;
         if (remaining > 0) {
-            cir.setReturnValue((double) remaining);
+            int targetTicks = OverclockCardRuntime.getProcessTicks();
+            // 将剩余能量均匀分摊到 N tick 中消耗，向上取整确保能在 N tick 内完成
+            double perTick = Math.ceil((double) remaining / targetTicks);
+            cir.setReturnValue(perTick);
         }
     }
 
@@ -232,154 +238,97 @@ public class MixinAE2CSOverclock {
 
     @Unique
     private void ae2oc_doExtraRounds(int extraRounds) {
-        for (int i = 0; i < extraRounds; i++) {
-            if (!ae2oc_doOneExtraRound()) {
-                break;
-            }
-        }
-    }
-
-    @Unique
-    private boolean ae2oc_doOneExtraRound() {
         try {
             String machine = this.getClass().getName();
             Object recipe = this.ae2oc_cachedRecipe;
             double unitEnergy = Math.max(1.0, this.ae2oc_cachedUnitEnergy);
 
-            // 每轮额外回合都需要消耗能量（无论是否超频）
-            if (!ae2oc_tryConsumeEnergy(unitEnergy)) {
-                return false;
-            }
+            Object inputInv = ae2oc_invokeNoArg(this, "getInputInv");
+            Object outputInv = ae2oc_invokeNoArg(this, "getOutputInv");
+            if (inputInv == null || outputInv == null) return;
+
+            Object level = this.ae2oc_cachedLevel;
+            if (level == null) return;
+            Object registryAccess = ae2oc_getRegistryAccess(level);
 
             if (machine.endsWith("CircuitEtcherBlockEntity") || machine.endsWith("CrystalAggregatorBlockEntity")) {
-                Object inputInv = ae2oc_invokeNoArg(this, "getInputInv");
-                Object outputInv = ae2oc_invokeNoArg(this, "getOutputInv");
-                if (inputInv == null || outputInv == null) {
-                    return false;
-                }
-
+                // 预缓存所有 Method / Class
                 Method getStackInSlot = inputInv.getClass().getMethod("getStackInSlot", int.class);
-                ItemStack s0 = (ItemStack) getStackInSlot.invoke(inputInv, 0);
-                ItemStack s1 = (ItemStack) getStackInSlot.invoke(inputInv, 1);
-                ItemStack s2 = (ItemStack) getStackInSlot.invoke(inputInv, 2);
-
                 Class<?> inputCls = Class.forName("io.github.lounode.ae2cs.common.recipe.input.ThreeItemStackRecipeInput");
                 Method of = inputCls.getMethod("of", ItemStack.class, ItemStack.class, ItemStack.class);
-                Object input = of.invoke(null, s0, s1, s2);
-
-                Object level = this.ae2oc_cachedLevel;
-                if (level == null) return false;
-                Object registryAccess = ae2oc_getRegistryAccess(level);
-                if (registryAccess == null) return false;
-                ItemStack result = ae2oc_invokeAssemble(recipe, input, registryAccess);
-                if (result == null || result.isEmpty()) {
-                    return false;
-                }
-
                 Method insertItem = outputInv.getClass().getMethod("insertItem", int.class, ItemStack.class, boolean.class);
-                ItemStack remain = (ItemStack) insertItem.invoke(outputInv, 0, result, true);
-                if (remain != null && !remain.isEmpty()) {
-                    // 本地输出槽已满，尝试输出到 ME 网络
-                    if (!ae2oc_tryOutputToMENetwork(result)) {
-                        return false;
-                    }
-                    // ME 网络接收成功，继续扣材料
-                    int[] match = this.ae2oc_cachedMatch;
-                    if (match == null) {
-                        match = ae2oc_recalculateMatch(inputInv, recipe);
-                    }
-                    if (match == null) {
-                        return false;
-                    }
-
-                    Method consume = this.getClass().getDeclaredMethod("consumeInputs", recipe.getClass(), int[].class);
-                    consume.setAccessible(true);
-                    Object consumed = consume.invoke(this, recipe, match);
-                    if (!(consumed instanceof Boolean ok) || !ok) {
-                        return false;
-                    }
-                    return true;
-                }
-
-                int[] match = this.ae2oc_cachedMatch;
-                if (match == null) {
-                    match = ae2oc_recalculateMatch(inputInv, recipe);
-                }
-                if (match == null) {
-                    return false;
-                }
-
                 Method consume = this.getClass().getDeclaredMethod("consumeInputs", recipe.getClass(), int[].class);
                 consume.setAccessible(true);
-                Object consumed = consume.invoke(this, recipe, match);
-                if (!(consumed instanceof Boolean ok) || !ok) {
-                    return false;
-                }
 
-                insertItem.invoke(outputInv, 0, result, false);
-                return true;
+                for (int i = 0; i < extraRounds; i++) {
+                    if (!ae2oc_tryConsumeEnergy(unitEnergy)) break;
+
+                    ItemStack s0 = (ItemStack) getStackInSlot.invoke(inputInv, 0);
+                    ItemStack s1 = (ItemStack) getStackInSlot.invoke(inputInv, 1);
+                    ItemStack s2 = (ItemStack) getStackInSlot.invoke(inputInv, 2);
+                    Object input = of.invoke(null, s0, s1, s2);
+                    if (registryAccess == null) break;
+                    ItemStack result = ae2oc_invokeAssemble(recipe, input, registryAccess);
+                    if (result == null || result.isEmpty()) break;
+
+                    ItemStack remain = (ItemStack) insertItem.invoke(outputInv, 0, result, true);
+                    if (remain != null && !remain.isEmpty()) {
+                        if (!ae2oc_tryOutputToMENetwork(result)) break;
+                        int[] match = this.ae2oc_cachedMatch;
+                        if (match == null) match = ae2oc_recalculateMatch(inputInv, recipe);
+                        if (match == null) break;
+                        Object consumed = consume.invoke(this, recipe, match);
+                        if (!(consumed instanceof Boolean ok) || !ok) break;
+                    } else {
+                        int[] match = this.ae2oc_cachedMatch;
+                        if (match == null) match = ae2oc_recalculateMatch(inputInv, recipe);
+                        if (match == null) break;
+                        Object consumed = consume.invoke(this, recipe, match);
+                        if (!(consumed instanceof Boolean ok) || !ok) break;
+                        insertItem.invoke(outputInv, 0, result, false);
+                    }
+                }
+                return;
             }
 
             if (machine.endsWith("CrystalPulverizerBlockEntity")) {
-                Object inputInv = ae2oc_invokeNoArg(this, "getInputInv");
-                Object outputInv = ae2oc_invokeNoArg(this, "getOutputInv");
-                if (inputInv == null || outputInv == null) {
-                    return false;
-                }
                 Method getStackInSlot = inputInv.getClass().getMethod("getStackInSlot", int.class);
-                ItemStack s0 = (ItemStack) getStackInSlot.invoke(inputInv, 0);
-
                 Class<?> inputCls = Class.forName("io.github.lounode.ae2cs.common.recipe.input.SingleItemStackRecipeInput");
                 Method of = inputCls.getMethod("of", ItemStack.class);
-                Object input = of.invoke(null, s0);
-
-                Object level = this.ae2oc_cachedLevel;
-                if (level == null) return false;
-                Object registryAccess = ae2oc_getRegistryAccess(level);
-                if (registryAccess == null) return false;
-                ItemStack result = ae2oc_invokeAssemble(recipe, input, registryAccess);
-                if (result == null || result.isEmpty()) {
-                    return false;
-                }
-
                 Method addItems = outputInv.getClass().getMethod("addItems", ItemStack.class, boolean.class);
-                ItemStack remain = (ItemStack) addItems.invoke(outputInv, result, true);
-                if (remain != null && !remain.isEmpty()) {
-                    // 本地输出槽已满，尝试输出到 ME 网络
-                    if (!ae2oc_tryOutputToMENetwork(result)) {
-                        return false;
-                    }
-                    // ME 网络接收成功，继续扣材料
-                    Method consume = this.getClass().getDeclaredMethod("consumeInputs", recipe.getClass());
-                    consume.setAccessible(true);
-                    Object consumed = consume.invoke(this, recipe);
-                    if (!(consumed instanceof Boolean ok) || !ok) {
-                        return false;
-                    }
-                    return true;
-                }
-
                 Method consume = this.getClass().getDeclaredMethod("consumeInputs", recipe.getClass());
                 consume.setAccessible(true);
-                Object consumed = consume.invoke(this, recipe);
-                if (!(consumed instanceof Boolean ok) || !ok) {
-                    return false;
-                }
 
-                addItems.invoke(outputInv, result, false);
-                return true;
+                for (int i = 0; i < extraRounds; i++) {
+                    if (!ae2oc_tryConsumeEnergy(unitEnergy)) break;
+
+                    ItemStack s0 = (ItemStack) getStackInSlot.invoke(inputInv, 0);
+                    Object input = of.invoke(null, s0);
+                    if (registryAccess == null) break;
+                    ItemStack result = ae2oc_invokeAssemble(recipe, input, registryAccess);
+                    if (result == null || result.isEmpty()) break;
+
+                    ItemStack remain = (ItemStack) addItems.invoke(outputInv, result, true);
+                    if (remain != null && !remain.isEmpty()) {
+                        if (!ae2oc_tryOutputToMENetwork(result)) break;
+                        Object consumed = consume.invoke(this, recipe);
+                        if (!(consumed instanceof Boolean ok) || !ok) break;
+                    } else {
+                        Object consumed = consume.invoke(this, recipe);
+                        if (!(consumed instanceof Boolean ok) || !ok) break;
+                        addItems.invoke(outputInv, result, false);
+                    }
+                }
+                return;
             }
 
             if (machine.endsWith("EntropyVariationReactionChamberBlockEntity")) {
                 Method getRecipeOutput = this.getClass().getDeclaredMethod("getRecipeOutput", recipe.getClass());
                 getRecipeOutput.setAccessible(true);
-                @SuppressWarnings("unchecked")
-                List<Object> outputs = (List<Object>) getRecipeOutput.invoke(null, recipe);
-                if (outputs == null || outputs.isEmpty()) {
-                    return false;
-                }
+                Method consume = this.getClass().getDeclaredMethod("consumeInputs", recipe.getClass());
+                consume.setAccessible(true);
 
-                // 获取 ME 网络存储（额外轮次优先直接输出到 ME 网络）
+                // 预获取 ME 网络和本地 outputInv
                 Object mainNode = ae2oc_invokeNoArg(this, "getMainNode");
                 Object gridNodeObj = mainNode != null ? ae2oc_invokeNoArg(mainNode, "getNode") : null;
                 IStorageService storageService = null;
@@ -389,77 +338,66 @@ public class MixinAE2CSOverclock {
                         storageService = grid.getService(IStorageService.class);
                     }
                 }
-
-                // 同时准备本地 outputInv 作为回落
-                Object outputInv = ae2oc_invokeNoArg(this, "getOutputInv");
                 Object actionSource = ae2oc_getFieldRecursive(this, "actionSource");
-                Method localInsert = null;
-                if (outputInv != null) {
-                    localInsert = outputInv.getClass().getMethod("insert",
-                            Class.forName("appeng.api.stacks.AEKey"), long.class, Actionable.class,
-                            Class.forName("appeng.api.networking.security.IActionSource"));
-                }
+                Method localInsert = outputInv.getClass().getMethod("insert",
+                        Class.forName("appeng.api.stacks.AEKey"), long.class, Actionable.class,
+                        Class.forName("appeng.api.networking.security.IActionSource"));
 
-                // 模拟检查：优先 ME 网络，回落本地缓存
-                for (Object gs : outputs) {
-                    Method what = gs.getClass().getMethod("what");
-                    Method amount = gs.getClass().getMethod("amount");
-                    Object key = what.invoke(gs);
-                    long amt = ((Number) amount.invoke(gs)).longValue();
-                    if (storageService != null) {
-                        long accepted = storageService.getInventory().insert(
-                                (AEKey) key, amt, Actionable.SIMULATE, IActionSource.empty());
-                        if (accepted < amt) {
-                            // ME 网络放不下，尝试本地缓存
-                            if (localInsert != null) {
+                for (int i = 0; i < extraRounds; i++) {
+                    if (!ae2oc_tryConsumeEnergy(unitEnergy)) break;
+
+                    @SuppressWarnings("unchecked")
+                    List<Object> outputs = (List<Object>) getRecipeOutput.invoke(null, recipe);
+                    if (outputs == null || outputs.isEmpty()) break;
+
+                    // 模拟检查
+                    boolean canOutput = true;
+                    for (Object gs : outputs) {
+                        Method what = gs.getClass().getMethod("what");
+                        Method amount = gs.getClass().getMethod("amount");
+                        Object key = what.invoke(gs);
+                        long amt = ((Number) amount.invoke(gs)).longValue();
+                        if (storageService != null) {
+                            long accepted = storageService.getInventory().insert(
+                                    (AEKey) key, amt, Actionable.SIMULATE, IActionSource.empty());
+                            if (accepted < amt) {
                                 long localAccepted = ((Number) localInsert.invoke(
                                         outputInv, key, amt, Actionable.SIMULATE, actionSource)).longValue();
-                                if (localAccepted < amt) return false;
-                            } else {
-                                return false;
+                                if (localAccepted < amt) { canOutput = false; break; }
                             }
+                        } else {
+                            long accepted = ((Number) localInsert.invoke(
+                                    outputInv, key, amt, Actionable.SIMULATE, actionSource)).longValue();
+                            if (accepted < amt) { canOutput = false; break; }
                         }
-                    } else if (localInsert != null) {
-                        long accepted = ((Number) localInsert.invoke(
-                                outputInv, key, amt, Actionable.SIMULATE, actionSource)).longValue();
-                        if (accepted < amt) return false;
-                    } else {
-                        return false;
+                    }
+                    if (!canOutput) break;
+
+                    // 扣材料
+                    Object consumed = consume.invoke(this, recipe);
+                    if (!(consumed instanceof Boolean ok) || !ok) break;
+
+                    // 实际输出
+                    for (Object gs : outputs) {
+                        Method what = gs.getClass().getMethod("what");
+                        Method amount = gs.getClass().getMethod("amount");
+                        Object key = what.invoke(gs);
+                        long amt = ((Number) amount.invoke(gs)).longValue();
+                        if (storageService != null) {
+                            long accepted = storageService.getInventory().insert(
+                                    (AEKey) key, amt, Actionable.MODULATE, IActionSource.empty());
+                            if (accepted < amt) {
+                                long remain = amt - accepted;
+                                localInsert.invoke(outputInv, key, remain, Actionable.MODULATE, actionSource);
+                            }
+                        } else {
+                            localInsert.invoke(outputInv, key, amt, Actionable.MODULATE, actionSource);
+                        }
                     }
                 }
-
-                // 扣减输入
-                Method consume = this.getClass().getDeclaredMethod("consumeInputs", recipe.getClass());
-                consume.setAccessible(true);
-                Object consumed = consume.invoke(this, recipe);
-                if (!(consumed instanceof Boolean ok) || !ok) {
-                    return false;
-                }
-
-                // 实际输出：优先 ME 网络，回落本地
-                for (Object gs : outputs) {
-                    Method what = gs.getClass().getMethod("what");
-                    Method amount = gs.getClass().getMethod("amount");
-                    Object key = what.invoke(gs);
-                    long amt = ((Number) amount.invoke(gs)).longValue();
-                    if (storageService != null) {
-                        long accepted = storageService.getInventory().insert(
-                                (AEKey) key, amt, Actionable.MODULATE, IActionSource.empty());
-                        if (accepted < amt && localInsert != null) {
-                            // 部分插入 ME 网络失败，剩余放本地
-                            long remain = amt - accepted;
-                            localInsert.invoke(outputInv, key, remain, Actionable.MODULATE, actionSource);
-                        }
-                    } else if (localInsert != null) {
-                        localInsert.invoke(outputInv, key, amt, Actionable.MODULATE, actionSource);
-                    }
-                }
-                return true;
             }
         } catch (Throwable ignored) {
         }
-
-        return false;
     }
 
     @Unique

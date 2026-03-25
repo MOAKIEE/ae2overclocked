@@ -11,7 +11,7 @@ import net.minecraft.world.level.Level;
 import java.util.List;
 
 /**
- * 超频卡 - 强制机器 1-tick 瞬间完工，极大增加单次耗电
+ * 超频卡 - 强制机器 N-tick 快速完工（默认 5 tick，可配置），极大增加单次耗电
  */
 public class OverclockCard extends UpgradeCardItem {
 

@@ -90,27 +90,32 @@ public class Ae2Overclocked {
     }
 
     /**
-     * 注册内置可选资源包：动态并行卡纹理
+     * 注册内置可选资源包：不同作者材质版本
      */
     private void addPackFinders(AddPackFindersEvent event) {
         if (event.getPackType() == PackType.CLIENT_RESOURCES) {
             IModFile modFile = ModList.get().getModFileById(MODID).getFile();
-            Path resourcePackPath = modFile.findResource("resourcepacks/ae2oc_dynamic_parallel");
+            registerBuiltInPack(event, modFile, "ae2oc_dynamic_parallel", "pack.ae2_overclocked.dynamic_1211.name");
+            registerBuiltInPack(event, modFile, "ae2oc_xingluo", "pack.ae2_overclocked.dynamic_xingluo.name");
+            registerBuiltInPack(event, modFile, "ae2oc_xiabishilidie", "pack.ae2_overclocked.dynamic_xiabishilidie.name");
+        }
+    }
 
-            Pack pack = Pack.readMetaAndCreate(
-                    "ae2oc_dynamic_parallel",
-                    Component.translatable("pack.ae2_overclocked.dynamic_1211.name"),
-                    false,  // 默认不启用，需要玩家手动启用
-                    (path) -> new PathPackResources(path, resourcePackPath, false),
-                    PackType.CLIENT_RESOURCES,
-                    Pack.Position.TOP,
-                    PackSource.BUILT_IN
-            );
+    private void registerBuiltInPack(AddPackFindersEvent event, IModFile modFile, String packId, String nameKey) {
+        Path resourcePackPath = modFile.findResource("resourcepacks/" + packId);
+        Pack pack = Pack.readMetaAndCreate(
+                packId,
+                Component.translatable(nameKey),
+                false,
+                (path) -> new PathPackResources(path, resourcePackPath, false),
+                PackType.CLIENT_RESOURCES,
+                Pack.Position.TOP,
+                PackSource.BUILT_IN
+        );
 
-            if (pack != null) {
-                event.addRepositorySource((consumer) -> consumer.accept(pack));
-                LOGGER.info("Registered built-in resource pack: ae2oc_dynamic_parallel");
-            }
+        if (pack != null) {
+            event.addRepositorySource((consumer) -> consumer.accept(pack));
+            LOGGER.info("Registered built-in resource pack: {}", packId);
         }
     }
 }

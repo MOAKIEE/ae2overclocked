@@ -62,9 +62,17 @@ public abstract class MixinCircuitCutterOverclock {
     @Unique
     private ItemStack ae2oc_cachedOutput = ItemStack.EMPTY;
 
+    /** 超频模式 tick 计数器 */
+    @Unique
+    private int ae2oc_tickCounter = 0;
+
+    /** 超频模式是否已激活 */
+    @Unique
+    private boolean ae2oc_overclockActive = false;
+
     /**
      * HEAD 注入：
-     * - 有超频卡 → 取消原版，瞬间完成（可选带并行）
+     * - 有超频卡 → 取消原版，N-tick 后完成（可选带并行）
      * - 仅并行卡 → 缓存状态，不取消，让原版推进度条
      */
     @Inject(method = "tickingRequest", at = @At("HEAD"), cancellable = true)
@@ -85,16 +93,92 @@ public abstract class MixinCircuitCutterOverclock {
             return;
         }
 
+        // 主动刷新：将输出槽残留物品转移到 ME 网络（防止死锁）
+        ae2oc_tryFlushOutputSlot(self, node);
+
         try {
             if (hasOverclock) {
-                // ===== 超频模式（可带并行）：瞬间完成 =====
+                // ===== 超频模式：检查计时状态 =====
+                if (this.ae2oc_overclockActive) {
+                    this.ae2oc_tickCounter++;
+                    int targetTicks = OverclockCardRuntime.getProcessTicks();
+
+                    if (this.ae2oc_tickCounter >= targetTicks) {
+                        // 到达 N tick，执行结算
+                        this.ae2oc_overclockActive = false;
+                        this.ae2oc_tickCounter = 0;
+                        this.ae2oc_processing = true;
+                        try {
+                            ae2oc_instantCraft(self, node, parallelMultiplier);
+                        } finally {
+                            this.ae2oc_processing = false;
+                        }
+                    }
+                    cir.setReturnValue(TickRateModulation.URGENT);
+                    return;
+                }
+
+                // 首次进入超频模式：一次性扣电，开始计时
                 this.ae2oc_processing = true;
                 try {
-                    ae2oc_instantCraft(self, node, parallelMultiplier);
+                    // 预检查是否有配方可执行（不实际执行）
+                    Field ctxField = ae2oc_getField(self.getClass(), "ctx");
+                    ctxField.setAccessible(true);
+                    Object ctx = ctxField.get(self);
+
+                    Field recipeField = ae2oc_getField(ctx.getClass(), "currentRecipe");
+                    recipeField.setAccessible(true);
+                    Object currentRecipe = recipeField.get(ctx);
+
+                    if (currentRecipe == null) {
+                        Method shouldTick = ctx.getClass().getMethod("shouldTick");
+                        if ((boolean) shouldTick.invoke(ctx)) {
+                            Method findRecipe = ae2oc_getMethod(ctx.getClass(), "findRecipe");
+                            findRecipe.setAccessible(true);
+                            findRecipe.invoke(ctx);
+                            currentRecipe = recipeField.get(ctx);
+                        }
+                    }
+
+                    if (currentRecipe == null) {
+                        cir.setReturnValue(TickRateModulation.IDLE);
+                        return;
+                    }
+
+                    // 获取材料信息计算并行数
+                    Field inputField = ae2oc_getField(self.getClass(), "input");
+                    inputField.setAccessible(true);
+                    Object inputInv = inputField.get(self);
+
+                    Method getStackInSlot = inputInv.getClass().getMethod("getStackInSlot", int.class);
+                    ItemStack inputStack = (ItemStack) getStackInSlot.invoke(inputInv, 0);
+                    int inputCount = inputStack.getCount();
+
+                    double availableEnergy = ae2oc_getAvailableEnergy(self, node);
+
+                    int actualParallel = ParallelEngine.calculateSimple(
+                            parallelMultiplier, inputCount, 1,
+                            Integer.MAX_VALUE,
+                            availableEnergy, AE2OC_CUTTER_RECIPE_ENERGY
+                    ).actualParallel();
+
+                    if (actualParallel < 1) {
+                        cir.setReturnValue(TickRateModulation.IDLE);
+                        return;
+                    }
+
+                    double totalEnergy = actualParallel * AE2OC_CUTTER_RECIPE_ENERGY;
+                    if (!ae2oc_tryConsumePower(self, node, totalEnergy)) {
+                        cir.setReturnValue(TickRateModulation.IDLE);
+                        return;
+                    }
+
+                    this.ae2oc_overclockActive = true;
+                    this.ae2oc_tickCounter = 0;
+                    cir.setReturnValue(TickRateModulation.URGENT);
                 } finally {
                     this.ae2oc_processing = false;
                 }
-                cir.setReturnValue(TickRateModulation.URGENT);
                 return;
             }
 
@@ -132,6 +216,7 @@ public abstract class MixinCircuitCutterOverclock {
             // 忽略
         }
     }
+
 
     /**
      * RETURN 注入：
@@ -396,12 +481,15 @@ public abstract class MixinCircuitCutterOverclock {
             // 检查是否有并行卡或超频卡
             int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
             boolean directToNetwork = parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self);
-            
+
             // 有并行卡或超频卡时，先把原版留在本地槽的1份也转移到ME网络
             if (directToNetwork) {
                 ae2oc_transferOutputToNetwork(node, outputInv);
             }
-            
+
+            // 缓存 insertItem Method 到循环外
+            Method insertItem = outputInv.getClass().getMethod("insertItem", int.class, ItemStack.class, boolean.class);
+
             // 逐轮执行（验证材料 → 消耗 + 产出）
             int actualExtra = 0;
             for (int i = 0; i < extraRounds; i++) {
@@ -419,18 +507,14 @@ public abstract class MixinCircuitCutterOverclock {
                         // ME网络未能全部接收，剩余放入本地槽
                         ItemStack remaining = output.copy();
                         remaining.setCount(output.getCount() - insertedToNetwork);
-                        outputInv.getClass().getMethod("insertItem", int.class, ItemStack.class, boolean.class)
-                                .invoke(outputInv, 0, remaining, false);
+                        insertItem.invoke(outputInv, 0, remaining, false);
                     }
                 } else {
                     // 无并行卡：检查本地槽空间
-                    if (!((ItemStack) outputInv.getClass().getMethod("insertItem", int.class, ItemStack.class, boolean.class)
-                            .invoke(outputInv, 0, output, true)).isEmpty()) {
-                        // 放不下，需要补偿（但材料已消耗）- 这种情况不应该发生，因为calculateParallel已限制
+                    if (!((ItemStack) insertItem.invoke(outputInv, 0, output, true)).isEmpty()) {
                         break;
                     }
-                    outputInv.getClass().getMethod("insertItem", int.class, ItemStack.class, boolean.class)
-                            .invoke(outputInv, 0, output, false);
+                    insertItem.invoke(outputInv, 0, output, false);
                 }
                 actualExtra++;
             }
@@ -628,6 +712,25 @@ public abstract class MixinCircuitCutterOverclock {
         try {
             Method method = self.getClass().getMethod("saveChanges");
             method.invoke(self);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * 主动刷新输出槽到 ME 网络，防止 ME 短暂掉线后死锁
+     */
+    @Unique
+    private void ae2oc_tryFlushOutputSlot(Object self, IGridNode node) {
+        try {
+            Field outputField = ae2oc_getField(self.getClass(), "output");
+            outputField.setAccessible(true);
+            Object outputInv = outputField.get(self);
+
+            Method getStackInSlot = outputInv.getClass().getMethod("getStackInSlot", int.class);
+            ItemStack stack = (ItemStack) getStackInSlot.invoke(outputInv, 0);
+            if (stack.isEmpty()) return;
+
+            ae2oc_transferOutputToNetwork(node, outputInv);
         } catch (Exception ignored) {
         }
     }

@@ -10,21 +10,30 @@ import java.lang.reflect.Method;
 
 /**
  * 超频卡运行时支持类
- * 用于检测机器是否安装了超频卡，并提供1-tick瞬间完工功能
+ * 用于检测机器是否安装了超频卡，并提供快速完工功能
  * 
  * 功能说明：
- * - 安装超频卡后，机器配方在1 tick内完成（不包含动画时间）
+ * - 安装超频卡后，机器配方在 N tick 内完成（N 由配置项 overclockCardProcessTicks 控制，默认 5）
  * - 需要一次性支付全部配方能量消耗
  * - 与能源卡配合使用效果最佳（能源卡扩展能量缓存）
  * 
  * 安全机制：
- * - 必须有足够能量才能瞬间完成
+ * - 必须有足够能量才能快速完成
  * - 必须有足够输出空间才能完成
  * - 能量不足时回退到原版速度
  */
 public final class OverclockCardRuntime {
 
     private OverclockCardRuntime() {
+    }
+
+    /**
+     * 获取超频卡完成配方所需的 tick 数（从配置读取）
+     *
+     * @return tick 数（>= 1）
+     */
+    public static int getProcessTicks() {
+        return Ae2OcConfig.getOverclockCardProcessTicks();
     }
 
     /**

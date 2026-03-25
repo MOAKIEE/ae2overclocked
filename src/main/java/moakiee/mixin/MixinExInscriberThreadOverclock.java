@@ -39,6 +39,14 @@ public abstract class MixinExInscriberThreadOverclock {
     @Unique
     private int ae2oc_pendingParallel = 0;
 
+    /** 超频模式 tick 计数器 */
+    @Unique
+    private int ae2oc_tickCounter = 0;
+
+    /** 超频模式是否已激活 */
+    @Unique
+    private boolean ae2oc_overclockActive = false;
+
     @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
     private void ae2oc_parallelOverclockThreadTick(CallbackInfoReturnable<TickRateModulation> cir) {
         Object self = this;
@@ -54,6 +62,30 @@ public abstract class MixinExInscriberThreadOverclock {
 
             // 无卡 → 走原版
             if (!hasOverclock && parallelMultiplier <= 1) {
+                return;
+            }
+
+            // 主动刷新：将输出槽残留物品转移到 ME 网络（防止死锁）
+            ae2oc_tryFlushOutputSlot(self, host);
+
+            // 超频模式正在计时中
+            if (this.ae2oc_overclockActive) {
+                this.ae2oc_tickCounter++;
+                int targetTicks = OverclockCardRuntime.getProcessTicks();
+
+                if (this.ae2oc_tickCounter >= targetTicks) {
+                    // 到达 N tick，触发 smash 动画
+                    this.ae2oc_overclockActive = false;
+                    this.ae2oc_tickCounter = 0;
+
+                    Method setSmash = self.getClass().getMethod("setSmash", boolean.class);
+                    setSmash.invoke(self, true);
+                    Field finalStepField = ae2oc_getField(self.getClass(), "finalStep");
+                    finalStepField.setAccessible(true);
+                    finalStepField.setInt(self, 0);
+                    ae2oc_markHostForUpdate(host);
+                }
+                cir.setReturnValue(TickRateModulation.URGENT);
                 return;
             }
 
@@ -101,16 +133,15 @@ public abstract class MixinExInscriberThreadOverclock {
             }
 
             if (hasOverclock) {
-                // 超频模式
+                // 超频模式：一次性扣电，开始计时
                 double totalEnergy = actualParallel * AE2OC_THREAD_RECIPE_ENERGY;
                 if (!ae2oc_tryConsumePower(host, totalEnergy)) {
                     return;
                 }
 
                 this.ae2oc_pendingParallel = actualParallel;
-                Method setSmash = self.getClass().getMethod("setSmash", boolean.class);
-                setSmash.invoke(self, true);
-                finalStepField.setInt(self, 0);
+                this.ae2oc_overclockActive = true;
+                this.ae2oc_tickCounter = 0;
                 ae2oc_markHostForUpdate(host);
                 cir.setReturnValue(TickRateModulation.URGENT);
             } else {
@@ -157,10 +188,20 @@ public abstract class MixinExInscriberThreadOverclock {
 
             ItemStack outputStack = recipe.getResultItem().copy();
 
+            double availableEnergy = ae2oc_getAvailableEnergy(host);
+
+            // 有并行卡时，产物优先输出到ME网络，不受本地槽限制
+            if (cardMultiplier > 1) {
+                return ParallelEngine.calculateSimple(
+                        cardMultiplier, inputCount, 1,
+                        Integer.MAX_VALUE,
+                        availableEnergy, AE2OC_THREAD_RECIPE_ENERGY
+                ).actualParallel();
+            }
+
+            // 无并行卡时使用本地槽限制
             Method insertMethod = sideHandler.getClass().getMethod("insertItem",
                     int.class, ItemStack.class, boolean.class);
-
-            double availableEnergy = ae2oc_getAvailableEnergy(host);
 
             ParallelEngine.ParallelResult result = ParallelEngine.calculate(
                     cardMultiplier, inputCount, 1, outputStack,
@@ -182,8 +223,7 @@ public abstract class MixinExInscriberThreadOverclock {
 
     /**
      * 原子化执行多倍结算
-     * 
-     * 产物先输出到本地槽，再转移到 ME 网络（如果有并行卡）
+     * 有并行卡/超频卡时，产物优先直出 ME 网络，剩余放本地槽。
      */
     @Unique
     private void ae2oc_finishCraftParallel(Object self, Object host, int parallel) {
@@ -207,15 +247,32 @@ public abstract class MixinExInscriberThreadOverclock {
             // 多倍产物
             ItemStack outputCopy = recipe.getResultItem().copy();
             int totalOutput = outputCopy.getCount() * parallel;
-            outputCopy.setCount(totalOutput);
-
             int singleOutputCount = recipe.getResultItem().getCount();
-            
-            // 先放入本地输出槽
-            Method insertMethod = sideHandler.getClass().getMethod("insertItem",
-                    int.class, ItemStack.class, boolean.class);
-            ItemStack leftover = (ItemStack) insertMethod.invoke(sideHandler, 1, outputCopy, false);
-            int actualInserted = totalOutput - leftover.getCount();
+
+            int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(host);
+            boolean hasOverclock = OverclockCardRuntime.hasOverclockCard(host);
+            boolean directToNetwork = parallelMultiplier > 1 || hasOverclock;
+
+            int actualInserted;
+            if (directToNetwork) {
+                // 产物优先直出 ME 网络
+                int insertedToNetwork = ae2oc_tryDirectOutputToNetwork(host, outputCopy.copyWithCount(totalOutput));
+                int remaining = totalOutput - insertedToNetwork;
+                actualInserted = insertedToNetwork;
+                if (remaining > 0) {
+                    Method insertMethod = sideHandler.getClass().getMethod("insertItem",
+                            int.class, ItemStack.class, boolean.class);
+                    ItemStack leftover = (ItemStack) insertMethod.invoke(sideHandler, 1,
+                            outputCopy.copyWithCount(remaining), false);
+                    actualInserted += remaining - leftover.getCount();
+                }
+            } else {
+                outputCopy.setCount(totalOutput);
+                Method insertMethod = sideHandler.getClass().getMethod("insertItem",
+                        int.class, ItemStack.class, boolean.class);
+                ItemStack leftover = (ItemStack) insertMethod.invoke(sideHandler, 1, outputCopy, false);
+                actualInserted = totalOutput - leftover.getCount();
+            }
 
             int actualParallel = singleOutputCount > 0 ? actualInserted / singleOutputCount : 0;
 
@@ -235,17 +292,38 @@ public abstract class MixinExInscriberThreadOverclock {
                         int.class, int.class, boolean.class);
                 sideExtract.invoke(sideHandler, 0, actualParallel, false);
             }
-            
-            // 有并行卡或超频卡时，把本地输出槽的产物转移到 ME 网络
-            int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(host);
-            boolean hasOverclock = OverclockCardRuntime.hasOverclockCard(host);
-            if (parallelMultiplier > 1 || hasOverclock) {
-                ae2oc_transferOutputToNetwork(host, sideHandler);
-            }
 
             ae2oc_saveHostChanges(host);
         } catch (Exception e) {
             // 忽略
+        }
+    }
+
+    /**
+     * 直接将产物输出到 ME 网络，返回实际插入数量
+     */
+    @Unique
+    private int ae2oc_tryDirectOutputToNetwork(Object host, ItemStack outputStack) {
+        try {
+            Method getMainNode = host.getClass().getMethod("getMainNode");
+            Object mainNode = getMainNode.invoke(host);
+            if (mainNode == null) return 0;
+
+            Method getGrid = mainNode.getClass().getMethod("getGrid");
+            Object grid = getGrid.invoke(mainNode);
+            if (grid == null) return 0;
+
+            IStorageService storageService = (IStorageService) ((appeng.api.networking.IGrid) grid).getService(IStorageService.class);
+            if (storageService == null) return 0;
+
+            AEItemKey key = AEItemKey.of(outputStack);
+            if (key == null) return 0;
+
+            appeng.api.networking.security.IActionSource actionSource = ae2oc_getActionSource(host, mainNode);
+            long inserted = storageService.getInventory().insert(key, outputStack.getCount(), Actionable.MODULATE, actionSource);
+            return (int) inserted;
+        } catch (Exception e) {
+            return 0;
         }
     }
     
@@ -412,6 +490,25 @@ public abstract class MixinExInscriberThreadOverclock {
         try {
             Method method = host.getClass().getMethod("saveChanges");
             method.invoke(host);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * 主动刷新输出槽到 ME 网络，防止 ME 短暂掉线后死锁
+     */
+    @Unique
+    private void ae2oc_tryFlushOutputSlot(Object self, Object host) {
+        try {
+            Field sideField = ae2oc_getField(self.getClass(), "sideItemHandler");
+            sideField.setAccessible(true);
+            Object sideHandler = sideField.get(self);
+
+            Method getStackInSlot = sideHandler.getClass().getMethod("getStackInSlot", int.class);
+            ItemStack stack = (ItemStack) getStackInSlot.invoke(sideHandler, 1);
+            if (stack.isEmpty()) return;
+
+            ae2oc_transferOutputToNetwork(host, sideHandler);
         } catch (Exception ignored) {
         }
     }
