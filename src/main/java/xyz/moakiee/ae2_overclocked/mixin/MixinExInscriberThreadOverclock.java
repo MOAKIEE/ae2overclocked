@@ -8,9 +8,11 @@ import appeng.api.networking.ticking.TickRateModulation;
 import appeng.api.stacks.AEItemKey;
 import appeng.recipes.handlers.InscriberProcessType;
 import appeng.recipes.handlers.InscriberRecipe;
+import xyz.moakiee.ae2_overclocked.Ae2OcConfig;
 import xyz.moakiee.ae2_overclocked.support.OverclockCardRuntime;
 import xyz.moakiee.ae2_overclocked.support.ParallelCardRuntime;
 import xyz.moakiee.ae2_overclocked.support.ParallelEngine;
+import xyz.moakiee.ae2_overclocked.support.ReflectionCache;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
@@ -30,17 +32,20 @@ public abstract class MixinExInscriberThreadOverclock {
     @Unique
     private static final double AE2OC_THREAD_RECIPE_ENERGY = 2000.0;
 
-    
+
     @Unique
     private int ae2oc_pendingParallel = 0;
+
+    @Unique
+    private int ae2oc_tickAccumulator = 0;
 
     @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
     private void ae2oc_parallelOverclockThreadTick(CallbackInfoReturnable<TickRateModulation> cir) {
         Object self = this;
 
         try {
-            Field hostField = ae2oc_getField(self.getClass(), "host");
-            hostField.setAccessible(true);
+            Field hostField = ReflectionCache.getFieldHierarchy(self.getClass(), "host");
+            if (hostField == null) return;
             Object host = hostField.get(self);
 
             boolean hasOverclock = OverclockCardRuntime.hasOverclockCard(host);
@@ -48,12 +53,12 @@ public abstract class MixinExInscriberThreadOverclock {
             if (!hasOverclock && parallelMultiplier <= 1) {
                 return;
             }
-            Field smashField = ae2oc_getField(self.getClass(), "smash");
-            smashField.setAccessible(true);
+            Field smashField = ReflectionCache.getFieldHierarchy(self.getClass(), "smash");
+            if (smashField == null) return;
             boolean smash = smashField.getBoolean(self);
 
-            Field finalStepField = ae2oc_getField(self.getClass(), "finalStep");
-            finalStepField.setAccessible(true);
+            Field finalStepField = ReflectionCache.getFieldHierarchy(self.getClass(), "finalStep");
+            if (finalStepField == null) return;
             int finalStep = finalStepField.getInt(self);
             if (smash) {
                 finalStep += 4;
@@ -67,14 +72,15 @@ public abstract class MixinExInscriberThreadOverclock {
                 }
                 if (finalStep >= 16) {
                     finalStepField.setInt(self, 0);
-                    Method setSmash = self.getClass().getMethod("setSmash", boolean.class);
-                    setSmash.invoke(self, false);
+                    Method setSmash = ReflectionCache.getMethod(self.getClass(), "setSmash", boolean.class);
+                    if (setSmash != null) setSmash.invoke(self, false);
                     ae2oc_markHostForUpdate(host);
                 }
                 cir.setReturnValue(TickRateModulation.URGENT);
                 return;
             }
-            Method getTask = self.getClass().getMethod("getTask");
+            Method getTask = ReflectionCache.getMethod(self.getClass(), "getTask");
+            if (getTask == null) return;
             InscriberRecipe recipe = (InscriberRecipe) getTask.invoke(self);
             if (recipe == null) {
                 return;
@@ -85,14 +91,22 @@ public abstract class MixinExInscriberThreadOverclock {
             }
 
             if (hasOverclock) {
+                // Gate new craft cycles by configurable tick interval.
+                ae2oc_tickAccumulator++;
+                if (ae2oc_tickAccumulator < Ae2OcConfig.getOverclockIntervalTicks()) {
+                    cir.setReturnValue(TickRateModulation.URGENT);
+                    return;
+                }
+                ae2oc_tickAccumulator = 0;
+
                 double totalEnergy = actualParallel * AE2OC_THREAD_RECIPE_ENERGY;
                 if (!ae2oc_tryConsumePower(host, totalEnergy)) {
                     return;
                 }
 
                 this.ae2oc_pendingParallel = actualParallel;
-                Method setSmash = self.getClass().getMethod("setSmash", boolean.class);
-                setSmash.invoke(self, true);
+                Method setSmash = ReflectionCache.getMethod(self.getClass(), "setSmash", boolean.class);
+                if (setSmash != null) setSmash.invoke(self, true);
                 finalStepField.setInt(self, 0);
                 ae2oc_markHostForUpdate(host);
                 cir.setReturnValue(TickRateModulation.URGENT);
@@ -104,24 +118,23 @@ public abstract class MixinExInscriberThreadOverclock {
         }
     }
 
-    
+
     @Unique
     private int ae2oc_calculateParallel(Object self, Object host, InscriberRecipe recipe, int cardMultiplier) {
         try {
-            Field sideField = ae2oc_getField(self.getClass(), "sideItemHandler");
-            sideField.setAccessible(true);
+            Field sideField = ReflectionCache.getFieldHierarchy(self.getClass(), "sideItemHandler");
+            if (sideField == null) return 0;
             Object sideHandler = sideField.get(self);
 
-            Method getStackInSlot = sideHandler.getClass().getMethod("getStackInSlot", int.class);
+            Method getStackInSlot = ReflectionCache.getMethod(sideHandler.getClass(), "getStackInSlot", int.class);
+            if (getStackInSlot == null) return 0;
             ItemStack inputStack = (ItemStack) getStackInSlot.invoke(sideHandler, 0);
             int inputCount = inputStack.getCount();
             if (recipe.getProcessType() == InscriberProcessType.PRESS) {
-                Field topField = ae2oc_getField(self.getClass(), "topItemHandler");
-                topField.setAccessible(true);
+                Field topField = ReflectionCache.getFieldHierarchy(self.getClass(), "topItemHandler");
+                Field bottomField = ReflectionCache.getFieldHierarchy(self.getClass(), "bottomItemHandler");
+                if (topField == null || bottomField == null) return 0;
                 Object topHandler = topField.get(self);
-
-                Field bottomField = ae2oc_getField(self.getClass(), "bottomItemHandler");
-                bottomField.setAccessible(true);
                 Object bottomHandler = bottomField.get(self);
 
                 ItemStack topStack = (ItemStack) getStackInSlot.invoke(topHandler, 0);
@@ -134,8 +147,9 @@ public abstract class MixinExInscriberThreadOverclock {
 
             ItemStack outputStack = recipe.getResultItem().copy();
 
-            Method insertMethod = sideHandler.getClass().getMethod("insertItem",
+            Method insertMethod = ReflectionCache.getMethod(sideHandler.getClass(), "insertItem",
                     int.class, ItemStack.class, boolean.class);
+            if (insertMethod == null) return 0;
 
             double availableEnergy = ae2oc_getAvailableEnergy(host);
 
@@ -166,24 +180,21 @@ public abstract class MixinExInscriberThreadOverclock {
         }
     }
 
-    
+
     @Unique
     private void ae2oc_finishCraftParallel(Object self, Object host, int parallel) {
         try {
-            Method getTask = self.getClass().getMethod("getTask");
+            Method getTask = ReflectionCache.getMethod(self.getClass(), "getTask");
+            if (getTask == null) return;
             InscriberRecipe recipe = (InscriberRecipe) getTask.invoke(self);
             if (recipe == null || parallel <= 0) return;
 
-            Field sideField = ae2oc_getField(self.getClass(), "sideItemHandler");
-            sideField.setAccessible(true);
+            Field sideField = ReflectionCache.getFieldHierarchy(self.getClass(), "sideItemHandler");
+            Field topField = ReflectionCache.getFieldHierarchy(self.getClass(), "topItemHandler");
+            Field bottomField = ReflectionCache.getFieldHierarchy(self.getClass(), "bottomItemHandler");
+            if (sideField == null || topField == null || bottomField == null) return;
             Object sideHandler = sideField.get(self);
-
-            Field topField = ae2oc_getField(self.getClass(), "topItemHandler");
-            topField.setAccessible(true);
             Object topHandler = topField.get(self);
-
-            Field bottomField = ae2oc_getField(self.getClass(), "bottomItemHandler");
-            bottomField.setAccessible(true);
             Object bottomHandler = bottomField.get(self);
 
             ItemStack singleOutput = recipe.getResultItem().copy();
@@ -194,11 +205,13 @@ public abstract class MixinExInscriberThreadOverclock {
             ItemStack outputCopy = singleOutput.copy();
             outputCopy.setCount(totalOutput);
 
-            Method insertMethod = sideHandler.getClass().getMethod("insertItem",
+            Method insertMethod = ReflectionCache.getMethod(sideHandler.getClass(), "insertItem",
                     int.class, ItemStack.class, boolean.class);
+            if (insertMethod == null) return;
 
             int insertedTotal = 0;
-            boolean directToNetwork = ParallelCardRuntime.getParallelMultiplier(host) > 1 || OverclockCardRuntime.hasOverclockCard(host);
+            // Always use network path: this method is only called when overclock or parallel card is active.
+            boolean directToNetwork = true;
             if (directToNetwork) {
                 int insertedToNetwork = ae2oc_insertStackToNetwork(host, outputCopy.copy(), Actionable.MODULATE);
                 insertedTotal += insertedToNetwork;
@@ -218,20 +231,21 @@ public abstract class MixinExInscriberThreadOverclock {
             int actualParallel = insertedTotal / singleOutputCount;
 
             if (actualParallel > 0) {
-                Method setProcessingTime = self.getClass().getDeclaredMethod("setProcessingTime", int.class);
-                setProcessingTime.setAccessible(true);
-                setProcessingTime.invoke(self, 0);
+                Method setProcessingTime = ReflectionCache.getDeclaredMethod(self.getClass(), "setProcessingTime", int.class);
+                if (setProcessingTime != null) setProcessingTime.invoke(self, 0);
 
                 if (recipe.getProcessType() == InscriberProcessType.PRESS) {
-                    Method extractItem = topHandler.getClass().getMethod("extractItem",
+                    Method extractItem = ReflectionCache.getMethod(topHandler.getClass(), "extractItem",
                             int.class, int.class, boolean.class);
-                    extractItem.invoke(topHandler, 0, actualParallel, false);
-                    extractItem.invoke(bottomHandler, 0, actualParallel, false);
+                    if (extractItem != null) {
+                        extractItem.invoke(topHandler, 0, actualParallel, false);
+                        extractItem.invoke(bottomHandler, 0, actualParallel, false);
+                    }
                 }
 
-                Method sideExtract = sideHandler.getClass().getMethod("extractItem",
+                Method sideExtract = ReflectionCache.getMethod(sideHandler.getClass(), "extractItem",
                         int.class, int.class, boolean.class);
-                sideExtract.invoke(sideHandler, 0, actualParallel, false);
+                if (sideExtract != null) sideExtract.invoke(sideHandler, 0, actualParallel, false);
             }
 
             if (directToNetwork) {
@@ -242,13 +256,14 @@ public abstract class MixinExInscriberThreadOverclock {
         } catch (Exception e) {
         }
     }
-    
-    
+
+
     @Unique
     private void ae2oc_transferOutputToNetwork(Object host, Object sideHandler) {
         try {
-            Method getStackInSlot = sideHandler.getClass().getMethod("getStackInSlot", int.class);
-            Method extractItem = sideHandler.getClass().getMethod("extractItem", int.class, int.class, boolean.class);
+            Method getStackInSlot = ReflectionCache.getMethod(sideHandler.getClass(), "getStackInSlot", int.class);
+            Method extractItem = ReflectionCache.getMethod(sideHandler.getClass(), "extractItem", int.class, int.class, boolean.class);
+            if (getStackInSlot == null || extractItem == null) return;
             ItemStack stack = (ItemStack) getStackInSlot.invoke(sideHandler, 1);
             if (stack.isEmpty()) return;
 
@@ -266,13 +281,15 @@ public abstract class MixinExInscriberThreadOverclock {
             return 0;
         }
         try {
-            Method getMainNode = host.getClass().getMethod("getMainNode");
+            Method getMainNode = ReflectionCache.getMethod(host.getClass(), "getMainNode");
+            if (getMainNode == null) return 0;
             Object mainNode = getMainNode.invoke(host);
             if (mainNode == null) {
                 return 0;
             }
 
-            Method getGrid = mainNode.getClass().getMethod("getGrid");
+            Method getGrid = ReflectionCache.getMethod(mainNode.getClass(), "getGrid");
+            if (getGrid == null) return 0;
             Object grid = getGrid.invoke(mainNode);
             if (!(grid instanceof appeng.api.networking.IGrid iGrid)) {
                 return 0;
@@ -299,17 +316,19 @@ public abstract class MixinExInscriberThreadOverclock {
         }
     }
 
-    
+
     @Unique
     private appeng.api.networking.security.IActionSource ae2oc_getActionSource(Object host, Object mainNode) {
         try {
             if (mainNode != null) {
-                Method getNode = mainNode.getClass().getMethod("getNode");
-                Object node = getNode.invoke(mainNode);
-                if (node instanceof appeng.api.networking.IGridNode gridNode) {
-                    Object owner = gridNode.getOwner();
-                    if (owner instanceof appeng.api.networking.security.IActionHost actionHost) {
-                        return appeng.api.networking.security.IActionSource.ofMachine(actionHost);
+                Method getNode = ReflectionCache.getMethod(mainNode.getClass(), "getNode");
+                if (getNode != null) {
+                    Object node = getNode.invoke(mainNode);
+                    if (node instanceof appeng.api.networking.IGridNode gridNode) {
+                        Object owner = gridNode.getOwner();
+                        if (owner instanceof appeng.api.networking.security.IActionHost actionHost) {
+                            return appeng.api.networking.security.IActionSource.ofMachine(actionHost);
+                        }
                     }
                 }
             }
@@ -322,20 +341,28 @@ public abstract class MixinExInscriberThreadOverclock {
     private double ae2oc_getAvailableEnergy(Object host) {
         double total = 0;
         try {
-            Method extractMethod = host.getClass().getMethod(
+            Method extractMethod = ReflectionCache.getMethod(host.getClass(),
                     "extractAEPower", double.class, Actionable.class, PowerMultiplier.class);
-            total += (double) extractMethod.invoke(host, Double.MAX_VALUE,
-                    Actionable.SIMULATE, PowerMultiplier.CONFIG);
+            if (extractMethod != null) {
+                total += (double) extractMethod.invoke(host, Double.MAX_VALUE,
+                        Actionable.SIMULATE, PowerMultiplier.CONFIG);
+            }
 
-            Method getMainNode = host.getClass().getMethod("getMainNode");
-            Object mainNode = getMainNode.invoke(host);
-            if (mainNode != null) {
-                Method getGrid = mainNode.getClass().getMethod("getGrid");
-                Object grid = getGrid.invoke(mainNode);
-                if (grid != null) {
-                    Method getEnergyService = grid.getClass().getMethod("getEnergyService");
-                    IEnergyService energyService = (IEnergyService) getEnergyService.invoke(grid);
-                    total += energyService.extractAEPower(Double.MAX_VALUE, Actionable.SIMULATE, PowerMultiplier.CONFIG);
+            Method getMainNode = ReflectionCache.getMethod(host.getClass(), "getMainNode");
+            if (getMainNode != null) {
+                Object mainNode = getMainNode.invoke(host);
+                if (mainNode != null) {
+                    Method getGrid = ReflectionCache.getMethod(mainNode.getClass(), "getGrid");
+                    if (getGrid != null) {
+                        Object grid = getGrid.invoke(mainNode);
+                        if (grid != null) {
+                            Method getEnergyService = ReflectionCache.getMethod(grid.getClass(), "getEnergyService");
+                            if (getEnergyService != null) {
+                                IEnergyService energyService = (IEnergyService) getEnergyService.invoke(grid);
+                                total += energyService.extractAEPower(Double.MAX_VALUE, Actionable.SIMULATE, PowerMultiplier.CONFIG);
+                            }
+                        }
+                    }
                 }
             }
         } catch (Exception e) {
@@ -346,8 +373,9 @@ public abstract class MixinExInscriberThreadOverclock {
     @Unique
     private boolean ae2oc_tryConsumePower(Object host, double powerNeeded) {
         try {
-            Method extractMethod = host.getClass().getMethod(
+            Method extractMethod = ReflectionCache.getMethod(host.getClass(),
                     "extractAEPower", double.class, Actionable.class, PowerMultiplier.class);
+            if (extractMethod == null) return false;
 
             double extracted = (double) extractMethod.invoke(host, powerNeeded,
                     Actionable.SIMULATE, PowerMultiplier.CONFIG);
@@ -356,19 +384,25 @@ public abstract class MixinExInscriberThreadOverclock {
                 return true;
             }
 
-            Method getMainNode = host.getClass().getMethod("getMainNode");
-            Object mainNode = getMainNode.invoke(host);
-            if (mainNode != null) {
-                Method getGrid = mainNode.getClass().getMethod("getGrid");
-                Object grid = getGrid.invoke(mainNode);
-                if (grid != null) {
-                    Method getEnergyService = grid.getClass().getMethod("getEnergyService");
-                    IEnergyService energyService = (IEnergyService) getEnergyService.invoke(grid);
-                    double networkExtracted = energyService.extractAEPower(powerNeeded, Actionable.SIMULATE,
-                            PowerMultiplier.CONFIG);
-                    if (networkExtracted >= powerNeeded - 0.01) {
-                        energyService.extractAEPower(powerNeeded, Actionable.MODULATE, PowerMultiplier.CONFIG);
-                        return true;
+            Method getMainNode = ReflectionCache.getMethod(host.getClass(), "getMainNode");
+            if (getMainNode != null) {
+                Object mainNode = getMainNode.invoke(host);
+                if (mainNode != null) {
+                    Method getGrid = ReflectionCache.getMethod(mainNode.getClass(), "getGrid");
+                    if (getGrid != null) {
+                        Object grid = getGrid.invoke(mainNode);
+                        if (grid != null) {
+                            Method getEnergyService = ReflectionCache.getMethod(grid.getClass(), "getEnergyService");
+                            if (getEnergyService != null) {
+                                IEnergyService energyService = (IEnergyService) getEnergyService.invoke(grid);
+                                double networkExtracted = energyService.extractAEPower(powerNeeded, Actionable.SIMULATE,
+                                        PowerMultiplier.CONFIG);
+                                if (networkExtracted >= powerNeeded - 0.01) {
+                                    energyService.extractAEPower(powerNeeded, Actionable.MODULATE, PowerMultiplier.CONFIG);
+                                    return true;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -378,23 +412,10 @@ public abstract class MixinExInscriberThreadOverclock {
     }
 
     @Unique
-    private Field ae2oc_getField(Class<?> clazz, String fieldName) throws NoSuchFieldException {
-        try {
-            return clazz.getDeclaredField(fieldName);
-        } catch (NoSuchFieldException e) {
-            Class<?> superClass = clazz.getSuperclass();
-            if (superClass != null) {
-                return ae2oc_getField(superClass, fieldName);
-            }
-            throw e;
-        }
-    }
-
-    @Unique
     private void ae2oc_markHostForUpdate(Object host) {
         try {
-            Method method = host.getClass().getMethod("markForUpdate");
-            method.invoke(host);
+            Method method = ReflectionCache.getMethod(host.getClass(), "markForUpdate");
+            if (method != null) method.invoke(host);
         } catch (Exception ignored) {
         }
     }
@@ -402,8 +423,8 @@ public abstract class MixinExInscriberThreadOverclock {
     @Unique
     private void ae2oc_saveHostChanges(Object host) {
         try {
-            Method method = host.getClass().getMethod("saveChanges");
-            method.invoke(host);
+            Method method = ReflectionCache.getMethod(host.getClass(), "saveChanges");
+            if (method != null) method.invoke(host);
         } catch (Exception ignored) {
         }
     }

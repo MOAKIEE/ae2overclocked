@@ -6,22 +6,12 @@ import appeng.helpers.externalstorage.GenericStackInv;
 import xyz.moakiee.ae2_overclocked.Ae2OcConfig;
 import xyz.moakiee.ae2_overclocked.ModItems;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 public final class CapacityCardRuntime {
 
     private CapacityCardRuntime() {
     }
-
-    // ── Reflection caches ──────────────────────────────────────────────
-    // Key = target Class,  Value = Optional.empty() means "not found / not applicable"
-    private static final ConcurrentHashMap<Class<?>, Optional<Method>> CACHE_GET_UPGRADES = new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<Class<?>, Optional<Method>> CACHE_GET_INSTALLED_UPGRADES = new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<String, Optional<Method>>  CACHE_METHOD_NO_ARG = new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<String, Optional<Field>>   CACHE_FIELD = new ConcurrentHashMap<>();
 
     // ── Public API ─────────────────────────────────────────────────────
 
@@ -40,7 +30,7 @@ public final class CapacityCardRuntime {
             return;
         }
 
-        Object tank = tryInvokeNoArg(host, "getTank");
+        Object tank = ReflectionCache.invokeNoArg(host, "getTank");
         if (!(tank instanceof GenericStackInv inv)) {
             return;
         }
@@ -69,7 +59,7 @@ public final class CapacityCardRuntime {
             return fromGetUpgrades;
         }
 
-        Object byGetBlockEntity = tryInvokeNoArg(target, "getBlockEntity");
+        Object byGetBlockEntity = ReflectionCache.invokeNoArg(target, "getBlockEntity");
         if (byGetBlockEntity != null) {
             int fromBlockEntity = getInstalledCapacityCards(byGetBlockEntity, depth + 1);
             if (fromBlockEntity > 0) {
@@ -77,7 +67,7 @@ public final class CapacityCardRuntime {
             }
         }
 
-        Object byGetHost = tryInvokeNoArg(target, "getHost");
+        Object byGetHost = ReflectionCache.invokeNoArg(target, "getHost");
         if (byGetHost != null) {
             int fromHost = getInstalledCapacityCards(byGetHost, depth + 1);
             if (fromHost > 0) {
@@ -85,7 +75,7 @@ public final class CapacityCardRuntime {
             }
         }
 
-        Object byHostField = tryGetField(target, "host");
+        Object byHostField = ReflectionCache.getFieldValue(target, "host");
         if (byHostField != null) {
             return getInstalledCapacityCards(byHostField, depth + 1);
         }
@@ -98,112 +88,29 @@ public final class CapacityCardRuntime {
     private static Integer tryGetInstalledFromGetUpgrades(Object target) {
         Class<?> clazz = target.getClass();
 
-        // Lookup (or cache) the getUpgrades() method for this class
-        Optional<Method> optGetUpgrades = CACHE_GET_UPGRADES.computeIfAbsent(clazz, c -> {
-            try {
-                Method m = c.getMethod("getUpgrades");
-                m.setAccessible(true);
-                return Optional.of(m);
-            } catch (NoSuchMethodException e) {
-                return Optional.empty();
-            }
-        });
-
-        if (optGetUpgrades.isEmpty()) {
-            return null; // This class has no getUpgrades() – cached, no exception thrown
+        Method getUpgrades = ReflectionCache.getMethod(clazz, "getUpgrades");
+        if (getUpgrades == null) {
+            return null;
         }
 
         try {
-            Object upgrades = optGetUpgrades.get().invoke(target);
+            Object upgrades = getUpgrades.invoke(target);
             if (upgrades == null) {
                 return null;
             }
 
-            // Lookup (or cache) the getInstalledUpgrades(ItemLike) method
-            Optional<Method> optGetInstalled = CACHE_GET_INSTALLED_UPGRADES.computeIfAbsent(upgrades.getClass(), c -> {
-                try {
-                    Method m = c.getMethod("getInstalledUpgrades", net.minecraft.world.level.ItemLike.class);
-                    m.setAccessible(true);
-                    return Optional.of(m);
-                } catch (NoSuchMethodException e) {
-                    return Optional.empty();
-                }
-            });
-
-            if (optGetInstalled.isEmpty()) {
+            Method getInstalled = ReflectionCache.getMethod(upgrades.getClass(),
+                    "getInstalledUpgrades", net.minecraft.world.level.ItemLike.class);
+            if (getInstalled == null) {
                 return null;
             }
 
-            Object result = optGetInstalled.get().invoke(upgrades, ModItems.CAPACITY_CARD.get());
+            Object result = getInstalled.invoke(upgrades, ModItems.CAPACITY_CARD.get());
             if (result instanceof Integer installed) {
                 return installed;
             }
         } catch (Throwable ignored) {
-            // Invocation failure (not lookup failure) – rare, don't cache
         }
         return null;
-    }
-
-    /**
-     * Invoke a public no-arg method by name, with Class-level caching.
-     * Returns null both when the method doesn't exist and when invocation fails.
-     */
-    private static Object tryInvokeNoArg(Object target, String methodName) {
-        if (target == null) {
-            return null;
-        }
-        Class<?> clazz = target.getClass();
-        String cacheKey = clazz.getName() + "#" + methodName;
-
-        Optional<Method> opt = CACHE_METHOD_NO_ARG.computeIfAbsent(cacheKey, k -> {
-            try {
-                Method m = clazz.getMethod(methodName);
-                m.setAccessible(true);
-                return Optional.of(m);
-            } catch (NoSuchMethodException e) {
-                return Optional.empty();
-            }
-        });
-
-        if (opt.isEmpty()) {
-            return null;
-        }
-
-        try {
-            return opt.get().invoke(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    /**
-     * Read a declared field by name, with Class-level caching.
-     */
-    private static Object tryGetField(Object target, String fieldName) {
-        if (target == null) {
-            return null;
-        }
-        Class<?> clazz = target.getClass();
-        String cacheKey = clazz.getName() + "#" + fieldName;
-
-        Optional<Field> opt = CACHE_FIELD.computeIfAbsent(cacheKey, k -> {
-            try {
-                Field f = clazz.getDeclaredField(fieldName);
-                f.setAccessible(true);
-                return Optional.of(f);
-            } catch (NoSuchFieldException e) {
-                return Optional.empty();
-            }
-        });
-
-        if (opt.isEmpty()) {
-            return null;
-        }
-
-        try {
-            return opt.get().get(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
     }
 }

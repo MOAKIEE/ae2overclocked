@@ -10,9 +10,11 @@ import appeng.api.networking.ticking.TickRateModulation;
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.GenericStack;
+import xyz.moakiee.ae2_overclocked.Ae2OcConfig;
 import xyz.moakiee.ae2_overclocked.support.OverclockCardRuntime;
 import xyz.moakiee.ae2_overclocked.support.ParallelCardRuntime;
 import xyz.moakiee.ae2_overclocked.support.ParallelEngine;
+import xyz.moakiee.ae2_overclocked.support.ReflectionCache;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.spongepowered.asm.mixin.Mixin;
@@ -46,8 +48,10 @@ public abstract class MixinReactionChamberOverclock {
     private double ae2oc_cachedUnitEnergy = 0;
     @Unique
     private Object ae2oc_cachedRecipe = null;
+    @Unique
+    private int ae2oc_tickAccumulator = 0;
 
-    
+
     @Inject(method = "tickingRequest", at = @At("HEAD"), cancellable = true)
     private void ae2oc_headTick(IGridNode node, int ticksSinceLastCall,
                                  CallbackInfoReturnable<TickRateModulation> cir) {
@@ -65,6 +69,14 @@ public abstract class MixinReactionChamberOverclock {
 
         try {
             if (hasOverclock) {
+                // Gate craft cycles by configurable tick interval.
+                ae2oc_tickAccumulator += ticksSinceLastCall;
+                if (ae2oc_tickAccumulator < Ae2OcConfig.getOverclockIntervalTicks()) {
+                    cir.setReturnValue(TickRateModulation.URGENT);
+                    return;
+                }
+                ae2oc_tickAccumulator = 0;
+
                 this.ae2oc_processing = true;
                 try {
                     ae2oc_instantCraft(self, node, parallelMultiplier);
@@ -74,26 +86,28 @@ public abstract class MixinReactionChamberOverclock {
                 cir.setReturnValue(TickRateModulation.URGENT);
                 return;
             }
-            Field ptField = ae2oc_getField(self.getClass(), "processingTime");
-            ptField.setAccessible(true);
+            Field ptField = ReflectionCache.getFieldHierarchy(self.getClass(), "processingTime");
+            if (ptField == null) return;
             this.ae2oc_prevProcessingTime = ptField.getInt(self);
-            Method getTask = self.getClass().getDeclaredMethod("getTask");
-            getTask.setAccessible(true);
+            Method getTask = ReflectionCache.getDeclaredMethod(self.getClass(), "getTask");
+            if (getTask == null) return;
             Object recipe = getTask.invoke(self);
 
             if (recipe != null) {
-                Method getEnergy = recipe.getClass().getMethod("getEnergy");
-                this.ae2oc_cachedUnitEnergy = (int) getEnergy.invoke(recipe);
+                Method getEnergy = ReflectionCache.getMethod(recipe.getClass(), "getEnergy");
+                if (getEnergy != null) this.ae2oc_cachedUnitEnergy = (int) getEnergy.invoke(recipe);
 
-                Method isItemOutput = recipe.getClass().getMethod("isItemOutput");
-                this.ae2oc_cachedIsItemOutput = (boolean) isItemOutput.invoke(recipe);
+                Method isItemOutput = ReflectionCache.getMethod(recipe.getClass(), "isItemOutput");
+                if (isItemOutput != null) this.ae2oc_cachedIsItemOutput = (boolean) isItemOutput.invoke(recipe);
 
                 if (this.ae2oc_cachedIsItemOutput) {
-                    Method getResultItem = recipe.getClass().getMethod("getResultItem");
-                    this.ae2oc_cachedItemOutput = ((ItemStack) getResultItem.invoke(recipe)).copy();
+                    Method getResultItem = ReflectionCache.getMethod(recipe.getClass(), "getResultItem");
+                    if (getResultItem != null)
+                        this.ae2oc_cachedItemOutput = ((ItemStack) getResultItem.invoke(recipe)).copy();
                 } else {
-                    Method getResultFluid = recipe.getClass().getMethod("getResultFluid");
-                    this.ae2oc_cachedFluidOutput = ((FluidStack) getResultFluid.invoke(recipe)).copy();
+                    Method getResultFluid = ReflectionCache.getMethod(recipe.getClass(), "getResultFluid");
+                    if (getResultFluid != null)
+                        this.ae2oc_cachedFluidOutput = ((FluidStack) getResultFluid.invoke(recipe)).copy();
                 }
                 this.ae2oc_cachedRecipe = recipe;
                 this.ae2oc_pendingParallel = ae2oc_calculateParallel(
@@ -106,7 +120,7 @@ public abstract class MixinReactionChamberOverclock {
         }
     }
 
-    
+
     @Inject(method = "tickingRequest", at = @At("RETURN"))
     private void ae2oc_tailTick(IGridNode node, int ticksSinceLastCall,
                                  CallbackInfoReturnable<TickRateModulation> cir) {
@@ -118,8 +132,8 @@ public abstract class MixinReactionChamberOverclock {
         try {
             Object self = this;
 
-            Field ptField = ae2oc_getField(self.getClass(), "processingTime");
-            ptField.setAccessible(true);
+            Field ptField = ReflectionCache.getFieldHierarchy(self.getClass(), "processingTime");
+            if (ptField == null) { ae2oc_resetCache(); return; }
             int currentPT = ptField.getInt(self);
 
             if (currentPT == 0) {
@@ -147,32 +161,34 @@ public abstract class MixinReactionChamberOverclock {
         this.ae2oc_cachedRecipe = null;
     }
 
-    
+
     @Unique
     private void ae2oc_instantCraft(Object self, IGridNode node, int parallelMultiplier) throws Exception {
         ae2oc_handleDirty(self);
 
-        Method getTask = self.getClass().getDeclaredMethod("getTask");
-        getTask.setAccessible(true);
+        Method getTask = ReflectionCache.getDeclaredMethod(self.getClass(), "getTask");
+        if (getTask == null) return;
         Object recipe = getTask.invoke(self);
         if (recipe == null) return;
 
-        Method getEnergy = recipe.getClass().getMethod("getEnergy");
+        Method getEnergy = ReflectionCache.getMethod(recipe.getClass(), "getEnergy");
+        if (getEnergy == null) return;
         double unitEnergy = (int) getEnergy.invoke(recipe);
 
-        Field outputInvField = ae2oc_getField(self.getClass(), "outputInv");
-        outputInvField.setAccessible(true);
+        Field outputInvField = ReflectionCache.getFieldHierarchy(self.getClass(), "outputInv");
+        if (outputInvField == null) return;
         Object outputInv = outputInvField.get(self);
 
-        Field inputInvField = ae2oc_getField(self.getClass(), "inputInv");
-        inputInvField.setAccessible(true);
+        Field inputInvField = ReflectionCache.getFieldHierarchy(self.getClass(), "inputInv");
+        if (inputInvField == null) return;
         Object inputInv = inputInvField.get(self);
 
-        Field fluidInvField = ae2oc_getField(self.getClass(), "fluidInv");
-        fluidInvField.setAccessible(true);
+        Field fluidInvField = ReflectionCache.getFieldHierarchy(self.getClass(), "fluidInv");
+        if (fluidInvField == null) return;
         Object fluidInv = fluidInvField.get(self);
 
-        Method isItemOutput = recipe.getClass().getMethod("isItemOutput");
+        Method isItemOutput = ReflectionCache.getMethod(recipe.getClass(), "isItemOutput");
+        if (isItemOutput == null) return;
         boolean itemOutput = (boolean) isItemOutput.invoke(recipe);
 
         int minInputCount = ae2oc_getMinInputCount(recipe, inputInv, fluidInv);
@@ -181,11 +197,13 @@ public abstract class MixinReactionChamberOverclock {
         int actualParallel;
 
         if (itemOutput) {
-            Method getResultItem = recipe.getClass().getMethod("getResultItem");
+            Method getResultItem = ReflectionCache.getMethod(recipe.getClass(), "getResultItem");
+            if (getResultItem == null) return;
             ItemStack outputItem = ((ItemStack) getResultItem.invoke(recipe)).copy();
 
-            Method insertItem = outputInv.getClass().getMethod("insertItem",
+            Method insertItem = ReflectionCache.getMethod(outputInv.getClass(), "insertItem",
                     int.class, ItemStack.class, boolean.class);
+            if (insertItem == null) return;
 
             ParallelEngine.ParallelResult result = ParallelEngine.calculate(
                     parallelMultiplier, minInputCount, 1, outputItem,
@@ -212,7 +230,8 @@ public abstract class MixinReactionChamberOverclock {
                 ae2oc_transferItemOutputToNetwork(node, outputInv);
             }
         } else {
-            Method getResultFluid = recipe.getClass().getMethod("getResultFluid");
+            Method getResultFluid = ReflectionCache.getMethod(recipe.getClass(), "getResultFluid");
+            if (getResultFluid == null) return;
             FluidStack outputFluid = (FluidStack) getResultFluid.invoke(recipe);
 
             int fluidOutputLimit = ae2oc_getFluidOutputLimit(fluidInv, outputFluid, parallelMultiplier);
@@ -230,39 +249,37 @@ public abstract class MixinReactionChamberOverclock {
 
             AEFluidKey fluidKey = AEFluidKey.of(outputFluid);
             int totalFluidAmount = outputFluid.getAmount() * actualParallel;
-            Method addMethod = fluidInv.getClass().getMethod("add", int.class, AEFluidKey.class, int.class);
-            addMethod.invoke(fluidInv, 0, fluidKey, totalFluidAmount);
+            Method addMethod = ReflectionCache.getMethod(fluidInv.getClass(), "add", int.class, AEFluidKey.class, int.class);
+            if (addMethod != null) addMethod.invoke(fluidInv, 0, fluidKey, totalFluidAmount);
             if (parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self)) {
                 ae2oc_transferFluidOutputToNetwork(node, fluidInv);
             }
         }
-        Field ptField = ae2oc_getField(self.getClass(), "processingTime");
-        ptField.setAccessible(true);
-        ptField.setInt(self, 0);
+        Field ptField = ReflectionCache.getFieldHierarchy(self.getClass(), "processingTime");
+        if (ptField != null) ptField.setInt(self, 0);
 
-        Field cachedTaskField = ae2oc_getField(self.getClass(), "cachedTask");
-        cachedTaskField.setAccessible(true);
-        cachedTaskField.set(self, null);
+        Field cachedTaskField = ReflectionCache.getFieldHierarchy(self.getClass(), "cachedTask");
+        if (cachedTaskField != null) cachedTaskField.set(self, null);
 
-        Method setWorking = self.getClass().getMethod("setWorking", boolean.class);
-        setWorking.invoke(self, false);
+        Method setWorking = ReflectionCache.getMethod(self.getClass(), "setWorking", boolean.class);
+        if (setWorking != null) setWorking.invoke(self, false);
 
         ae2oc_markForUpdate(self);
         ae2oc_saveChanges(self);
     }
 
-    
+
     @Unique
     private void ae2oc_doExtraOutputs(Object self, IGridNode node, int extraRounds) {
         if (extraRounds <= 0) return;
 
         try {
-            Field inputInvField = ae2oc_getField(self.getClass(), "inputInv");
-            inputInvField.setAccessible(true);
+            Field inputInvField = ReflectionCache.getFieldHierarchy(self.getClass(), "inputInv");
+            if (inputInvField == null) return;
             Object inputInv = inputInvField.get(self);
 
-            Field fluidInvField = ae2oc_getField(self.getClass(), "fluidInv");
-            fluidInvField.setAccessible(true);
+            Field fluidInvField = ReflectionCache.getFieldHierarchy(self.getClass(), "fluidInv");
+            if (fluidInvField == null) return;
             Object fluidInv = fluidInvField.get(self);
             double available = ae2oc_getAvailableEnergy(self, node);
             if (this.ae2oc_cachedUnitEnergy > 0.001) {
@@ -275,12 +292,13 @@ public abstract class MixinReactionChamberOverclock {
             if (!ae2oc_tryConsumePower(self, node, extraEnergy)) return;
 
             if (this.ae2oc_cachedIsItemOutput) {
-                Field outputInvField = ae2oc_getField(self.getClass(), "outputInv");
-                outputInvField.setAccessible(true);
+                Field outputInvField = ReflectionCache.getFieldHierarchy(self.getClass(), "outputInv");
+                if (outputInvField == null) return;
                 Object outputInv = outputInvField.get(self);
 
-                Method insertItem = outputInv.getClass().getMethod("insertItem",
+                Method insertItem = ReflectionCache.getMethod(outputInv.getClass(), "insertItem",
                         int.class, ItemStack.class, boolean.class);
+                if (insertItem == null) return;
                 ItemStack totalOutput = this.ae2oc_cachedItemOutput.copy();
                 totalOutput.setCount(totalOutput.getCount() * extraRounds);
                 ItemStack leftover = (ItemStack) insertItem.invoke(outputInv, 0, totalOutput, false);
@@ -290,29 +308,23 @@ public abstract class MixinReactionChamberOverclock {
                 if (actualExtra > 0) {
                     ae2oc_consumeBatchWithRecipe(this.ae2oc_cachedRecipe, inputInv, fluidInv, actualExtra);
                 }
-                int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
-                if (parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self)) {
-                    ae2oc_transferItemOutputToNetwork(node, outputInv);
-                }
+                ae2oc_transferItemOutputToNetwork(node, outputInv);
             } else {
                 AEFluidKey fluidKey = AEFluidKey.of(this.ae2oc_cachedFluidOutput);
-                Method addMethod = fluidInv.getClass().getMethod("add", int.class, AEFluidKey.class, int.class);
+                Method addMethod = ReflectionCache.getMethod(fluidInv.getClass(), "add", int.class, AEFluidKey.class, int.class);
                 int singleFluidAmount = this.ae2oc_cachedFluidOutput.getAmount();
                 int totalFluidAmount = singleFluidAmount * extraRounds;
-                Method canAdd = fluidInv.getClass().getMethod("canAdd", int.class, AEFluidKey.class, int.class);
+                Method canAdd = ReflectionCache.getMethod(fluidInv.getClass(), "canAdd", int.class, AEFluidKey.class, int.class);
                 int actualInserted = 0;
-                if ((boolean) canAdd.invoke(fluidInv, 0, fluidKey, totalFluidAmount)) {
-                    addMethod.invoke(fluidInv, 0, fluidKey, totalFluidAmount);
+                if (canAdd != null && (boolean) canAdd.invoke(fluidInv, 0, fluidKey, totalFluidAmount)) {
+                    if (addMethod != null) addMethod.invoke(fluidInv, 0, fluidKey, totalFluidAmount);
                     actualInserted = totalFluidAmount;
                 }
                 int actualExtra = singleFluidAmount > 0 ? actualInserted / singleFluidAmount : 0;
                 if (actualExtra > 0) {
                     ae2oc_consumeBatchWithRecipe(this.ae2oc_cachedRecipe, inputInv, fluidInv, actualExtra);
                 }
-                int parallelMultiplier = ParallelCardRuntime.getParallelMultiplier(self);
-                if (parallelMultiplier > 1 || OverclockCardRuntime.hasOverclockCard(self)) {
-                    ae2oc_transferFluidOutputToNetwork(node, fluidInv);
-                }
+                ae2oc_transferFluidOutputToNetwork(node, fluidInv);
             }
 
             ae2oc_saveChanges(self);
@@ -324,31 +336,29 @@ public abstract class MixinReactionChamberOverclock {
     @Unique
     private void ae2oc_handleDirty(Object self) {
         try {
-            Field dirtyField = ae2oc_getField(self.getClass(), "dirty");
-            dirtyField.setAccessible(true);
+            Field dirtyField = ReflectionCache.getFieldHierarchy(self.getClass(), "dirty");
+            if (dirtyField == null) return;
             boolean dirty = dirtyField.getBoolean(self);
 
             if (dirty) {
-                Field levelField = ae2oc_getField(self.getClass(), "level");
-                levelField.setAccessible(true);
-                Object level = levelField.get(self);
+                Field levelField = ReflectionCache.getFieldHierarchy(self.getClass(), "level");
+                Object level = levelField != null ? levelField.get(self) : null;
 
                 if (level != null) {
-                    Method findRecipe = self.getClass().getDeclaredMethod("findRecipe",
+                    Method findRecipe = ReflectionCache.getDeclaredMethod(self.getClass(), "findRecipe",
                             net.minecraft.world.level.Level.class);
-                    findRecipe.setAccessible(true);
-                    Object recipe = findRecipe.invoke(self, level);
-                    if (recipe == null) {
-                        Field ptField = ae2oc_getField(self.getClass(), "processingTime");
-                        ptField.setAccessible(true);
-                        ptField.setInt(self, 0);
+                    if (findRecipe != null) {
+                        Object recipe = findRecipe.invoke(self, level);
+                        if (recipe == null) {
+                            Field ptField = ReflectionCache.getFieldHierarchy(self.getClass(), "processingTime");
+                            if (ptField != null) ptField.setInt(self, 0);
 
-                        Method setWorking = self.getClass().getMethod("setWorking", boolean.class);
-                        setWorking.invoke(self, false);
+                            Method setWorking = ReflectionCache.getMethod(self.getClass(), "setWorking", boolean.class);
+                            if (setWorking != null) setWorking.invoke(self, false);
 
-                        Field cachedTaskField = ae2oc_getField(self.getClass(), "cachedTask");
-                        cachedTaskField.setAccessible(true);
-                        cachedTaskField.set(self, null);
+                            Field cachedTaskField = ReflectionCache.getFieldHierarchy(self.getClass(), "cachedTask");
+                            if (cachedTaskField != null) cachedTaskField.set(self, null);
+                        }
                     }
                 }
                 ae2oc_markForUpdate(self);
@@ -361,33 +371,37 @@ public abstract class MixinReactionChamberOverclock {
     @Unique
     private int ae2oc_calculateParallel(Object self, IGridNode node, Object recipe, int cardMultiplier) {
         try {
-            Field inputInvField = ae2oc_getField(self.getClass(), "inputInv");
-            inputInvField.setAccessible(true);
+            Field inputInvField = ReflectionCache.getFieldHierarchy(self.getClass(), "inputInv");
+            if (inputInvField == null) return 1;
             Object inputInv = inputInvField.get(self);
 
-            Field fluidInvField = ae2oc_getField(self.getClass(), "fluidInv");
-            fluidInvField.setAccessible(true);
+            Field fluidInvField = ReflectionCache.getFieldHierarchy(self.getClass(), "fluidInv");
+            if (fluidInvField == null) return 1;
             Object fluidInv = fluidInvField.get(self);
 
             int minInputCount = ae2oc_getMinInputCount(recipe, inputInv, fluidInv);
             double availableEnergy = ae2oc_getAvailableEnergy(self, node);
 
-            Method getEnergy = recipe.getClass().getMethod("getEnergy");
+            Method getEnergy = ReflectionCache.getMethod(recipe.getClass(), "getEnergy");
+            if (getEnergy == null) return 1;
             double unitEnergy = (int) getEnergy.invoke(recipe);
 
-            Method isItemOutput = recipe.getClass().getMethod("isItemOutput");
+            Method isItemOutput = ReflectionCache.getMethod(recipe.getClass(), "isItemOutput");
+            if (isItemOutput == null) return 1;
             boolean itemOutput = (boolean) isItemOutput.invoke(recipe);
 
             if (itemOutput) {
-                Field outputInvField = ae2oc_getField(self.getClass(), "outputInv");
-                outputInvField.setAccessible(true);
+                Field outputInvField = ReflectionCache.getFieldHierarchy(self.getClass(), "outputInv");
+                if (outputInvField == null) return 1;
                 Object outputInv = outputInvField.get(self);
 
-                Method getResultItem = recipe.getClass().getMethod("getResultItem");
+                Method getResultItem = ReflectionCache.getMethod(recipe.getClass(), "getResultItem");
+                if (getResultItem == null) return 1;
                 ItemStack outputItem = ((ItemStack) getResultItem.invoke(recipe)).copy();
 
-                Method insertItem = outputInv.getClass().getMethod("insertItem",
+                Method insertItem = ReflectionCache.getMethod(outputInv.getClass(), "insertItem",
                         int.class, ItemStack.class, boolean.class);
+                if (insertItem == null) return 1;
 
                 return ParallelEngine.calculate(
                         cardMultiplier, minInputCount, 1, outputItem,
@@ -401,7 +415,8 @@ public abstract class MixinReactionChamberOverclock {
                         availableEnergy, unitEnergy
                 ).actualParallel();
             } else {
-                Method getResultFluid = recipe.getClass().getMethod("getResultFluid");
+                Method getResultFluid = ReflectionCache.getMethod(recipe.getClass(), "getResultFluid");
+                if (getResultFluid == null) return 1;
                 FluidStack outputFluid = (FluidStack) getResultFluid.invoke(recipe);
                 int fluidOutputLimit = ae2oc_getFluidOutputLimit(fluidInv, outputFluid, cardMultiplier);
 
@@ -419,47 +434,58 @@ public abstract class MixinReactionChamberOverclock {
     private int ae2oc_getMinInputCount(Object recipe, Object inputInv, Object fluidInv) {
         int minCount = Integer.MAX_VALUE;
         try {
-            Method getValidInputs = recipe.getClass().getMethod("getValidInputs");
+            Method getValidInputs = ReflectionCache.getMethod(recipe.getClass(), "getValidInputs");
+            if (getValidInputs == null) return 1;
             @SuppressWarnings("unchecked")
             java.util.List<Object> validInputs = (java.util.List<Object>) getValidInputs.invoke(recipe);
 
-            Method getSize = inputInv.getClass().getMethod("size");
+            Method getSize = ReflectionCache.getMethod(inputInv.getClass(), "size");
+            if (getSize == null) return 1;
             int invSize = (int) getSize.invoke(inputInv);
 
+            // Cache these method lookups outside the loops
+            Method getStackInSlot = ReflectionCache.getMethod(inputInv.getClass(), "getStackInSlot", int.class);
+            Method getStack = ReflectionCache.getMethod(fluidInv.getClass(), "getStack", int.class);
+
             for (Object input : validInputs) {
-                Method getAmount = input.getClass().getMethod("getAmount");
+                Class<?> inputClass = input.getClass();
+                Method getAmount = ReflectionCache.getMethod(inputClass, "getAmount");
+                if (getAmount == null) continue;
                 int requiredAmount = (int) getAmount.invoke(input);
                 if (requiredAmount <= 0) requiredAmount = 1;
 
                 int available = 0;
 
-                for (int x = 0; x < invSize; x++) {
-                    Method getStackInSlot = inputInv.getClass().getMethod("getStackInSlot", int.class);
-                    ItemStack stack = (ItemStack) getStackInSlot.invoke(inputInv, x);
-                    if (!stack.isEmpty()) {
-                        Method checkType = input.getClass().getMethod("checkType", Object.class);
-                        if ((boolean) checkType.invoke(input, stack)) {
-                            available += stack.getCount();
+                Method checkType = ReflectionCache.getMethod(inputClass, "checkType", Object.class);
+                if (checkType == null) continue;
+
+                if (getStackInSlot != null) {
+                    for (int x = 0; x < invSize; x++) {
+                        ItemStack stack = (ItemStack) getStackInSlot.invoke(inputInv, x);
+                        if (!stack.isEmpty()) {
+                            if ((boolean) checkType.invoke(input, stack)) {
+                                available += stack.getCount();
+                            }
                         }
                     }
                 }
                 try {
-                    Method getStack = fluidInv.getClass().getMethod("getStack", int.class);
-                    Object gs = getStack.invoke(fluidInv, 1);
-                    if (gs != null) {
-                        Field whatField = gs.getClass().getDeclaredField("what");
-                        whatField.setAccessible(true);
-                        Object aeKey = whatField.get(gs);
+                    if (getStack != null) {
+                        Object gs = getStack.invoke(fluidInv, 1);
+                        if (gs != null) {
+                            Field whatField = ReflectionCache.getField(gs.getClass(), "what");
+                            Field amountField = ReflectionCache.getField(gs.getClass(), "amount");
 
-                        Field amountField = gs.getClass().getDeclaredField("amount");
-                        amountField.setAccessible(true);
-                        long amount = amountField.getLong(gs);
+                            if (whatField != null && amountField != null) {
+                                Object aeKey = whatField.get(gs);
+                                long amount = amountField.getLong(gs);
 
-                        if (aeKey instanceof AEFluidKey key) {
-                            FluidStack fs = key.toStack((int) amount);
-                            Method checkType = input.getClass().getMethod("checkType", Object.class);
-                            if ((boolean) checkType.invoke(input, fs)) {
-                                available += (int) amount / requiredAmount * requiredAmount;
+                                if (aeKey instanceof AEFluidKey key) {
+                                    FluidStack fs = key.toStack((int) amount);
+                                    if ((boolean) checkType.invoke(input, fs)) {
+                                        available += (int) amount / requiredAmount * requiredAmount;
+                                    }
+                                }
                             }
                         }
                     }
@@ -475,15 +501,16 @@ public abstract class MixinReactionChamberOverclock {
     }
 
     @Unique
-    private static final int AE2OC_MAX_PARALLEL_LIMIT = 1_000_000_000; // ??????
-    
+    private static final int AE2OC_MAX_PARALLEL_LIMIT = 1_000_000_000;
+
     @Unique
     private int ae2oc_getFluidOutputLimit(Object fluidInv, FluidStack outputFluid, int maxParallel) {
         try {
             AEFluidKey fluidKey = AEFluidKey.of(outputFluid);
-            Method canAdd = fluidInv.getClass().getMethod("canAdd", int.class, AEFluidKey.class, int.class);
+            Method canAdd = ReflectionCache.getMethod(fluidInv.getClass(), "canAdd", int.class, AEFluidKey.class, int.class);
+            if (canAdd == null) return 0;
             int safeMaxParallel = Math.min(maxParallel, AE2OC_MAX_PARALLEL_LIMIT);
-            
+
             int lo = 0, hi = safeMaxParallel;
             while (lo < hi) {
                 int mid = lo + (hi - lo + 1) / 2;
@@ -504,82 +531,87 @@ public abstract class MixinReactionChamberOverclock {
         }
     }
 
-
-
-    
-    @Unique
-    private void ae2oc_consumeOnceWithRecipe(Object recipe, Object inputInv, Object fluidInv) {
-        try {
-            Method getValidInputs = recipe.getClass().getMethod("getValidInputs");
-            @SuppressWarnings("unchecked")
-            java.util.List<Object> validInputs = (java.util.List<Object>) getValidInputs.invoke(recipe);
-
-            Method getStack = fluidInv.getClass().getMethod("getStack", int.class);
-            Object gs = getStack.invoke(fluidInv, 1);
-            FluidStack fluidStack = null;
-            if (gs != null) {
-                Field whatField = gs.getClass().getDeclaredField("what");
-                whatField.setAccessible(true);
-                Object aeKey = whatField.get(gs);
-                if (aeKey instanceof AEFluidKey key) {
-                    Field amountField = gs.getClass().getDeclaredField("amount");
-                    amountField.setAccessible(true);
-                    long amount = amountField.getLong(gs);
-                    fluidStack = key.toStack((int) amount);
-                }
-            }
-
-            Method getSize = inputInv.getClass().getMethod("size");
-            int invSize = (int) getSize.invoke(inputInv);
-
-            for (Object input : validInputs) {
-                for (int x = 0; x < invSize; x++) {
-                    Method getStackInSlot = inputInv.getClass().getMethod("getStackInSlot", int.class);
-                    ItemStack stack = (ItemStack) getStackInSlot.invoke(inputInv, x);
-
-                    Method checkType = input.getClass().getMethod("checkType", Object.class);
-                    if ((boolean) checkType.invoke(input, stack)) {
-                        Method consume = input.getClass().getMethod("consume", Object.class);
-                        consume.invoke(input, stack);
-
-                        Method setItemDirect = inputInv.getClass().getMethod("setItemDirect",
-                                int.class, ItemStack.class);
-                        setItemDirect.invoke(inputInv, x, stack);
-                    }
-
-                    Method isEmpty = input.getClass().getMethod("isEmpty");
-                    if ((boolean) isEmpty.invoke(input)) break;
-                }
-
-                Method isEmpty = input.getClass().getMethod("isEmpty");
-                if (fluidStack != null && !(boolean) isEmpty.invoke(input)) {
-                    Method checkType = input.getClass().getMethod("checkType", Object.class);
-                    if ((boolean) checkType.invoke(input, fluidStack)) {
-                        Method consume = input.getClass().getMethod("consume", Object.class);
-                        consume.invoke(input, fluidStack);
-                    }
-                }
-            }
-            if (fluidStack != null) {
-                Method setStack = fluidInv.getClass().getMethod("setStack", int.class, GenericStack.class);
-                if (fluidStack.isEmpty()) {
-                    setStack.invoke(fluidInv, 1, null);
-                } else {
-                    setStack.invoke(fluidInv, 1, new GenericStack(
-                            Objects.requireNonNull(AEFluidKey.of(fluidStack)), fluidStack.getAmount()));
-                }
-            }
-        } catch (Exception ignored) {
-        }
-    }
-
-    
+    /**
+     * Batch-consume inputs for the given recipe. Instead of calling consumeOnce N times
+     * (each doing 10+ uncached reflections), we resolve all methods once and directly
+     * deduct totalRequired = singleAmount * batchCount from each input slot.
+     */
     @Unique
     private void ae2oc_consumeBatchWithRecipe(Object recipe, Object inputInv, Object fluidInv, int batchCount) {
         if (batchCount <= 0) return;
         try {
-            for (int i = 0; i < batchCount; i++) {
-                ae2oc_consumeOnceWithRecipe(recipe, inputInv, fluidInv);
+            Method getValidInputs = ReflectionCache.getMethod(recipe.getClass(), "getValidInputs");
+            if (getValidInputs == null) return;
+            @SuppressWarnings("unchecked")
+            java.util.List<Object> validInputs = (java.util.List<Object>) getValidInputs.invoke(recipe);
+
+            Method getSize = ReflectionCache.getMethod(inputInv.getClass(), "size");
+            if (getSize == null) return;
+            int invSize = (int) getSize.invoke(inputInv);
+
+            // Resolve all methods once
+            Method getStackInSlot = ReflectionCache.getMethod(inputInv.getClass(), "getStackInSlot", int.class);
+            Method setItemDirect = ReflectionCache.getMethod(inputInv.getClass(), "setItemDirect", int.class, ItemStack.class);
+            Method getFluidStack = ReflectionCache.getMethod(fluidInv.getClass(), "getStack", int.class);
+            Method setFluidStack = ReflectionCache.getMethod(fluidInv.getClass(), "setStack", int.class, GenericStack.class);
+            if (getStackInSlot == null || setItemDirect == null) return;
+
+            // Read current fluid state once
+            FluidStack fluidStack = null;
+            if (getFluidStack != null) {
+                Object gs = getFluidStack.invoke(fluidInv, 1);
+                if (gs != null) {
+                    Field whatField = ReflectionCache.getField(gs.getClass(), "what");
+                    Field amountField = ReflectionCache.getField(gs.getClass(), "amount");
+                    if (whatField != null && amountField != null) {
+                        Object aeKey = whatField.get(gs);
+                        if (aeKey instanceof AEFluidKey key) {
+                            long amount = amountField.getLong(gs);
+                            fluidStack = key.toStack((int) amount);
+                        }
+                    }
+                }
+            }
+
+            for (Object input : validInputs) {
+                Class<?> inputClass = input.getClass();
+                Method getAmount = ReflectionCache.getMethod(inputClass, "getAmount");
+                Method checkType = ReflectionCache.getMethod(inputClass, "checkType", Object.class);
+                if (getAmount == null || checkType == null) continue;
+
+                int singleAmount = (int) getAmount.invoke(input);
+                if (singleAmount <= 0) singleAmount = 1;
+                int totalRequired = singleAmount * batchCount;
+
+                // Deduct from item slots
+                for (int x = 0; x < invSize && totalRequired > 0; x++) {
+                    ItemStack stack = (ItemStack) getStackInSlot.invoke(inputInv, x);
+                    if (stack.isEmpty()) continue;
+                    if (!(boolean) checkType.invoke(input, stack)) continue;
+
+                    int take = Math.min(stack.getCount(), totalRequired);
+                    stack.shrink(take);
+                    setItemDirect.invoke(inputInv, x, stack);
+                    totalRequired -= take;
+                }
+
+                // Deduct from fluid slot if still needed
+                if (totalRequired > 0 && fluidStack != null) {
+                    if ((boolean) checkType.invoke(input, fluidStack)) {
+                        int take = Math.min(fluidStack.getAmount(), totalRequired);
+                        fluidStack.shrink(take);
+                    }
+                }
+            }
+
+            // Write back fluid state once
+            if (fluidStack != null && setFluidStack != null) {
+                if (fluidStack.isEmpty()) {
+                    setFluidStack.invoke(fluidInv, 1, null);
+                } else {
+                    setFluidStack.invoke(fluidInv, 1, new GenericStack(
+                            Objects.requireNonNull(AEFluidKey.of(fluidStack)), fluidStack.getAmount()));
+                }
             }
         } catch (Exception ignored) {
         }
@@ -589,10 +621,12 @@ public abstract class MixinReactionChamberOverclock {
     private double ae2oc_getAvailableEnergy(Object self, IGridNode node) {
         double total = 0;
         try {
-            Method extractMethod = self.getClass().getMethod(
+            Method extractMethod = ReflectionCache.getMethod(self.getClass(),
                     "extractAEPower", double.class, Actionable.class, PowerMultiplier.class);
-            total += (double) extractMethod.invoke(self, Double.MAX_VALUE,
-                    Actionable.SIMULATE, PowerMultiplier.CONFIG);
+            if (extractMethod != null) {
+                total += (double) extractMethod.invoke(self, Double.MAX_VALUE,
+                        Actionable.SIMULATE, PowerMultiplier.CONFIG);
+            }
 
             var grid = node.getGrid();
             if (grid != null) {
@@ -607,8 +641,9 @@ public abstract class MixinReactionChamberOverclock {
     @Unique
     private boolean ae2oc_tryConsumePower(Object self, IGridNode node, double powerNeeded) {
         try {
-            Method extractMethod = self.getClass().getMethod(
+            Method extractMethod = ReflectionCache.getMethod(self.getClass(),
                     "extractAEPower", double.class, Actionable.class, PowerMultiplier.class);
+            if (extractMethod == null) return false;
 
             double extracted = (double) extractMethod.invoke(self, powerNeeded,
                     Actionable.SIMULATE, PowerMultiplier.CONFIG);
@@ -633,23 +668,10 @@ public abstract class MixinReactionChamberOverclock {
     }
 
     @Unique
-    private Field ae2oc_getField(Class<?> clazz, String fieldName) throws NoSuchFieldException {
-        try {
-            return clazz.getDeclaredField(fieldName);
-        } catch (NoSuchFieldException e) {
-            Class<?> superClass = clazz.getSuperclass();
-            if (superClass != null) {
-                return ae2oc_getField(superClass, fieldName);
-            }
-            throw e;
-        }
-    }
-
-    @Unique
     private void ae2oc_markForUpdate(Object self) {
         try {
-            Method method = self.getClass().getMethod("markForUpdate");
-            method.invoke(self);
+            Method method = ReflectionCache.getMethod(self.getClass(), "markForUpdate");
+            if (method != null) method.invoke(self);
         } catch (Exception ignored) {
         }
     }
@@ -657,86 +679,86 @@ public abstract class MixinReactionChamberOverclock {
     @Unique
     private void ae2oc_saveChanges(Object self) {
         try {
-            Method method = self.getClass().getMethod("saveChanges");
-            method.invoke(self);
+            Method method = ReflectionCache.getMethod(self.getClass(), "saveChanges");
+            if (method != null) method.invoke(self);
         } catch (Exception ignored) {
         }
     }
-    
-    
+
+
     @Unique
     private void ae2oc_transferItemOutputToNetwork(IGridNode node, Object outputInv) {
         try {
             var grid = node.getGrid();
             if (grid == null) return;
-            
+
             IStorageService storageService = grid.getService(IStorageService.class);
             if (storageService == null) return;
-            
-            Method getStackInSlot = outputInv.getClass().getMethod("getStackInSlot", int.class);
-            Method setItemDirect = outputInv.getClass().getMethod("setItemDirect", int.class, ItemStack.class);
+
+            Method getStackInSlot = ReflectionCache.getMethod(outputInv.getClass(), "getStackInSlot", int.class);
+            Method setItemDirect = ReflectionCache.getMethod(outputInv.getClass(), "setItemDirect", int.class, ItemStack.class);
+            if (getStackInSlot == null || setItemDirect == null) return;
             ItemStack stack = (ItemStack) getStackInSlot.invoke(outputInv, 0);
             if (stack.isEmpty()) return;
-            
+
             AEItemKey key = AEItemKey.of(stack);
             if (key == null) return;
-            
+
             long inserted = storageService.getInventory().insert(
                     key,
                     stack.getCount(),
                     Actionable.MODULATE,
                     IActionSource.empty()
             );
-            
+
             if (inserted >= stack.getCount()) {
                 setItemDirect.invoke(outputInv, 0, ItemStack.EMPTY);
             } else if (inserted > 0) {
                 stack.shrink((int) inserted);
                 setItemDirect.invoke(outputInv, 0, stack);
             }
-            
+
         } catch (Exception e) {
         }
     }
-    
-    
+
+
     @Unique
     private void ae2oc_transferFluidOutputToNetwork(IGridNode node, Object fluidInv) {
         try {
             var grid = node.getGrid();
             if (grid == null) return;
-            
+
             IStorageService storageService = grid.getService(IStorageService.class);
             if (storageService == null) return;
-            
-            Method getStack = fluidInv.getClass().getMethod("getStack", int.class);
-            Method setStack = fluidInv.getClass().getMethod("setStack", int.class, GenericStack.class);
+
+            Method getStack = ReflectionCache.getMethod(fluidInv.getClass(), "getStack", int.class);
+            Method setStack = ReflectionCache.getMethod(fluidInv.getClass(), "setStack", int.class, GenericStack.class);
+            if (getStack == null || setStack == null) return;
             Object gs = getStack.invoke(fluidInv, 0);
             if (gs == null) return;
-            
-            Field whatField = gs.getClass().getDeclaredField("what");
-            whatField.setAccessible(true);
+
+            Field whatField = ReflectionCache.getField(gs.getClass(), "what");
+            Field amountField = ReflectionCache.getField(gs.getClass(), "amount");
+            if (whatField == null || amountField == null) return;
             Object aeKey = whatField.get(gs);
-            
-            Field amountField = gs.getClass().getDeclaredField("amount");
-            amountField.setAccessible(true);
             long amount = amountField.getLong(gs);
-            
+
             if (!(aeKey instanceof AEFluidKey fluidKey) || amount <= 0) return;
-            
+
             long inserted = storageService.getInventory().insert(
                     fluidKey,
                     amount,
                     Actionable.MODULATE,
                     IActionSource.empty()
             );
-            
+
             if (inserted >= amount) {
                 setStack.invoke(fluidInv, 0, null);
             } else if (inserted > 0) {
                 setStack.invoke(fluidInv, 0, new GenericStack(fluidKey, amount - inserted));
             }
-            
+
         } catch (Exception e) {
         }
     }

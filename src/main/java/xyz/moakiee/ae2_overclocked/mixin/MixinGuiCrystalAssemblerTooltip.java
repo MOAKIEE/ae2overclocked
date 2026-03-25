@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import xyz.moakiee.ae2_overclocked.support.FluidDisplayHelper;
+import xyz.moakiee.ae2_overclocked.support.ReflectionCache;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -41,25 +42,25 @@ public class MixinGuiCrystalAssemblerTooltip {
     @Inject(method = "renderTooltip", at = @At("HEAD"), cancellable = true, require = 0)
     private void ae2oc_renderTooltipFormatted(GuiGraphics guiGraphics, int x, int y, CallbackInfo ci) {
         try {
-            Object menu = ae2oc_invokeNoArg(this, "getMenu");
+            Object menu = ReflectionCache.invokeNoArg(this, "getMenu");
             if (menu == null) {
                 return;
             }
 
             // Check if hovering over a tank slot
-            Object carried = ae2oc_invokeNoArg(menu, "getCarried");
+            Object carried = ReflectionCache.invokeNoArg(menu, "getCarried");
             if (carried instanceof net.minecraft.world.item.ItemStack carriedStack && !carriedStack.isEmpty()) {
                 return;
             }
 
-            Object hoveredSlotObj = ae2oc_getFieldValue(this, "hoveredSlot");
+            Object hoveredSlotObj = ReflectionCache.getFieldValue(this, "hoveredSlot");
             if (!(hoveredSlotObj instanceof Slot hoveredSlot)) {
                 return;
             }
 
             // Call menu.isTank(slot) to determine if this is a fluid slot
-            Method isTankMethod = menu.getClass().getMethod("isTank", Slot.class);
-            if (!(boolean) isTankMethod.invoke(menu, hoveredSlot)) {
+            Method isTankMethod = ReflectionCache.getMethod(menu.getClass(), "isTank", Slot.class);
+            if (isTankMethod == null || !(boolean) isTankMethod.invoke(menu, hoveredSlot)) {
                 return;
             }
 
@@ -68,12 +69,11 @@ public class MixinGuiCrystalAssemblerTooltip {
             }
 
             // Build item tooltip
-            Method getTooltipMethod = ae2oc_findMethod(this.getClass(), "getTooltipFromContainerItem",
+            Method getTooltipMethod = ReflectionCache.getDeclaredMethodHierarchy(this.getClass(), "getTooltipFromContainerItem",
                     net.minecraft.world.item.ItemStack.class);
             if (getTooltipMethod == null) {
                 return;
             }
-            getTooltipMethod.setAccessible(true);
             @SuppressWarnings("unchecked")
             List<Component> baseTooltip = (List<Component>) getTooltipMethod.invoke(this, hoveredSlot.getItem());
             List<Component> itemTooltip = new ArrayList<>(baseTooltip);
@@ -92,10 +92,9 @@ public class MixinGuiCrystalAssemblerTooltip {
                     .withStyle(Tooltips.NORMAL_TOOLTIP_TEXT));
 
             // Draw the tooltip via the parent helper
-            Method drawTooltipMethod = ae2oc_findMethod(this.getClass(), "drawTooltip",
+            Method drawTooltipMethod = ReflectionCache.getDeclaredMethodHierarchy(this.getClass(), "drawTooltip",
                     GuiGraphics.class, int.class, int.class, List.class);
             if (drawTooltipMethod != null) {
-                drawTooltipMethod.setAccessible(true);
                 drawTooltipMethod.invoke(this, guiGraphics, x, y, itemTooltip);
             }
 
@@ -108,12 +107,12 @@ public class MixinGuiCrystalAssemblerTooltip {
     @Unique
     private long ae2oc_getTankCapacityMb(Object menu) {
         try {
-            Object host = ae2oc_invokeNoArg(menu, "getHost");
+            Object host = ReflectionCache.invokeNoArg(menu, "getHost");
             if (host == null) {
                 return AE2OC_DEFAULT_TANK_MB;
             }
 
-            Object tankObj = ae2oc_invokeNoArg(host, "getTank");
+            Object tankObj = ReflectionCache.invokeNoArg(host, "getTank");
             if (tankObj instanceof GenericStackInv tankInv) {
                 long capacity = tankInv.getCapacity(AEKeyType.fluids());
                 if (capacity > 0) {
@@ -125,58 +124,4 @@ public class MixinGuiCrystalAssemblerTooltip {
         return AE2OC_DEFAULT_TANK_MB;
     }
 
-    @Unique
-    private static Object ae2oc_invokeNoArg(Object target, String methodName) {
-        if (target == null) {
-            return null;
-        }
-        try {
-            Method method = target.getClass().getMethod(methodName);
-            return method.invoke(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    @Unique
-    private static Object ae2oc_getFieldValue(Object target, String fieldName) {
-        if (target == null) {
-            return null;
-        }
-        try {
-            java.lang.reflect.Field field = ae2oc_findField(target.getClass(), fieldName);
-            if (field != null) {
-                field.setAccessible(true);
-                return field.get(target);
-            }
-        } catch (Throwable ignored) {
-        }
-        return null;
-    }
-
-    @Unique
-    private static java.lang.reflect.Field ae2oc_findField(Class<?> clazz, String name) {
-        Class<?> current = clazz;
-        while (current != null) {
-            try {
-                return current.getDeclaredField(name);
-            } catch (NoSuchFieldException ignored) {
-                current = current.getSuperclass();
-            }
-        }
-        return null;
-    }
-
-    @Unique
-    private static Method ae2oc_findMethod(Class<?> clazz, String name, Class<?>... params) {
-        Class<?> current = clazz;
-        while (current != null) {
-            try {
-                return current.getDeclaredMethod(name, params);
-            } catch (NoSuchMethodException ignored) {
-                current = current.getSuperclass();
-            }
-        }
-        return null;
-    }
 }

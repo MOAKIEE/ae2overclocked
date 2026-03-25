@@ -24,6 +24,7 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import xyz.moakiee.ae2_overclocked.Ae2OcConfig;
 import xyz.moakiee.ae2_overclocked.support.OverclockCardRuntime;
 import xyz.moakiee.ae2_overclocked.support.ParallelCardRuntime;
 import xyz.moakiee.ae2_overclocked.support.ParallelEngine;
@@ -39,6 +40,9 @@ public abstract class MixinInscriberOverclock {
 
     @Unique
     private int ae2ocPendingParallel = 0;
+
+    @Unique
+    private int ae2oc_tickAccumulator = 0;
 
     @Shadow
     private boolean smash;
@@ -98,6 +102,14 @@ public abstract class MixinInscriberOverclock {
         }
 
         if (hasOverclock) {
+            // Gate new craft cycles by configurable tick interval.
+            ae2oc_tickAccumulator += ticksSinceLastCall;
+            if (ae2oc_tickAccumulator < Ae2OcConfig.getOverclockIntervalTicks()) {
+                cir.setReturnValue(TickRateModulation.URGENT);
+                return;
+            }
+            ae2oc_tickAccumulator = 0;
+
             double totalEnergy = actualParallel * AE2OC_INSCRIBER_RECIPE_ENERGY;
             if (!ae2oc_tryConsumePower(self, node, totalEnergy)) {
                 // Fall back to normal parallel flow when instant overclock energy is not available.
@@ -203,9 +215,8 @@ public abstract class MixinInscriberOverclock {
             this.sideItemHandler.extractItem(0, actualParallel, false);
         }
 
-        if (ParallelCardRuntime.getParallelMultiplier(self) > 1 || OverclockCardRuntime.hasOverclockCard(self)) {
-            ae2oc_transferOutputToNetwork(self);
-        }
+        // Always transfer: this method is only called when overclock or parallel card is active.
+        ae2oc_transferOutputToNetwork(self);
 
         self.saveChanges();
     }

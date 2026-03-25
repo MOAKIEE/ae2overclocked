@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import xyz.moakiee.ae2_overclocked.Ae2OcConfig;
 import xyz.moakiee.ae2_overclocked.support.CapacityCardRuntime;
+import xyz.moakiee.ae2_overclocked.support.ReflectionCache;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -47,12 +48,12 @@ public class MixinReactionChamberScreen {
     @Inject(method = "updateBeforeRender", at = @At("TAIL"), require = 0)
     private void ae2oc_updateTankMaxLevel(CallbackInfo ci) {
         try {
-            Object menu = ae2oc_invokeNoArg(this, "getMenu", "m_6262_");
+            Object menu = ae2oc_invokeByNames(this, "getMenu", "m_6262_");
             if (menu == null) {
                 return;
             }
 
-            Object host = ae2oc_invokeNoArg(menu, "getHost", "host");
+            Object host = ae2oc_invokeByNames(menu, "getHost", "host");
             if (host == null) {
                 return;
             }
@@ -61,8 +62,8 @@ public class MixinReactionChamberScreen {
             // Config value is in mB, convert to buckets for FluidTankSlot maxLevel
             int targetMax = upgraded ? (int) Math.min((long) Ae2OcConfig.getCapacityCardSlotLimit() / 1000L, Integer.MAX_VALUE) : AE2OC_DEFAULT_BUCKETS;
 
-            Object inputSlot = ae2oc_getFieldValue(this, "inputSlot");
-            Object outputSlot = ae2oc_getFieldValue(this, "outputSlot");
+            Object inputSlot = ReflectionCache.getFieldValue(this, "inputSlot");
+            Object outputSlot = ReflectionCache.getFieldValue(this, "outputSlot");
 
             if (targetMax != this.ae2ocLastInputMax) {
                 ae2oc_setMaxLevelAndRefresh(inputSlot, targetMax);
@@ -78,67 +79,14 @@ public class MixinReactionChamberScreen {
     }
 
     @Unique
-    private static Object ae2oc_invokeNoArg(Object target, String... methodNames) {
+    private static Object ae2oc_invokeByNames(Object target, String... methodNames) {
         if (target == null) {
             return null;
         }
-
-        for (String methodName : methodNames) {
-            Method method = ae2oc_findMethod(target.getClass(), methodName);
-            if (method == null || method.getParameterCount() != 0) {
-                continue;
-            }
-
-            try {
-                method.setAccessible(true);
-                return method.invoke(target);
-            } catch (Throwable ignored) {
-            }
-        }
-
-        return null;
-    }
-
-    @Unique
-    private static Method ae2oc_findMethod(Class<?> clazz, String name, Class<?>... params) {
-        Class<?> current = clazz;
-        while (current != null) {
-            try {
-                return current.getDeclaredMethod(name, params);
-            } catch (NoSuchMethodException ignored) {
-                current = current.getSuperclass();
-            }
-        }
-        return null;
-    }
-
-    @Unique
-    private static Object ae2oc_getFieldValue(Object target, String fieldName) {
-        if (target == null) {
-            return null;
-        }
-
-        Field field = ae2oc_findField(target.getClass(), fieldName);
-        if (field == null) {
-            return null;
-        }
-
-        try {
-            field.setAccessible(true);
-            return field.get(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    @Unique
-    private static Field ae2oc_findField(Class<?> clazz, String name) {
-        Class<?> current = clazz;
-        while (current != null) {
-            try {
-                return current.getDeclaredField(name);
-            } catch (NoSuchFieldException ignored) {
-                current = current.getSuperclass();
+        for (String name : methodNames) {
+            Object result = ReflectionCache.invokeNoArg(target, name);
+            if (result != null) {
+                return result;
             }
         }
         return null;
@@ -152,7 +100,7 @@ public class MixinReactionChamberScreen {
 
         try {
             if (ae2ocMaxLevelOffset < 0L) {
-                Field maxLevelField = ae2oc_findField(fluidTankSlot.getClass(), "maxLevel");
+                Field maxLevelField = ReflectionCache.getFieldHierarchy(fluidTankSlot.getClass(), "maxLevel");
                 if (maxLevelField == null) {
                     return;
                 }
@@ -161,24 +109,21 @@ public class MixinReactionChamberScreen {
 
             AE2OC_UNSAFE.putInt(fluidTankSlot, ae2ocMaxLevelOffset, maxLevel);
 
-            Field contentField = ae2oc_findField(fluidTankSlot.getClass(), "content");
+            Field contentField = ReflectionCache.getFieldHierarchy(fluidTankSlot.getClass(), "content");
             if (contentField == null) {
                 return;
             }
-            contentField.setAccessible(true);
             Object content = contentField.get(fluidTankSlot);
             if (!(content instanceof FluidStack stack)) {
                 return;
             }
 
-            Method setFluidStack = ae2oc_findMethod(fluidTankSlot.getClass(), "setFluidStack", FluidStack.class);
+            Method setFluidStack = ReflectionCache.getDeclaredMethodHierarchy(fluidTankSlot.getClass(), "setFluidStack", FluidStack.class);
             if (setFluidStack == null) {
                 return;
             }
-            setFluidStack.setAccessible(true);
             setFluidStack.invoke(fluidTankSlot, stack);
         } catch (Throwable ignored) {
         }
     }
 }
-

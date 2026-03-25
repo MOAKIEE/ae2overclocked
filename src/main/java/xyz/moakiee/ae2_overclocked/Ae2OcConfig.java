@@ -5,10 +5,13 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import xyz.moakiee.ae2_overclocked.support.ReflectionCache;
+
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * AE2 Overclocked common configuration.
@@ -24,6 +27,7 @@ public final class Ae2OcConfig {
     public static final int DEFAULT_PARALLEL_MAX_MULTIPLIER = Integer.MAX_VALUE;
     public static final int DEFAULT_SUPER_SPEED_CARD_MULTIPLIER = 512;
     public static final int DEFAULT_BREAK_PROTECTION_ITEM_THRESHOLD = 1000;
+    public static final int DEFAULT_OVERCLOCK_INTERVAL_TICKS = 5;
     public static final double DEFAULT_FE_PER_AE = 2.0;
 
     public static final ModConfigSpec SPEC;
@@ -33,6 +37,7 @@ public final class Ae2OcConfig {
     private static final ModConfigSpec.IntValue PARALLEL_MAX_MULTIPLIER;
     private static final ModConfigSpec.IntValue SUPER_SPEED_CARD_MULTIPLIER;
     private static final ModConfigSpec.IntValue BREAK_PROTECTION_ITEM_THRESHOLD;
+    private static final ModConfigSpec.IntValue OVERCLOCK_INTERVAL_TICKS;
     private static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED_MACHINE_IDS;
 
     static {
@@ -59,6 +64,11 @@ public final class Ae2OcConfig {
                 .translation("config.ae2_overclocked.cards.superSpeedCardMultiplier")
                 .comment("Multiplier applied when Super Speed Card is active on I/O buses and I/O ports. Default: 512.")
                 .defineInRange("superSpeedCardMultiplier", DEFAULT_SUPER_SPEED_CARD_MULTIPLIER, 1, Integer.MAX_VALUE);
+
+        OVERCLOCK_INTERVAL_TICKS = builder
+                .translation("config.ae2_overclocked.cards.overclockIntervalTicks")
+                .comment("Number of ticks between each overclock craft cycle. Lower = faster but more CPU. Default: 5 (range 1-10).")
+                .defineInRange("overclockIntervalTicks", DEFAULT_OVERCLOCK_INTERVAL_TICKS, 1, 10);
 
         builder.pop();
         builder.translation("config.ae2_overclocked.protection").push("protection");
@@ -87,6 +97,28 @@ public final class Ae2OcConfig {
     private Ae2OcConfig() {
     }
 
+    // Cached disabled-ID set built lazily from config list.
+    private static volatile Set<String> disabledIdSet = null;
+    private static final ConcurrentHashMap<Class<?>, Boolean> DISABLED_CLASS_CACHE = new ConcurrentHashMap<>();
+
+    private static Set<String> getDisabledIdSet() {
+        Set<String> cached = disabledIdSet;
+        if (cached != null) {
+            return cached;
+        }
+        Set<String> set = new HashSet<>();
+        for (String entry : DISABLED_MACHINE_IDS.get()) {
+            if (entry != null) {
+                String value = entry.trim().toLowerCase(Locale.ROOT);
+                if (!value.isEmpty()) {
+                    set.add(value);
+                }
+            }
+        }
+        disabledIdSet = set;
+        return set;
+    }
+
     public static int getCapacityCardSlotLimit() {
         return Math.max(CAPACITY_SLOT_LIMIT.get(), 64);
     }
@@ -108,6 +140,10 @@ public final class Ae2OcConfig {
         return Math.max(BREAK_PROTECTION_ITEM_THRESHOLD.get(), 1);
     }
 
+    public static int getOverclockIntervalTicks() {
+        return Math.max(OVERCLOCK_INTERVAL_TICKS.get(), 1);
+    }
+
     /**
      * Returns whether the machine hosting the given object (or the object itself) is on the disabled list.
      *
@@ -119,7 +155,7 @@ public final class Ae2OcConfig {
         if (machine == null) {
             return false;
         }
-        return isBlockIdDisabled(machine);
+        return DISABLED_CLASS_CACHE.computeIfAbsent(machine.getClass(), k -> isBlockIdDisabled(machine));
     }
 
     private static boolean isBlockIdDisabled(Object machine) {
@@ -128,16 +164,7 @@ public final class Ae2OcConfig {
             return false;
         }
         String normalizedId = blockId.toString().toLowerCase(Locale.ROOT);
-        for (String entry : DISABLED_MACHINE_IDS.get()) {
-            if (entry == null) {
-                continue;
-            }
-            String value = entry.trim().toLowerCase(Locale.ROOT);
-            if (!value.isEmpty() && value.equals(normalizedId)) {
-                return true;
-            }
-        }
-        return false;
+        return getDisabledIdSet().contains(normalizedId);
     }
 
     private static ResourceLocation resolveBlockId(Object machine) {
@@ -145,12 +172,12 @@ public final class Ae2OcConfig {
             return BuiltInRegistries.BLOCK.getKey(blockEntity.getBlockState().getBlock());
         }
 
-        Object byGetBlockEntity = tryInvokeNoArg(machine, "getBlockEntity");
+        Object byGetBlockEntity = ReflectionCache.invokeNoArg(machine, "getBlockEntity");
         if (byGetBlockEntity instanceof BlockEntity blockEntity) {
             return BuiltInRegistries.BLOCK.getKey(blockEntity.getBlockState().getBlock());
         }
 
-        Object byField = tryGetField(machine, "blockEntity");
+        Object byField = ReflectionCache.getFieldValue(machine, "blockEntity");
         if (byField instanceof BlockEntity blockEntity) {
             return BuiltInRegistries.BLOCK.getKey(blockEntity.getBlockState().getBlock());
         }
@@ -166,7 +193,7 @@ public final class Ae2OcConfig {
             return target;
         }
 
-        Object byGetBlockEntity = tryInvokeNoArg(target, "getBlockEntity");
+        Object byGetBlockEntity = ReflectionCache.invokeNoArg(target, "getBlockEntity");
         if (byGetBlockEntity != null) {
             Object resolved = resolveMachine(byGetBlockEntity, depth + 1);
             if (resolved != null) {
@@ -174,7 +201,7 @@ public final class Ae2OcConfig {
             }
         }
 
-        Object byGetHost = tryInvokeNoArg(target, "getHost");
+        Object byGetHost = ReflectionCache.invokeNoArg(target, "getHost");
         if (byGetHost != null && byGetHost != target) {
             Object resolved = resolveMachine(byGetHost, depth + 1);
             if (resolved != null) {
@@ -182,7 +209,7 @@ public final class Ae2OcConfig {
             }
         }
 
-        Object byHostField = tryGetField(target, "host");
+        Object byHostField = ReflectionCache.getFieldValue(target, "host");
         if (byHostField != null && byHostField != target) {
             Object resolved = resolveMachine(byHostField, depth + 1);
             if (resolved != null) {
@@ -193,63 +220,4 @@ public final class Ae2OcConfig {
         return target;
     }
 
-    // ── Reflection caches for Ae2OcConfig ──────────────────────────────
-    private static final java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<Method>> CONFIG_CACHE_METHOD = new java.util.concurrent.ConcurrentHashMap<>();
-    private static final java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<Field>>  CONFIG_CACHE_FIELD  = new java.util.concurrent.ConcurrentHashMap<>();
-
-    private static Object tryInvokeNoArg(Object target, String methodName) {
-        if (target == null) {
-            return null;
-        }
-        Class<?> clazz = target.getClass();
-        String cacheKey = clazz.getName() + "#" + methodName;
-
-        java.util.Optional<Method> opt = CONFIG_CACHE_METHOD.computeIfAbsent(cacheKey, k -> {
-            try {
-                Method m = clazz.getMethod(methodName);
-                m.setAccessible(true);
-                return java.util.Optional.of(m);
-            } catch (NoSuchMethodException e) {
-                return java.util.Optional.empty();
-            }
-        });
-
-        if (opt.isEmpty()) {
-            return null;
-        }
-
-        try {
-            return opt.get().invoke(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    private static Object tryGetField(Object target, String fieldName) {
-        if (target == null) {
-            return null;
-        }
-        Class<?> clazz = target.getClass();
-        String cacheKey = clazz.getName() + "#" + fieldName;
-
-        java.util.Optional<Field> opt = CONFIG_CACHE_FIELD.computeIfAbsent(cacheKey, k -> {
-            try {
-                Field f = clazz.getDeclaredField(fieldName);
-                f.setAccessible(true);
-                return java.util.Optional.of(f);
-            } catch (NoSuchFieldException e) {
-                return java.util.Optional.empty();
-            }
-        });
-
-        if (opt.isEmpty()) {
-            return null;
-        }
-
-        try {
-            return opt.get().get(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
 }

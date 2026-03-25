@@ -4,9 +4,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.lang.reflect.Method;
-import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 public final class MachineBreakProtection {
 
@@ -16,8 +14,6 @@ public final class MachineBreakProtection {
             "com.glodblock.github.extendedae.common.tileentities.TileCircuitCutter",
             "net.pedroksl.advanced_ae.common.entities.ReactionChamberEntity"
     );
-
-    private static final ConcurrentHashMap<String, Optional<Method>> METHOD_CACHE = new ConcurrentHashMap<>();
 
     private MachineBreakProtection() {
     }
@@ -44,7 +40,7 @@ public final class MachineBreakProtection {
         }
 
         try {
-            Method getInternalInventory = cachedGetMethod(blockEntity.getClass(), "getInternalInventory");
+            Method getInternalInventory = ReflectionCache.getMethod(blockEntity.getClass(), "getInternalInventory");
             if (getInternalInventory == null) return 0;
             Object internalInventory = getInternalInventory.invoke(blockEntity);
             return countInventoryStacks(internalInventory);
@@ -59,8 +55,8 @@ public final class MachineBreakProtection {
         }
 
         try {
-            Method sizeMethod = cachedGetMethod(inventory.getClass(), "size");
-            Method getStackInSlotMethod = cachedGetMethod(inventory.getClass(), "getStackInSlot", int.class);
+            Method sizeMethod = ReflectionCache.getMethod(inventory.getClass(), "size");
+            Method getStackInSlotMethod = ReflectionCache.getMethod(inventory.getClass(), "getStackInSlot", int.class);
             if (sizeMethod == null || getStackInSlotMethod == null) return 0;
 
             int size = (int) sizeMethod.invoke(inventory);
@@ -75,22 +71,5 @@ public final class MachineBreakProtection {
         } catch (Exception ignored) {
             return 0;
         }
-    }
-
-    private static Method cachedGetMethod(Class<?> clazz, String name, Class<?>... params) {
-        StringBuilder sb = new StringBuilder(clazz.getName()).append('#').append(name);
-        for (Class<?> p : params) sb.append(',').append(p.getName());
-        String key = sb.toString();
-
-        Optional<Method> opt = METHOD_CACHE.computeIfAbsent(key, k -> {
-            try {
-                Method m = clazz.getMethod(name, params);
-                m.setAccessible(true);
-                return Optional.of(m);
-            } catch (NoSuchMethodException e) {
-                return Optional.empty();
-            }
-        });
-        return opt.orElse(null);
     }
 }

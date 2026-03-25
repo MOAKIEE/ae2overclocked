@@ -16,8 +16,10 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import xyz.moakiee.ae2_overclocked.Ae2OcConfig;
 import xyz.moakiee.ae2_overclocked.support.OverclockCardRuntime;
 import xyz.moakiee.ae2_overclocked.support.ParallelCardRuntime;
+import xyz.moakiee.ae2_overclocked.support.ReflectionCache;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -41,6 +43,9 @@ public abstract class MixinCrystalAssemblerOverclock {
     @Unique
     private Object ae2oc_cachedRecipe = null;
 
+    @Unique
+    private int ae2oc_tickAccumulator = 0;
+
     @Inject(method = "tickingRequest", at = @At("HEAD"), cancellable = true)
     private void ae2oc_headTick(IGridNode node, int ticksSinceLastCall,
                                  CallbackInfoReturnable<TickRateModulation> cir) {
@@ -57,6 +62,14 @@ public abstract class MixinCrystalAssemblerOverclock {
 
         try {
             if (hasOverclock) {
+                // Gate craft cycles by configurable tick interval.
+                ae2oc_tickAccumulator += ticksSinceLastCall;
+                if (ae2oc_tickAccumulator < Ae2OcConfig.getOverclockIntervalTicks()) {
+                    cir.setReturnValue(TickRateModulation.URGENT);
+                    return;
+                }
+                ae2oc_tickAccumulator = 0;
+
                 this.ae2oc_processing = true;
                 try {
                     ae2oc_instantCraft(self, node, Math.max(parallelMultiplier, 1));
@@ -67,16 +80,16 @@ public abstract class MixinCrystalAssemblerOverclock {
                 return;
             }
 
-            Field progressField = ae2oc_getField(self.getClass(), "progress");
-            progressField.setAccessible(true);
+            Field progressField = ReflectionCache.getFieldHierarchy(self.getClass(), "progress");
+            if (progressField == null) return;
             this.ae2oc_prevProgress = progressField.getInt(self);
 
-            Field ctxField = ae2oc_getField(self.getClass(), "ctx");
-            ctxField.setAccessible(true);
+            Field ctxField = ReflectionCache.getFieldHierarchy(self.getClass(), "ctx");
+            if (ctxField == null) return;
             Object ctx = ctxField.get(self);
 
-            Field recipeField = ae2oc_getField(ctx.getClass(), "currentRecipe");
-            recipeField.setAccessible(true);
+            Field recipeField = ReflectionCache.getFieldHierarchy(ctx.getClass(), "currentRecipe");
+            if (recipeField == null) return;
             Object recipe = recipeField.get(ctx);
             if (recipe == null) {
                 this.ae2oc_pendingParallel = 0;
@@ -100,8 +113,8 @@ public abstract class MixinCrystalAssemblerOverclock {
 
         try {
             Object self = this;
-            Field progressField = ae2oc_getField(self.getClass(), "progress");
-            progressField.setAccessible(true);
+            Field progressField = ReflectionCache.getFieldHierarchy(self.getClass(), "progress");
+            if (progressField == null) { ae2oc_resetCache(); return; }
             int currentProgress = progressField.getInt(self);
 
             if (currentProgress == 0) {
@@ -128,7 +141,8 @@ public abstract class MixinCrystalAssemblerOverclock {
     @Unique
     private int ae2oc_calculateParallel(Object self, IGridNode node, Object ctx, Object recipe, int cardMultiplier) {
         try {
-            Method testRecipe = ctx.getClass().getMethod("testRecipe", RecipeHolder.class);
+            Method testRecipe = ReflectionCache.getMethod(ctx.getClass(), "testRecipe", RecipeHolder.class);
+            if (testRecipe == null) return 0;
             if (!(boolean) testRecipe.invoke(ctx, recipe)) {
                 return 0;
             }
@@ -147,20 +161,21 @@ public abstract class MixinCrystalAssemblerOverclock {
             return;
         }
 
-        Field ctxField = ae2oc_getField(self.getClass(), "ctx");
-        ctxField.setAccessible(true);
+        Field ctxField = ReflectionCache.getFieldHierarchy(self.getClass(), "ctx");
+        if (ctxField == null) return;
         Object ctx = ctxField.get(self);
 
-        Field recipeField = ae2oc_getField(ctx.getClass(), "currentRecipe");
-        recipeField.setAccessible(true);
+        Field recipeField = ReflectionCache.getFieldHierarchy(ctx.getClass(), "currentRecipe");
+        if (recipeField == null) return;
         Object recipe = recipeField.get(ctx);
         if (recipe == null) {
-            Method shouldTick = ctx.getClass().getMethod("shouldTick");
-            if ((boolean) shouldTick.invoke(ctx)) {
-                Method findRecipe = ae2oc_getMethod(ctx.getClass(), "findRecipe");
-                findRecipe.setAccessible(true);
-                findRecipe.invoke(ctx);
-                recipe = recipeField.get(ctx);
+            Method shouldTick = ReflectionCache.getMethod(ctx.getClass(), "shouldTick");
+            if (shouldTick != null && (boolean) shouldTick.invoke(ctx)) {
+                Method findRecipe = ReflectionCache.getDeclaredMethodHierarchy(ctx.getClass(), "findRecipe");
+                if (findRecipe != null) {
+                    findRecipe.invoke(ctx);
+                    recipe = recipeField.get(ctx);
+                }
             }
         }
         if (recipe == null) {
@@ -172,14 +187,13 @@ public abstract class MixinCrystalAssemblerOverclock {
             return;
         }
 
-        Field progressField = ae2oc_getField(self.getClass(), "progress");
-        progressField.setAccessible(true);
-        progressField.setInt(self, 0);
+        Field progressField = ReflectionCache.getFieldHierarchy(self.getClass(), "progress");
+        if (progressField != null) progressField.setInt(self, 0);
 
         recipeField.set(ctx, null);
 
-        Method setWorking = self.getClass().getMethod("setWorking", boolean.class);
-        setWorking.invoke(self, false);
+        Method setWorking = ReflectionCache.getMethod(self.getClass(), "setWorking", boolean.class);
+        if (setWorking != null) setWorking.invoke(self, false);
 
         ae2oc_markForUpdate(self);
         ae2oc_saveChanges(self);
@@ -192,8 +206,8 @@ public abstract class MixinCrystalAssemblerOverclock {
         }
 
         try {
-            Field ctxField = ae2oc_getField(self.getClass(), "ctx");
-            ctxField.setAccessible(true);
+            Field ctxField = ReflectionCache.getFieldHierarchy(self.getClass(), "ctx");
+            if (ctxField == null) return;
             Object ctx = ctxField.get(self);
 
             int crafted = ae2oc_craftRounds(self, node, ctx, recipe, extraRounds);
@@ -206,19 +220,21 @@ public abstract class MixinCrystalAssemblerOverclock {
 
     @Unique
     private int ae2oc_craftRounds(Object self, IGridNode node, Object ctx, Object recipe, int maxRounds) throws Exception {
-        Field outputField = ae2oc_getField(self.getClass(), "output");
-        outputField.setAccessible(true);
+        Field outputField = ReflectionCache.getFieldHierarchy(self.getClass(), "output");
+        if (outputField == null) return 0;
         Object outputInv = outputField.get(self);
 
-        Method insertItem = outputInv.getClass().getMethod("insertItem", int.class, ItemStack.class, boolean.class);
-        Method testRecipe = ctx.getClass().getMethod("testRecipe", RecipeHolder.class);
-        Method runRecipe = ctx.getClass().getMethod("runRecipe", RecipeHolder.class);
+        Method insertItem = ReflectionCache.getMethod(outputInv.getClass(), "insertItem", int.class, ItemStack.class, boolean.class);
+        Method testRecipe = ReflectionCache.getMethod(ctx.getClass(), "testRecipe", RecipeHolder.class);
+        Method runRecipe = ReflectionCache.getMethod(ctx.getClass(), "runRecipe", RecipeHolder.class);
+        if (insertItem == null || testRecipe == null || runRecipe == null) return 0;
 
         // recipe is RecipeHolder, need to get the actual recipe value
-        Method recipeValueMethod = recipe.getClass().getMethod("value");
+        Method recipeValueMethod = ReflectionCache.getMethod(recipe.getClass(), "value");
+        if (recipeValueMethod == null) return 0;
         Object recipeValue = recipeValueMethod.invoke(recipe);
-        Field recipeOutputField = ae2oc_getField(recipeValue.getClass(), "output");
-        recipeOutputField.setAccessible(true);
+        Field recipeOutputField = ReflectionCache.getFieldHierarchy(recipeValue.getClass(), "output");
+        if (recipeOutputField == null) return 0;
         ItemStack recipeOutput = ((ItemStack) recipeOutputField.get(recipeValue)).copy();
         if (recipeOutput.isEmpty()) {
             return 0;
@@ -320,8 +336,9 @@ public abstract class MixinCrystalAssemblerOverclock {
     @Unique
     private void ae2oc_transferOutputToNetwork(IGridNode node, Object outputInv) {
         try {
-            Method getStackInSlot = outputInv.getClass().getMethod("getStackInSlot", int.class);
-            Method extractItem = outputInv.getClass().getMethod("extractItem", int.class, int.class, boolean.class);
+            Method getStackInSlot = ReflectionCache.getMethod(outputInv.getClass(), "getStackInSlot", int.class);
+            Method extractItem = ReflectionCache.getMethod(outputInv.getClass(), "extractItem", int.class, int.class, boolean.class);
+            if (getStackInSlot == null || extractItem == null) return;
             ItemStack stack = (ItemStack) getStackInSlot.invoke(outputInv, 0);
             if (stack.isEmpty()) {
                 return;
@@ -339,10 +356,12 @@ public abstract class MixinCrystalAssemblerOverclock {
     private double ae2oc_getAvailableEnergy(Object self, IGridNode node) {
         double total = 0;
         try {
-            Method extractMethod = self.getClass().getMethod(
+            Method extractMethod = ReflectionCache.getMethod(self.getClass(),
                     "extractAEPower", double.class, Actionable.class, PowerMultiplier.class);
-            total += (double) extractMethod.invoke(self, Double.MAX_VALUE,
-                    Actionable.SIMULATE, PowerMultiplier.CONFIG);
+            if (extractMethod != null) {
+                total += (double) extractMethod.invoke(self, Double.MAX_VALUE,
+                        Actionable.SIMULATE, PowerMultiplier.CONFIG);
+            }
 
             var grid = node.getGrid();
             if (grid != null) {
@@ -357,8 +376,9 @@ public abstract class MixinCrystalAssemblerOverclock {
     @Unique
     private boolean ae2oc_tryConsumePower(Object self, IGridNode node, double powerNeeded) {
         try {
-            Method extractMethod = self.getClass().getMethod(
+            Method extractMethod = ReflectionCache.getMethod(self.getClass(),
                     "extractAEPower", double.class, Actionable.class, PowerMultiplier.class);
+            if (extractMethod == null) return false;
 
             double extracted = (double) extractMethod.invoke(self, powerNeeded,
                     Actionable.SIMULATE, PowerMultiplier.CONFIG);
@@ -383,36 +403,10 @@ public abstract class MixinCrystalAssemblerOverclock {
     }
 
     @Unique
-    private Field ae2oc_getField(Class<?> clazz, String fieldName) throws NoSuchFieldException {
-        try {
-            return clazz.getDeclaredField(fieldName);
-        } catch (NoSuchFieldException e) {
-            Class<?> superClass = clazz.getSuperclass();
-            if (superClass != null) {
-                return ae2oc_getField(superClass, fieldName);
-            }
-            throw e;
-        }
-    }
-
-    @Unique
-    private Method ae2oc_getMethod(Class<?> clazz, String methodName, Class<?>... paramTypes) throws NoSuchMethodException {
-        try {
-            return clazz.getDeclaredMethod(methodName, paramTypes);
-        } catch (NoSuchMethodException e) {
-            Class<?> superClass = clazz.getSuperclass();
-            if (superClass != null) {
-                return ae2oc_getMethod(superClass, methodName, paramTypes);
-            }
-            throw e;
-        }
-    }
-
-    @Unique
     private void ae2oc_markForUpdate(Object self) {
         try {
-            Method method = self.getClass().getMethod("markForUpdate");
-            method.invoke(self);
+            Method method = ReflectionCache.getMethod(self.getClass(), "markForUpdate");
+            if (method != null) method.invoke(self);
         } catch (Exception ignored) {
         }
     }
@@ -420,8 +414,8 @@ public abstract class MixinCrystalAssemblerOverclock {
     @Unique
     private void ae2oc_saveChanges(Object self) {
         try {
-            Method method = self.getClass().getMethod("saveChanges");
-            method.invoke(self);
+            Method method = ReflectionCache.getMethod(self.getClass(), "saveChanges");
+            if (method != null) method.invoke(self);
         } catch (Exception ignored) {
         }
     }

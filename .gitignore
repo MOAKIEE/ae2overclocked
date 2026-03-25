@@ -123,3 +123,7 @@ doc/
 .idea/
 cankao/
 AGENTS.md
+PERFORMANCE_OPTIMIZATION.md
+
+# AI Agent
+.claude/
