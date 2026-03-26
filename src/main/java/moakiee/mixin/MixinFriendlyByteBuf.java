@@ -12,15 +12,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * 修复 FriendlyByteBuf 对 ItemStack 数量使用 byte 编码的限制。
- * count > 64 时完全接管序列化，将数量改用 int 编码。
+ * count > 64 时完全接管序列化：先写一个哨兵字节 0，再用 int 编码数量。
  *
- * 参考外部修复方案 AE2OverclockedBiggerStacksFix 实现。
+ * 协议格式：
+ *   原版：  boolean(true) + VarInt(itemId) + byte(count 1~64) + NBT
+ *   自定义：boolean(true) + VarInt(itemId) + byte(0)【哨兵】+ int(count) + NBT
+ *
+ * 哨兵字节 0 在原版中不会出现（非空物品 count >= 1），因此可安全区分两种格式。
  */
 @Mixin(value = FriendlyByteBuf.class, remap = false, priority = 2000)
 public class MixinFriendlyByteBuf {
 
     /**
-     * count > 64 时接管 writeItemStack，将数量改用 writeInt 编码。
+     * count > 64 时接管 writeItemStack：写哨兵字节 0 + writeInt 编码数量。
      */
     @Inject(
             method = {"writeItemStack", "m_130057_"},
@@ -39,9 +43,11 @@ public class MixinFriendlyByteBuf {
         buf.writeBoolean(true);
         // 2. item ID（使用原版 Registry ID 编码方式）
         buf.writeId(BuiltInRegistries.ITEM, stack.getItem());
-        // 3. 用 writeInt 代替 writeByte 编码数量
+        // 3. 哨兵字节 0，表示后续 count 用 int 编码
+        buf.writeByte(0);
+        // 4. 用 writeInt 编码数量
         buf.writeInt(stack.getCount());
-        // 4. NBT tag
+        // 5. NBT tag
         Item item = stack.getItem();
         CompoundTag compoundtag = null;
         if (item.isDamageable(stack) || item.shouldOverrideMultiplayerNbt()) {
@@ -53,8 +59,8 @@ public class MixinFriendlyByteBuf {
     }
 
     /**
-     * readItem HEAD: 检测是否为超大堆叠的自定义格式。
-     * 如果 count > 64，说明是用 writeInt 写的，走自定义读取路径。
+     * readItem HEAD: 通过哨兵字节 0 检测是否为超大堆叠的自定义格式。
+     * 原版 count 字节范围 1~64，不会为 0，因此 0 可安全用作标记。
      */
     @Inject(
             method = {"m_130267_"}, // readItem
@@ -76,16 +82,16 @@ public class MixinFriendlyByteBuf {
         }
 
         Item item = buf.readById(BuiltInRegistries.ITEM);
-        int count = buf.readInt(); // 尝试按 int 读取
+        int countByte = buf.readByte(); // 读取 1 字节，与原版 writeByte 对齐
 
-        if (count <= 64) {
-            // count <= 64 说明可能是原版格式（用 writeByte 写的），
-            // 回退让原版处理
+        if (countByte != 0) {
+            // 不是哨兵字节，说明是原版格式（count 1~64），回退让原版处理
             buf.resetReaderIndex();
             return;
         }
 
-        // count > 64，这是我们自定义的格式
+        // 哨兵字节 0 → 自定义格式，接下来用 readInt 读取真实数量
+        int count = buf.readInt();
         ItemStack itemstack = new ItemStack(item, count);
         itemstack.readShareTag(buf.readNbt());
 
