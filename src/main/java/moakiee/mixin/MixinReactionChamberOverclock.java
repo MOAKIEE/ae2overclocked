@@ -586,12 +586,11 @@ public abstract class MixinReactionChamberOverclock {
                 if (requiredAmount <= 0) requiredAmount = 1;
 
                 int available = 0;
-                Method checkType = input.getClass().getMethod("checkType", Object.class);
 
                 for (int x = 0; x < invSize; x++) {
                     ItemStack stack = (ItemStack) getStackInSlot.invoke(inputInv, x);
                     if (!stack.isEmpty()) {
-                        if ((boolean) checkType.invoke(input, stack)) {
+                        if (ae2oc_testIngredient(input, stack)) {
                             available += stack.getCount();
                         }
                     }
@@ -600,8 +599,8 @@ public abstract class MixinReactionChamberOverclock {
                 // 流体输入
                 if (fluidAeKey != null && fluidAmount > 0) {
                     FluidStack fs = fluidAeKey.toStack((int) fluidAmount);
-                    if ((boolean) checkType.invoke(input, fs)) {
-                        available += (int) fluidAmount / requiredAmount * requiredAmount;
+                    if (ae2oc_testIngredient(input, fs)) {
+                        available += (int) fluidAmount;
                     }
                 }
 
@@ -677,19 +676,18 @@ public abstract class MixinReactionChamberOverclock {
             Method getSize = inputInv.getClass().getMethod("size");
             int invSize = (int) getSize.invoke(inputInv);
 
+            Method getStackInSlotOnce = inputInv.getClass().getMethod("getStackInSlot", int.class);
+            Method setItemDirectOnce = inputInv.getClass().getMethod("setItemDirect",
+                    int.class, ItemStack.class);
+
             for (Object input : validInputs) {
                 for (int x = 0; x < invSize; x++) {
-                    Method getStackInSlot = inputInv.getClass().getMethod("getStackInSlot", int.class);
-                    ItemStack stack = (ItemStack) getStackInSlot.invoke(inputInv, x);
+                    ItemStack stack = (ItemStack) getStackInSlotOnce.invoke(inputInv, x);
 
-                    Method checkType = input.getClass().getMethod("checkType", Object.class);
-                    if ((boolean) checkType.invoke(input, stack)) {
+                    if (!stack.isEmpty() && ae2oc_testIngredient(input, stack)) {
                         Method consume = input.getClass().getMethod("consume", Object.class);
                         consume.invoke(input, stack);
-
-                        Method setItemDirect = inputInv.getClass().getMethod("setItemDirect",
-                                int.class, ItemStack.class);
-                        setItemDirect.invoke(inputInv, x, stack);
+                        setItemDirectOnce.invoke(inputInv, x, stack);
                     }
 
                     Method isEmpty = input.getClass().getMethod("isEmpty");
@@ -698,8 +696,7 @@ public abstract class MixinReactionChamberOverclock {
 
                 Method isEmpty = input.getClass().getMethod("isEmpty");
                 if (fluidStack != null && !(boolean) isEmpty.invoke(input)) {
-                    Method checkType = input.getClass().getMethod("checkType", Object.class);
-                    if ((boolean) checkType.invoke(input, fluidStack)) {
+                    if (ae2oc_testIngredient(input, fluidStack)) {
                         Method consume = input.getClass().getMethod("consume", Object.class);
                         consume.invoke(input, fluidStack);
                     }
@@ -764,13 +761,12 @@ public abstract class MixinReactionChamberOverclock {
                 if (requiredPerRecipe <= 0) requiredPerRecipe = 1;
                 long totalRequired = (long) requiredPerRecipe * batchCount;
 
-                Method checkType = input.getClass().getMethod("checkType", Object.class);
                 long remaining = totalRequired;
 
                 // 从物品槽批量扣除
                 for (int x = 0; x < invSize && remaining > 0; x++) {
                     ItemStack stack = (ItemStack) getStackInSlot.invoke(inputInv, x);
-                    if (!stack.isEmpty() && (boolean) checkType.invoke(input, stack)) {
+                    if (!stack.isEmpty() && ae2oc_testIngredient(input, stack)) {
                         int take = (int) Math.min(remaining, stack.getCount());
                         stack.shrink(take);
                         setItemDirect.invoke(inputInv, x, stack);
@@ -779,7 +775,7 @@ public abstract class MixinReactionChamberOverclock {
                 }
 
                 // 从流体槽批量扣除
-                if (remaining > 0 && fluidStackForCheck != null && (boolean) checkType.invoke(input, fluidStackForCheck)) {
+                if (remaining > 0 && fluidStackForCheck != null && ae2oc_testIngredient(input, fluidStackForCheck)) {
                     long availableFluid = fluidAmount - totalFluidConsumed;
                     long take = Math.min(remaining, availableFluid);
                     totalFluidConsumed += take;
@@ -889,6 +885,46 @@ public abstract class MixinReactionChamberOverclock {
             Method method = self.getClass().getMethod("saveChanges");
             method.invoke(self);
         } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * 精确匹配物品/流体是否符合 IngredientStack 的 ingredient 条件。
+     * 替代 checkType()（仅做 instanceof 类型检查），通过 sample()+consume() 模拟匹配做实际检测。
+     * 
+     * 原理：创建 IngredientStack 的 sample 副本（amount 相同，ingredient 相同），
+     * 对 stack 的副本调用 consume()，如果 amount 减少说明 ingredient.test() 匹配成功。
+     * 这种方式完全复用原版匹配逻辑，不依赖任何字段名。
+     */
+    @Unique
+    private boolean ae2oc_testIngredient(Object ingredientStack, Object stack) {
+        try {
+            // 创建 IngredientStack 的 sample 副本（避免修改原对象）
+            Method sampleMethod = ingredientStack.getClass().getMethod("sample");
+            Object testSample = sampleMethod.invoke(ingredientStack);
+
+            Method getAmount = testSample.getClass().getMethod("getAmount");
+            int amountBefore = (int) getAmount.invoke(testSample);
+            if (amountBefore <= 0) return false;
+
+            // 创建 stack 的副本（avoid mutating caller's stack）
+            Object testStack;
+            if (stack instanceof ItemStack is) {
+                testStack = is.copy();
+            } else if (stack instanceof FluidStack fs) {
+                testStack = fs.copy();
+            } else {
+                return false;
+            }
+
+            // 调用 consume：内部会执行 ingredient.test()，匹配后才扣减 amount
+            Method consume = testSample.getClass().getMethod("consume", Object.class);
+            consume.invoke(testSample, testStack);
+
+            int amountAfter = (int) getAmount.invoke(testSample);
+            return amountAfter < amountBefore;
+        } catch (Exception e) {
+            return false;
         }
     }
     
