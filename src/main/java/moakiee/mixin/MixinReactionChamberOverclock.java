@@ -16,6 +16,7 @@ import moakiee.support.ParallelEngine;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.fluids.FluidStack;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -37,6 +38,7 @@ import java.util.Objects;
  * - HEAD 注入：缓存 processingTime 和配方信息
  * - RETURN 注入：检测 processingTime 从非零变为零 → 追加 (P-1) 倍产出
  */
+@Pseudo
 @Mixin(targets = "net.pedroksl.advanced_ae.common.entities.ReactionChamberEntity", remap = false)
 public abstract class MixinReactionChamberOverclock {
 

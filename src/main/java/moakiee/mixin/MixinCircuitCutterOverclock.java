@@ -14,6 +14,7 @@ import moakiee.support.ParallelEngine;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Recipe;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -34,6 +35,7 @@ import java.lang.reflect.Method;
  * - HEAD 注入：缓存当前进度和配方信息，不取消原版
  * - RETURN 注入：检测配方是否刚刚完成（progress 从非零变为零），追加 (P-1) 倍额外产出
  */
+@Pseudo
 @Mixin(targets = "com.glodblock.github.extendedae.common.tileentities.TileCircuitCutter", remap = false)
 public abstract class MixinCircuitCutterOverclock {
 

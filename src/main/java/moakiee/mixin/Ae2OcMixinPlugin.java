@@ -47,6 +47,14 @@ public class Ae2OcMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        String modId = null;
+        if (targetClassName.startsWith("com.glodblock.github.extendedae.")) modId = "expatternprovider";
+        else if (targetClassName.startsWith("net.pedroksl.advanced_ae.")) modId = "advanced_ae";
+        else if (targetClassName.startsWith("io.github.lounode.ae2cs.")) modId = "ae2cs";
+        if (modId != null) {
+            LoadingModList list = LoadingModList.get();
+            if (list == null || list.getModFileById(modId) == null) return false;
+        }
         if (biggerStacksLoaded && FRIENDLY_BYTE_BUF_MIXIN.equals(mixinClassName)) {
             return false;
         }

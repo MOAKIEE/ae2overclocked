@@ -14,33 +14,16 @@
     "MixinConfigInventory",
     "MixinConfigMenuInventory",
     "MixinGenericStackInv",
-    "MixinReactionChamberEntityCapacity",
-    "MixinTileCircuitCutterCapacity",
-    "MixinAE2CSItemMachinesCapacity",
-    "MixinAE2CSEntropyVariationReactionChamberCapacity",
-    "MixinAE2CSEnergyComponent",
-    "MixinAE2CSOverclock",
     "MixinIOBusPartSuperSpeed",
-    "MixinExImportBusSuperSpeed",
-    "MixinExExportBusSuperSpeed",
     "MixinIOPortSuperSpeed",
-    "MixinExIOPortSuperSpeed",
     "MixinAEBasePoweredBlockEntity",
     "MixinInscriberOverclock",
-    "MixinExInscriberThreadOverclock",
-    "MixinCircuitCutterOverclock",
-    "MixinReactionChamberOverclock",
     "MixinInscriberBlockEntity",
-    "MixinTileCircuitCutterNetwork",
-    "MixinReactionChamberEntityNetwork",
-    "MixinInscriberThreadNetwork",
     "MixinFriendlyByteBuf",
     "MixinUpgradeInventory"
   ],
   "client": [
-    "MixinAEBaseScreen",
-    "MixinReactionChamberScreen",
-    "MixinGuiCircuitCutter"
+    "MixinAEBaseScreen"
   ],
   "injectors": {
     "defaultRequire": 1

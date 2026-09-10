@@ -13,6 +13,7 @@ import moakiee.support.ParallelCardRuntime;
 import moakiee.support.ParallelEngine;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -29,6 +30,7 @@ import java.lang.reflect.Method;
  *
  * 结算顺序与压印器一致：先定并行量 → 再算总电 → 判超频 → 秒结算
  */
+@Pseudo
 @Mixin(targets = "com.glodblock.github.extendedae.common.me.InscriberThread", remap = false)
 public abstract class MixinExInscriberThreadOverclock {
 

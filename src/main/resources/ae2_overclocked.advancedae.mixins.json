@@ -1,0 +1,18 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "moakiee.mixin",
+  "plugin": "moakiee.mixin.Ae2OcMixinPlugin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "MixinReactionChamberEntityCapacity",
+    "MixinReactionChamberOverclock",
+    "MixinReactionChamberEntityNetwork"
+  ],
+  "client": [
+    "MixinReactionChamberScreen"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
