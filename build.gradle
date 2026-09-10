@@ -135,6 +135,10 @@ dependencies {
     compileOnly fg.deobf("curse.maven:advancedae-1084104:${advancedae_file_id}")
     // AdvancedAE embeds ae2addonlib through JarJar; expose its matching API for typed adapters.
     compileOnly fg.deobf("curse.maven:ae2addonlib-1366135:${ae2addonlib_file_id}")
+    compileOnly fg.deobf("curse.maven:ae2-crystal-science-1435174:${ae2cs_file_id}")
+    if (providers.gradleProperty('compatRuntime').getOrElse('none') in ['ae2cs', 'all']) {
+        runtimeOnly fg.deobf("curse.maven:ae2-crystal-science-1435174:${ae2cs_file_id}")
+    }
     if (providers.gradleProperty('compatRuntime').getOrElse('none') in ['extendedae', 'all']) {
         runtimeOnly fg.deobf("curse.maven:ex-pattern-provider-892005:${extendedae_file_id}")
     }

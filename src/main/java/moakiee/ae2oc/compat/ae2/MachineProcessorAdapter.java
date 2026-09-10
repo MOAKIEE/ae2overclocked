@@ -12,7 +12,9 @@ import appeng.api.networking.ticking.TickRateModulation;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import appeng.api.upgrades.IUpgradeableObject;
-import appeng.blockentity.grid.AENetworkPowerBlockEntity;
+import appeng.blockentity.AEBaseBlockEntity;
+import appeng.me.helpers.IGridConnectedBlockEntity;
+import appeng.api.networking.energy.IEnergySource;
 import appeng.core.definitions.AEItems;
 import appeng.recipes.handlers.InscriberProcessType;
 import appeng.recipes.handlers.InscriberRecipe;
@@ -28,7 +30,7 @@ import net.minecraft.world.item.ItemStack;
 
 /** Typed bindings shared by AE2 and ExtendedAE inscriber threads. */
 public class MachineProcessorAdapter {
-    private final AENetworkPowerBlockEntity host;
+    private final AEBaseBlockEntity host;
     private final IUpgradeableObject upgrades;
     private final InternalInventory inventory;
     private final Supplier<RecipeBatch> recipeSource;
@@ -38,12 +40,12 @@ public class MachineProcessorAdapter {
     private long retryAt;
     private int retryDelay = 5;
 
-    public MachineProcessorAdapter(AENetworkPowerBlockEntity host, IUpgradeableObject upgrades,
+    public MachineProcessorAdapter(AEBaseBlockEntity host, IUpgradeableObject upgrades,
                             InternalInventory inventory, Supplier<RecipeBatch> recipeSource) {
         this(host, upgrades, inventory, recipeSource, 1, 3);
     }
 
-    public MachineProcessorAdapter(AENetworkPowerBlockEntity host, IUpgradeableObject upgrades,
+    public MachineProcessorAdapter(AEBaseBlockEntity host, IUpgradeableObject upgrades,
                             InternalInventory inventory, Supplier<RecipeBatch> recipeSource, int budgetShares, int outputSlot) {
         this.host = host;
         this.upgrades = upgrades;
@@ -59,7 +61,7 @@ public class MachineProcessorAdapter {
         boolean overclock = !disabled && upgrades.getUpgrades().getInstalledUpgrades(ModItems.OVERCLOCK_CARD.get()) > 0;
         int multiplier = disabled ? 1 : ParallelCardRuntime.getParallelMultiplier(host);
         if (processor.snapshot() == null && !overclock && multiplier <= 1) return null;
-        if (!host.getMainNode().isActive() || host.getLevel() == null) return TickRateModulation.IDLE;
+        if (!((IGridConnectedBlockEntity) host).getMainNode().isActive() || host.getLevel() == null) return TickRateModulation.IDLE;
         long now = host.getLevel().getGameTime();
         if (now < retryAt) return TickRateModulation.SLOWER;
         boolean progressed = false;
@@ -122,15 +124,15 @@ public class MachineProcessorAdapter {
         return true;
     }
     private double simulateEnergy() {
-        double internal = host.extractAEPower(Double.MAX_VALUE, Actionable.SIMULATE, PowerMultiplier.CONFIG);
-        var grid = host.getMainNode().getGrid();
+        double internal = ((IEnergySource) host).extractAEPower(Double.MAX_VALUE, Actionable.SIMULATE, PowerMultiplier.CONFIG);
+        var grid = ((IGridConnectedBlockEntity) host).getMainNode().getGrid();
         double network = grid == null ? 0 : grid.getEnergyService().extractAEPower(Double.MAX_VALUE, Actionable.SIMULATE, PowerMultiplier.CONFIG);
         return Math.min(Double.MAX_VALUE, internal + network);
     }
 
     private double extractEnergy(double requested) {
-        double paid = host.extractAEPower(requested, Actionable.MODULATE, PowerMultiplier.CONFIG);
-        var grid = host.getMainNode().getGrid();
+        double paid = ((IEnergySource) host).extractAEPower(requested, Actionable.MODULATE, PowerMultiplier.CONFIG);
+        var grid = ((IGridConnectedBlockEntity) host).getMainNode().getGrid();
         if (paid < requested && grid != null) {
             paid += grid.getEnergyService().extractAEPower(requested - paid, Actionable.MODULATE, PowerMultiplier.CONFIG);
         }
@@ -146,10 +148,10 @@ public class MachineProcessorAdapter {
     }
 
     private long insertOutput(ResourceAmount<AEKey> resource) {
-        var grid = host.getMainNode().getGrid();
+        var grid = ((IGridConnectedBlockEntity) host).getMainNode().getGrid();
         if (grid != null) {
             long accepted = grid.getStorageService().getInventory().insert(resource.key(), resource.amount(),
-                    Actionable.MODULATE, IActionSource.ofMachine(host));
+                    Actionable.MODULATE, IActionSource.ofMachine((IGridConnectedBlockEntity) host));
             if (accepted > 0) return accepted;
         }
         return insertLocalOutput(resource);
