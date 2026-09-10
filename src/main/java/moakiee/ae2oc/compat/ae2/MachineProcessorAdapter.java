@@ -137,6 +137,14 @@ public class MachineProcessorAdapter {
         return paid;
     }
 
+    protected long insertLocalOutput(ResourceAmount<AEKey> resource) {
+        if (resource.key() instanceof AEItemKey item) {
+            int count = (int) Math.min(resource.amount(), item.toStack().getMaxStackSize());
+            return count - inventory.insertItem(outputSlot, item.toStack(count), false).getCount();
+        }
+        return 0;
+    }
+
     private long insertOutput(ResourceAmount<AEKey> resource) {
         var grid = host.getMainNode().getGrid();
         if (grid != null) {
@@ -144,11 +152,7 @@ public class MachineProcessorAdapter {
                     Actionable.MODULATE, IActionSource.ofMachine(host));
             if (accepted > 0) return accepted;
         }
-        if (resource.key() instanceof AEItemKey item) {
-            int count = (int) Math.min(resource.amount(), item.toStack().getMaxStackSize());
-            return count - inventory.insertItem(outputSlot, item.toStack(count), false).getCount();
-        }
-        return 0;
+        return insertLocalOutput(resource);
     }
 
     public void save(CompoundTag tag) {
