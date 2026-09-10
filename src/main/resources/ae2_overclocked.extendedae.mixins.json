@@ -12,7 +12,8 @@
     "MixinExInscriberThreadOverclock",
     "MixinCircuitCutterOverclock",
     "MixinTileCircuitCutterNetwork",
-    "MixinInscriberThreadNetwork"
+    "MixinInscriberThreadNetwork",
+    "MixinExInscriberPersistence"
   ],
   "client": [
     "MixinGuiCircuitCutter"
