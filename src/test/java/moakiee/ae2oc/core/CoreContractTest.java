@@ -3,12 +3,17 @@ package moakiee.ae2oc.core;
 import java.math.BigInteger;
 import java.util.OptionalLong;
 import java.util.Random;
+import java.util.List;
+import moakiee.ae2oc.api.ResourceAmount;
+import moakiee.ae2oc.core.execution.BatchProcessor;
+import moakiee.ae2oc.core.execution.ProcessingState;
 import moakiee.ae2oc.core.planning.BatchPlanner;
 import moakiee.ae2oc.core.quantity.SaturatedMath;
 
 /** Dependency-free deterministic property checks, executed by Gradle check. */
 public final class CoreContractTest {
     public static void main(String[] args) {
+        processing();
         long[] edges = {0, 1, 2, Integer.MAX_VALUE, Long.MAX_VALUE - 1, Long.MAX_VALUE};
         for (long a : edges) for (long b : edges) arithmetic(a, b);
         Random random = new Random(0xAE20C);
@@ -28,6 +33,40 @@ public final class CoreContractTest {
         rejects(() -> SaturatedMath.floorDivToLong(Double.NaN, 1));
         rejects(() -> BatchPlanner.plan(OptionalLong.empty(), 1, 1, 1, 1, Double.NaN));
         System.out.println("Core contracts passed: boundaries and 10000 deterministic quantity/planner cases");
+    }
+
+    private static void processing() {
+        BatchProcessor<String> processor = new BatchProcessor<>();
+        processor.begin(new ProcessingState<>("test:recipe", List.of(new ResourceAmount<>("input", 8)),
+                List.of(new ResourceAmount<>("output", 16)), 80, 0, 5));
+        double[] charged = {0};
+        for (int tick = 0; tick < 12; tick++) {
+            processor.advance(request -> { double paid = Math.min(request, 10); charged[0] += paid; return paid; });
+            var restored = new BatchProcessor<String>();
+            restored.restore(processor.snapshot());
+            processor = restored;
+        }
+        check(charged[0] == 80 && processor.snapshot().finished());
+        check(!processor.drain(64, 1, resource -> 0));
+        check(processor.ownedResources().get(0).amount() == 16);
+        check(processor.drain(7, 1, ResourceAmount::amount));
+        check(processor.snapshot().outputs().get(0).amount() == 9);
+        var restored = new BatchProcessor<String>();
+        restored.restore(processor.snapshot());
+        restored.drain(64, 1, ResourceAmount::amount);
+        check(restored.snapshot() == null);
+        // A failure in the second destination must not replay the first accepted output.
+        restored.begin(new ProcessingState<>("test:two", List.of(),
+                List.of(new ResourceAmount<>("a", 1), new ResourceAmount<>("b", 1)), 0, 0, 0));
+        try {
+            restored.drain(64, 2, resource -> {
+                if (resource.key().equals("b")) throw new IllegalStateException("destination unavailable");
+                return 1;
+            });
+            throw new AssertionError("Expected injected failure");
+        } catch (IllegalStateException expected) {
+            check(restored.snapshot().outputs().equals(List.of(new ResourceAmount<>("b", 1))));
+        }
     }
 
     private static void arithmetic(long a, long b) {
