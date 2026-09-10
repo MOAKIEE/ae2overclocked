@@ -5,6 +5,7 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.AEKeyType;
 import appeng.api.stacks.GenericStack;
 import moakiee.support.OverstackingRegistry;
+import moakiee.ae2oc.core.quantity.SaturatedMath;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -92,7 +93,7 @@ public abstract class MixinGenericStackInv {
         
         if (currentWhat == null || currentWhat.equals(what)) {
             long capacity = getCapacity(what.getType());
-            long newAmount = Math.min(currentAmount + amount, capacity);
+            long newAmount = Math.min(SaturatedMath.addNonNegative(currentAmount, amount), capacity);
             
             if (newAmount > currentAmount) {
                 if (mode == Actionable.MODULATE) {

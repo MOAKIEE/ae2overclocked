@@ -7,6 +7,7 @@
 package moakiee.support;
 
 import moakiee.Ae2OcConfig;
+import moakiee.ae2oc.core.quantity.SaturatedMath;
 
 import java.lang.reflect.Field;
 
@@ -16,7 +17,7 @@ public final class SuperSpeedNumberUtil {
     }
 
     public static int convertLongToIntSaturating(long value) {
-        long result = value * ae2oc_getSuperSpeedMultiplier() * ae2oc_getExtendedAeBusSpeed();
+        long result = boostLongSaturating(value);
         if (result > Integer.MAX_VALUE) {
             return Integer.MAX_VALUE;
         } else if (result < Integer.MIN_VALUE) {
@@ -27,7 +28,7 @@ public final class SuperSpeedNumberUtil {
     }
 
     public static long boostLongSaturating(long value) {
-        long multiplier = (long) ae2oc_getSuperSpeedMultiplier() * ae2oc_getExtendedAeBusSpeed();
+        long multiplier = SaturatedMath.multiplyNonNegative(ae2oc_getSuperSpeedMultiplier(), ae2oc_getExtendedAeBusSpeed());
         if (value <= 0L || multiplier <= 0L) {
             return 0L;
         }

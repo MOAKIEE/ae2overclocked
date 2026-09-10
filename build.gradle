@@ -200,3 +200,10 @@ publishing {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
 }
+
+tasks.register('coreContractTest', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'moakiee.ae2oc.core.CoreContractTest'
+}
+tasks.named('check') { dependsOn 'coreContractTest' }
