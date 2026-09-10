@@ -45,6 +45,7 @@ public class Ae2Overclocked {
 
         // 监听通用初始化事件，用于注册 Upgrades 绑定
         modEventBus.addListener(this::commonSetup);
+        modEventBus.addListener(Ae2OcConfig::reload);
 
         // 注册内置资源包
         modEventBus.addListener(this::addPackFinders);

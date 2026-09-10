@@ -5,8 +5,8 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.registries.ForgeRegistries;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+
+
 import java.util.List;
 import java.util.Locale;
 
@@ -129,102 +129,21 @@ public final class Ae2OcConfig {
         return Math.max(configured, 1);
     }
 
-    public static boolean isMachineDisabled(Object hostOrMachine) {
-        Object machine = resolveMachine(hostOrMachine, 0);
-        if (machine == null) {
-            return false;
-        }
+    private static volatile java.util.Set<ResourceLocation> disabledIds = java.util.Set.of();
 
-        return isBlockIdDisabled(machine);
+    public static void reload(net.minecraftforge.fml.event.config.ModConfigEvent event) {
+        if (event.getConfig().getSpec() != SPEC) return;
+        var parsed = new java.util.HashSet<ResourceLocation>();
+        for (String raw : DISABLED_MACHINE_IDS.get()) {
+            var id = ResourceLocation.tryParse(raw.trim().toLowerCase(Locale.ROOT));
+            if (id == null) org.slf4j.LoggerFactory.getLogger(Ae2OcConfig.class).warn("Invalid disabled machine ID: {}", raw);
+            else parsed.add(id);
+        }
+        disabledIds = java.util.Set.copyOf(parsed);
     }
 
-    private static boolean isBlockIdDisabled(Object machine) {
-        ResourceLocation blockId = resolveBlockId(machine);
-        if (blockId == null) {
-            return false;
-        }
-        String normalizedId = blockId.toString().toLowerCase(Locale.ROOT);
-        for (String entry : DISABLED_MACHINE_IDS.get()) {
-            if (entry == null) {
-                continue;
-            }
-            String value = entry.trim().toLowerCase(Locale.ROOT);
-            if (!value.isEmpty() && value.equals(normalizedId)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static ResourceLocation resolveBlockId(Object machine) {
-        if (machine instanceof BlockEntity blockEntity) {
-            return ForgeRegistries.BLOCKS.getKey(blockEntity.getBlockState().getBlock());
-        }
-
-        Object byGetBlockEntity = tryInvokeNoArg(machine, "getBlockEntity");
-        if (byGetBlockEntity instanceof BlockEntity blockEntity) {
-            return ForgeRegistries.BLOCKS.getKey(blockEntity.getBlockState().getBlock());
-        }
-
-        Object byField = tryGetField(machine, "blockEntity");
-        if (byField instanceof BlockEntity blockEntity) {
-            return ForgeRegistries.BLOCKS.getKey(blockEntity.getBlockState().getBlock());
-        }
-
-        return null;
-    }
-
-    private static Object resolveMachine(Object target, int depth) {
-        if (target == null || depth > 6) {
-            return null;
-        }
-        if (target instanceof BlockEntity) {
-            return target;
-        }
-
-        Object byGetBlockEntity = tryInvokeNoArg(target, "getBlockEntity");
-        if (byGetBlockEntity != null) {
-            Object resolved = resolveMachine(byGetBlockEntity, depth + 1);
-            if (resolved != null) {
-                return resolved;
-            }
-        }
-
-        Object byGetHost = tryInvokeNoArg(target, "getHost");
-        if (byGetHost != null && byGetHost != target) {
-            Object resolved = resolveMachine(byGetHost, depth + 1);
-            if (resolved != null) {
-                return resolved;
-            }
-        }
-
-        Object byHostField = tryGetField(target, "host");
-        if (byHostField != null && byHostField != target) {
-            Object resolved = resolveMachine(byHostField, depth + 1);
-            if (resolved != null) {
-                return resolved;
-            }
-        }
-
-        return target;
-    }
-
-    private static Object tryInvokeNoArg(Object target, String methodName) {
-        try {
-            Method method = target.getClass().getMethod(methodName);
-            return method.invoke(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    private static Object tryGetField(Object target, String fieldName) {
-        try {
-            Field field = target.getClass().getDeclaredField(fieldName);
-            field.setAccessible(true);
-            return field.get(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
+    public static boolean isMachineDisabled(Object machine) {
+        if (!(machine instanceof BlockEntity blockEntity)) return false;
+        return disabledIds.contains(ForgeRegistries.BLOCKS.getKey(blockEntity.getBlockState().getBlock()));
     }
 }

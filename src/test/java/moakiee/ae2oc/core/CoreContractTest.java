@@ -13,6 +13,7 @@ import moakiee.ae2oc.core.quantity.SaturatedMath;
 /** Dependency-free deterministic property checks, executed by Gradle check. */
 public final class CoreContractTest {
     public static void main(String[] args) {
+        logicalSlots();
         processing();
         long[] edges = {0, 1, 2, Integer.MAX_VALUE, Long.MAX_VALUE - 1, Long.MAX_VALUE};
         for (long a : edges) for (long b : edges) arithmetic(a, b);
@@ -33,6 +34,24 @@ public final class CoreContractTest {
         rejects(() -> SaturatedMath.floorDivToLong(Double.NaN, 1));
         rejects(() -> BatchPlanner.plan(OptionalLong.empty(), 1, 1, 1, 1, Double.NaN));
         System.out.println("Core contracts passed: boundaries and 10000 deterministic quantity/planner cases");
+    }
+
+    private static void logicalSlots() {
+        check(moakiee.ae2oc.migration.LegacyQuantity.resolve(1, OptionalLong.of(Integer.MAX_VALUE), OptionalLong.of(8)) == Integer.MAX_VALUE);
+        check(moakiee.ae2oc.migration.LegacyQuantity.resolve(1, OptionalLong.empty(), OptionalLong.of(1024)) == 1024);
+        rejects(() -> moakiee.ae2oc.migration.LegacyQuantity.resolve(1, OptionalLong.of(-1), OptionalLong.empty()));
+        var slot = new moakiee.ae2oc.core.quantity.LogicalSlot<String>(Long.MAX_VALUE);
+        check(slot.insert("iron", Long.MAX_VALUE, false) == Long.MAX_VALUE);
+        slot.setCapacity(64);
+        check(slot.overCapacity() && slot.amount() == Long.MAX_VALUE);
+        check(slot.insert("iron", 1, false) == 0);
+        check(slot.extract(Long.MAX_VALUE - 63, false) == Long.MAX_VALUE - 63);
+        check(!slot.overCapacity() && slot.amount() == 63);
+        check(slot.insert("gold", 1, false) == 0);
+        check(slot.insert("iron", 2, true) == 1 && slot.amount() == 63);
+        check(slot.insert("iron", 2, false) == 1);
+        slot.restore("gold", 1000);
+        check(slot.overCapacity() && slot.amount() == 1000);
     }
 
     private static void processing() {

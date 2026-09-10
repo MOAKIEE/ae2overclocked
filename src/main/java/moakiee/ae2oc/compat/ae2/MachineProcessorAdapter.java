@@ -15,9 +15,6 @@ import appeng.api.upgrades.IUpgradeableObject;
 import appeng.blockentity.AEBaseBlockEntity;
 import appeng.me.helpers.IGridConnectedBlockEntity;
 import appeng.api.networking.energy.IEnergySource;
-import appeng.core.definitions.AEItems;
-import appeng.recipes.handlers.InscriberProcessType;
-import appeng.recipes.handlers.InscriberRecipe;
 import moakiee.ModItems;
 import moakiee.Ae2OcConfig;
 import moakiee.support.ParallelCardRuntime;
@@ -28,7 +25,7 @@ import moakiee.ae2oc.core.planning.BatchPlanner;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
 
-/** Typed bindings shared by AE2 and ExtendedAE inscriber threads. */
+/** AE2 resource and energy ports for the shared processing state machine. */
 public class MachineProcessorAdapter {
     private final AEBaseBlockEntity host;
     private final IUpgradeableObject upgrades;
@@ -51,6 +48,7 @@ public class MachineProcessorAdapter {
         this.upgrades = upgrades;
         this.inventory = inventory;
         this.recipeSource = recipeSource;
+        if (budgetShares < 1 || budgetShares > 64) throw new IllegalArgumentException("Invalid machine budget shares");
         this.budgetShares = budgetShares;
         this.outputSlot = outputSlot;
     }
@@ -131,12 +129,11 @@ public class MachineProcessorAdapter {
     }
 
     private double extractEnergy(double requested) {
-        double paid = ((IEnergySource) host).extractAEPower(requested, Actionable.MODULATE, PowerMultiplier.CONFIG);
+        // One external extraction per advance makes a partial payment an explicit save boundary.
+        double internal = ((IEnergySource) host).extractAEPower(requested, Actionable.SIMULATE, PowerMultiplier.CONFIG);
+        if (internal > 0) return ((IEnergySource) host).extractAEPower(Math.min(requested, internal), Actionable.MODULATE, PowerMultiplier.CONFIG);
         var grid = ((IGridConnectedBlockEntity) host).getMainNode().getGrid();
-        if (paid < requested && grid != null) {
-            paid += grid.getEnergyService().extractAEPower(requested - paid, Actionable.MODULATE, PowerMultiplier.CONFIG);
-        }
-        return paid;
+        return grid == null ? 0 : grid.getEnergyService().extractAEPower(requested, Actionable.MODULATE, PowerMultiplier.CONFIG);
     }
 
     protected long insertLocalOutput(ResourceAmount<AEKey> resource) {

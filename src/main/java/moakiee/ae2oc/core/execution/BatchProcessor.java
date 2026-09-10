@@ -38,6 +38,8 @@ public final class BatchProcessor<K> {
         return progress;
     }
 
+    public boolean isIdle() { return state == null; }
+
     public boolean drain(long amountBudget, int keyBudget, ToLongFunction<ResourceAmount<K>> insert) {
         if (amountBudget < 0 || keyBudget < 0) throw new IllegalArgumentException("Negative transfer budget");
         if (state == null || !state.finished()) return false;
