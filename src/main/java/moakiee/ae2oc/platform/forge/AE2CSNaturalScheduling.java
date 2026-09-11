@@ -13,6 +13,7 @@ import appeng.core.definitions.AEBlocks;
 import appeng.me.helpers.IGridConnectedBlockEntity;
 import io.github.lounode.ae2cs.common.block.entity.CircuitEtcherBlockEntity;
 import io.github.lounode.ae2cs.common.block.entity.CrystalAggregatorBlockEntity;
+import io.github.lounode.ae2cs.common.block.entity.CrystalPulverizerBlockEntity;
 import io.github.lounode.ae2cs.common.block.entity.EntropyVariationReactionChamberBlockEntity;
 import moakiee.ModItems;
 import moakiee.ae2oc.api.ResourceAmount;
@@ -55,6 +56,11 @@ final class AE2CSNaturalScheduling {
     private static Fixture fixture(GameTestHelper helper, String machineId, BlockPos pos) {
         helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.tryParse("ae2cs:" + machineId)));
         var host = (AEBaseBlockEntity) helper.getBlockEntity(pos);
+        if (host instanceof CrystalPulverizerBlockEntity machine) {
+            return new Fixture(host, ManagedItemStorages.slots(machine.getInputInv()), List.of(item("minecraft:flint")),
+                    1, 1, 8000, "ae2cs:pulverizer/gunpowder",
+                    () -> drainItems(helper, machine.getOutputInv(), item("minecraft:gunpowder")));
+        }
         if (host instanceof CrystalAggregatorBlockEntity machine) {
             return new Fixture(host, ManagedItemStorages.slots(machine.getInputInv()),
                     List.of(item("ae2:printed_logic_processor"), item("minecraft:redstone"), item("ae2:printed_silicon")),
@@ -109,6 +115,82 @@ final class AE2CSNaturalScheduling {
     private static long amount(LocalResourceSlot slot) {
         var value = slot.read();
         return value == null ? 0 : value.amount();
+    }
+
+    /** Wait for a naturally reserved, paid, unfinished batch before exercising its ownership boundary. */
+    static void lifecycle(GameTestHelper helper, String machineId, boolean destroy) {
+        var fixture = fixture(helper, machineId, new BlockPos(1, 1, 1));
+        helper.runAfterDelay(40, () -> {
+            var upgrades = ((IUpgradeableObject) fixture.host()).getUpgrades();
+            upgrades.setItemDirect(0, new ItemStack(ModItems.PARALLEL_CARD.get()));
+            upgrades.setItemDirect(1, new ItemStack(ModItems.SUPER_ENERGY_CARD.get()));
+            upgrades.setItemDirect(2, new ItemStack(ModItems.CAPACITY_CARD.get()));
+            for (int slot = 0; slot < fixture.keys().size(); slot++) {
+                fixture.inputs().get(slot).write(new ResourceAmount<AEKey>(fixture.keys().get(slot), 2L * fixture.inputPerOperation()));
+            }
+            var energy = (IAEPowerStorage) fixture.host();
+            energy.injectAEPower(2 * fixture.energyPerOperation(), Actionable.MODULATE);
+            double initialEnergy = energy.getAECurrentPower();
+            helper.assertTrue(initialEnergy >= 2 * fixture.energyPerOperation(), "Lifecycle fixture needs a full energy payment");
+            interruptBatch(helper, fixture, initialEnergy, destroy, 0);
+        });
+    }
+
+    private static void interruptBatch(GameTestHelper helper, Fixture fixture, double initialEnergy,
+            boolean destroy, int elapsed) {
+        var saved = fixture.host().saveWithFullMetadata();
+        if (!saved.contains("ae2ocProcessing")) {
+            helper.assertTrue(elapsed < 100, "Lifecycle fixture never reserved a batch");
+            helper.runAfterDelay(1, () -> interruptBatch(helper, fixture, initialEnergy, destroy, elapsed + 1));
+            return;
+        }
+        var state = ProcessingCodec.read(saved.getCompound("ae2ocProcessing"));
+        helper.assertTrue(state.recipe().equals(fixture.recipe()) && !state.finished() && state.energyPaid() > 0,
+                "Lifecycle interruption requires a paid, unfinished real batch");
+        helper.assertTrue(fixture.drain().getAsLong() == 0, "Lifecycle interruption happened after output");
+        for (var input : fixture.inputs()) helper.assertTrue(amount(input) == 0, "Expected all inputs to be reserved");
+        if (destroy) {
+            var pos = new BlockPos(1, 1, 1);
+            helper.assertTrue(helper.getLevel().destroyBlock(helper.absolutePos(pos), true, helper.makeMockPlayer()),
+                    "Machine destruction failed");
+            helper.assertTrue(helper.getLevel().getBlockEntity(helper.absolutePos(pos)) == null, "Destroyed machine remains");
+            helper.runAfterDelay(2, () -> {
+                var entities = helper.getEntities(net.minecraft.world.entity.EntityType.ITEM, pos, 3);
+                for (var key : fixture.keys()) {
+                    helper.assertTrue(entityAmount(entities, key) == 2L * fixture.inputPerOperation(),
+                            "Real destruction lost or duplicated reserved input: " + key);
+                }
+                for (var output : state.outputs()) {
+                    helper.assertTrue(entityAmount(entities, output.key()) == 0, "Unfinished real destruction created products");
+                }
+                helper.succeed();
+            });
+            return;
+        }
+        fixture.host().load(saved);
+        fixture.host().load(saved);
+        helper.assertTrue(fixture.host().saveWithFullMetadata().getCompound("ae2ocProcessing")
+                .equals(saved.getCompound("ae2ocProcessing")), "Repeated host load changed batch payment or ownership");
+        var upgrades = ((IUpgradeableObject) fixture.host()).getUpgrades();
+        upgrades.setItemDirect(0, ItemStack.EMPTY);
+        upgrades.setItemDirect(2, ItemStack.EMPTY);
+        helper.assertTrue(fixture.host().saveWithFullMetadata().getCompound("ae2ocProcessing")
+                .equals(saved.getCompound("ae2ocProcessing")), "Card removal changed the held batch");
+        // Retain the energy card: truncating its buffer is a separate, intentional gameplay rule.
+        observe(helper, fixture, initialEnergy, 0, 0, true);
+    }
+
+    private static long entityAmount(List<net.minecraft.world.entity.item.ItemEntity> entities, AEKey key) {
+        long total = 0;
+        for (var entity : entities) {
+            var stack = entity.getItem();
+            if (key instanceof AEItemKey itemKey && itemKey.matches(stack)) total += stack.getCount();
+            else if (stack.is(ModItems.STORED_RESOURCES.get()) && stack.hasTag()
+                    && key.equals(AEKey.fromTagGeneric(stack.getTag().getCompound("resource")))) {
+                total += stack.getTag().getLong("amount");
+            }
+        }
+        return total;
     }
 
     private static void starved(GameTestHelper helper, Fixture fixture, int remaining) {

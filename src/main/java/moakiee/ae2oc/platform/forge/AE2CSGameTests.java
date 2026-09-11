@@ -11,6 +11,47 @@ import net.minecraftforge.gametest.PrefixGameTestTemplate;
 @PrefixGameTestTemplate(false)
 public final class AE2CSGameTests {
     @GameTest(template = "empty", timeoutTicks = 600)
+    public static void pulverizerReloadAndCardRemovalPreserveBatch(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.lifecycle(helper, "crystal_pulverizer", false);
+    }
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void pulverizerRealBreakReturnsReservedInputs(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.lifecycle(helper, "crystal_pulverizer", true);
+    }
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void aggregatorReloadAndCardRemovalPreserveBatch(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.lifecycle(helper, "crystal_aggregator", false);
+    }
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void aggregatorRealBreakReturnsReservedInputs(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.lifecycle(helper, "crystal_aggregator", true);
+    }
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void circuitEtcherReloadAndCardRemovalPreserveBatch(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.lifecycle(helper, "circuit_etcher", false);
+    }
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void circuitEtcherRealBreakReturnsReservedInputs(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.lifecycle(helper, "circuit_etcher", true);
+    }
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void entropyChamberReloadAndCardRemovalPreserveBatch(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.lifecycle(helper, "entropy_variation_reaction_chamber", false);
+    }
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void entropyChamberRealBreakReturnsReservedInputs(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.lifecycle(helper, "entropy_variation_reaction_chamber", true);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 600)
     public static void aggregatorNaturallyResumesAfterEnergyArrives(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
         AE2CSNaturalScheduling.run(helper, "crystal_aggregator", false);
