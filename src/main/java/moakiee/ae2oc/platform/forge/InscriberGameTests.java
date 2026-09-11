@@ -23,6 +23,38 @@ import net.minecraftforge.gametest.PrefixGameTestTemplate;
 @GameTestHolder(Ae2Overclocked.MODID)
 @PrefixGameTestTemplate(false)
 public final class InscriberGameTests {
+    @GameTest(template = "empty", timeoutTicks = 300)
+    public static void inscriberNamePressRetainsTemplateAndCopiesName(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos.west(), AEBlocks.CREATIVE_ENERGY_CELL.block());
+        helper.setBlock(pos, AEBlocks.INSCRIBER.block());
+        var machine = (InscriberBlockEntity) helper.getBlockEntity(pos);
+        helper.runAfterDelay(40, () -> {
+            helper.assertTrue(machine.getMainNode().isActive(), "Name press test grid did not become active");
+            machine.getUpgrades().setItemDirect(0, new ItemStack(ModItems.PARALLEL_CARD_8X.get()));
+            machine.getUpgrades().setItemDirect(1, new ItemStack(ModItems.OVERCLOCK_CARD.get()));
+            var namePress = new ItemStack(appeng.core.definitions.AEItems.NAME_PRESS.asItem());
+            namePress.getOrCreateTag().putString(appeng.items.materials.NamePressItem.TAG_INSCRIBE_NAME, "Persistent Template");
+            var slots = ManagedItemStorages.slots(machine.getInternalInventory());
+            slots.get(0).write(new ResourceAmount<AEKey>(AEItemKey.of(namePress), 1));
+            slots.get(2).write(new ResourceAmount<AEKey>(AEItemKey.of(Items.DIAMOND), 5));
+            var recipe = machine.getTask();
+            helper.assertTrue(recipe != null && recipe.getId().toString().equals("ae2:nameplate"),
+                    "Name press did not select the special upstream recipe");
+            for (int tick = 0; tick < 20; tick++) machine.tickingRequest(machine.getMainNode().getNode(), 1);
+            var output = machine.getInternalInventory().extractItem(3, 64, false);
+            helper.assertTrue(output.is(Items.DIAMOND) && output.getCount() == 5,
+                    "Parallel name press produced the wrong item count");
+            helper.assertTrue(output.hasCustomHoverName() && output.getHoverName().getString().equals("Persistent Template"),
+                    "Parallel name press lost the generated item name");
+            helper.assertTrue(amount(slots.get(0)) == 1 && amount(slots.get(2)) == 0,
+                    "Name press template was consumed or middle inputs remained");
+            helper.assertTrue(!machine.saveWithFullMetadata().contains("ae2ocProcessing"),
+                    "Completed name press recipe retained a batch");
+            helper.succeed();
+        });
+    }
+
     @GameTest(template = "empty", timeoutTicks = 1200)
     public static void extendedInscriberRecipeMatrix(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
