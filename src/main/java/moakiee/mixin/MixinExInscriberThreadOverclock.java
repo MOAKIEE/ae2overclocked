@@ -23,6 +23,11 @@ public abstract class MixinExInscriberThreadOverclock implements InscriberThread
     @Shadow public abstract InscriberRecipe getTask();
     @Unique private InscriberAdapter ae2oc_adapter;
 
+    @Inject(method = "<init>", at = @At("TAIL"))
+    private void ae2oc_attach(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.attach(getInternalInventory(), host);
+    }
+
     @Override public InscriberAdapter ae2oc$getAdapter() {
         if (ae2oc_adapter == null) ae2oc_adapter = new InscriberAdapter(host, host, getInternalInventory(), this::getTask, 4);
         return ae2oc_adapter;

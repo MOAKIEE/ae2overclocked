@@ -29,7 +29,7 @@ public final class InscriberAdapter extends MachineProcessorAdapter {
         if (recipe == null || recipe.getResultItem().isEmpty()) return null;
         var inputs = new ArrayList<RecipeBatch.Debit>();
         for (int slot = 0; slot < 3; slot++) {
-            var port = LocalResourceSlot.item(inventory, slot);
+            var port = ManagedItemStorages.slots(inventory).get(slot);
             var before = port.read();
             if (before != null) inputs.add(new RecipeBatch.Debit(port, before,
                     slot == 2 || recipe.getProcessType() == InscriberProcessType.PRESS ? 1 : 0));

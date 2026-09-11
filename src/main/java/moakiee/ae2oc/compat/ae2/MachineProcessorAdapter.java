@@ -164,7 +164,9 @@ public class MachineProcessorAdapter {
     }
 
     public void addDrops(List<ItemStack> drops) {
-        for (var resource : processor.ownedResources()) resource.key().addDrops(resource.amount(), drops, host.getLevel(), host.getBlockPos());
+        for (var resource : processor.ownedResources()) {
+            if (resource.amount() > 0) drops.add(moakiee.item.StoredResourcesItem.pack(resource.key(), resource.amount()));
+        }
     }
 }
 

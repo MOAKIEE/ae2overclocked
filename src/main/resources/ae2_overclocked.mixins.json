@@ -5,26 +5,20 @@
   "plugin": "moakiee.mixin.Ae2OcMixinPlugin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
-    "MixinInternalInventory",
-    "MixinAppEngInternalInventory",
     "MixinAEBaseBlockEntityCapacityHook",
-    "MixinAEBaseInvBlockEntity",
-    "MixinAppEngSlot",
-    "MixinAEBaseMenu",
     "MixinConfigInventory",
-    "MixinConfigMenuInventory",
     "MixinGenericStackInv",
     "MixinIOBusPartSuperSpeed",
     "MixinIOPortSuperSpeed",
     "MixinAEBasePoweredBlockEntity",
     "MixinInscriberOverclock",
-    "MixinInscriberBlockEntity",
-    "MixinFriendlyByteBuf",
-    "MixinUpgradeInventory"
+    "MixinUpgradeInventory",
+    "MixinManagedItemInventory",
+    "AccessorCombinedInventory",
+    "AccessorAppEngSlot",
+    "MixinLogicalMenu"
   ],
-  "client": [
-    "MixinAEBaseScreen"
-  ],
+  "client": [],
   "injectors": {
     "defaultRequire": 1
   }

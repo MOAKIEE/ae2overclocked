@@ -15,10 +15,19 @@ public interface LocalResourceSlot {
     static LocalResourceSlot item(InternalInventory inv, int slot) {
         return new LocalResourceSlot() {
             public ResourceAmount<AEKey> read() {
+                if (inv instanceof ManagedItemInventory managed && managed.ae2oc$storage() != null) {
+                    var logical = managed.ae2oc$storage().slot(slot);
+                    return logical.key() == null ? null : new ResourceAmount<>(logical.key(), logical.amount());
+                }
                 var stack = inv.getStackInSlot(slot);
                 return stack.isEmpty() ? null : new ResourceAmount<>(AEItemKey.of(stack), stack.getCount());
             }
             public void write(ResourceAmount<AEKey> value) {
+                if (inv instanceof ManagedItemInventory managed && managed.ae2oc$storage() != null) {
+                    managed.ae2oc$storage().slot(slot).restore(value == null ? null : (AEItemKey) value.key(), value == null ? 0 : value.amount());
+                    inv.setItemDirect(slot, managed.ae2oc$storage().projection(slot));
+                    return;
+                }
                 inv.setItemDirect(slot, value == null || value.amount() == 0 ? ItemStack.EMPTY
                         : ((AEItemKey) value.key()).toStack(Math.toIntExact(value.amount())));
             }

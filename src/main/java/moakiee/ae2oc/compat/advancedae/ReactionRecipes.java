@@ -37,7 +37,7 @@ public final class ReactionRecipes implements Supplier<RecipeBatch> {
         if (recipe.output == null || recipe.output.amount() <= 0) return null;
         var input = host.getInput();
         ItemStack[] items = new ItemStack[input.size()];
-        for (int slot = 0; slot < items.length; slot++) items[slot] = input.getStackInSlot(slot).copy();
+        for (int slot = 0; slot < items.length; slot++) items[slot] = moakiee.ae2oc.compat.ae2.ManagedItemStorages.recipeStack(input, slot);
         var fluidPort = LocalResourceSlot.generic(host.getTank(), 1);
         var fluidBefore = fluidPort.read();
         var fluid = fluidBefore != null && fluidBefore.key() instanceof AEFluidKey key

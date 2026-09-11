@@ -1,82 +1,61 @@
 package moakiee.mixin;
 
-import net.minecraftforge.fml.loading.LoadingModList;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
-import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
-
 import java.util.List;
 import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
+import net.minecraftforge.fml.loading.LoadingModList;
+import org.apache.logging.log4j.LogManager;
+import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
+import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
+import org.spongepowered.asm.service.MixinService;
+import org.objectweb.asm.tree.ClassNode;
 
-/**
- * Mixin 配置插件：用于在运行期按需禁用与其它 mod 冲突的 mixin。
- *
- * 当前唯一作用：当检测到 BiggerStacks 与本 mod 同时加载时，禁用 {@link MixinFriendlyByteBuf}。
- * 两者都会修改 FriendlyByteBuf 的物品堆栈数量序列化方式（byte → int），但协议格式不一致，
- * 同时启用会导致网络包错位，触发 UTFDataFormatException。
- *
- * 检测必须使用 {@link LoadingModList}，因为 mixin 插件加载远早于 Forge 的 ModList 初始化。
- */
-public class Ae2OcMixinPlugin implements IMixinConfigPlugin {
-
-    private static final Logger LOGGER = LogManager.getLogger("ae2_overclocked/MixinPlugin");
-
-    private static final String FRIENDLY_BYTE_BUF_MIXIN = "moakiee.mixin.MixinFriendlyByteBuf";
-    private static final String BIGGER_STACKS_MOD_ID = "biggerstacks";
-
-    private boolean biggerStacksLoaded = false;
-
-    @Override
-    public void onLoad(String mixinPackage) {
+/** Resolves optional compatibility once at startup, without loading optional Java classes. */
+public final class Ae2OcMixinPlugin implements IMixinConfigPlugin {
+    private static final Map<String, Boolean> ENABLED = new HashMap<>();
+    @Override public void onLoad(String mixinPackage) {}
+    @Override public String getRefMapperConfig() { return null; }
+    @Override public List<String> getMixins() { return null; }
+    @Override public void acceptTargets(Set<String> mine, Set<String> others) {}
+    @Override public void preApply(String name, ClassNode target, String mixin, IMixinInfo info) {}
+    @Override public void postApply(String name, ClassNode target, String mixin, IMixinInfo info) {}
+    @Override public boolean shouldApplyMixin(String target, String mixin) {
+        String id = target.startsWith("com.glodblock.github.extendedae.") ? "expatternprovider"
+                : target.startsWith("net.pedroksl.advanced_ae.") ? "advanced_ae"
+                : target.startsWith("io.github.lounode.ae2cs.") ? "ae2cs" : null;
+        if (id == null) return true;
+        return ENABLED.computeIfAbsent(id, Ae2OcMixinPlugin::validate);
+    }
+    private static boolean validate(String id) {
+        var logger = LogManager.getLogger("ae2_overclocked/compat");
+        var list = LoadingModList.get();
+        var file = list == null ? null : list.getModFileById(id);
+        if (file == null) { logger.info("Compatibility {} disabled: mod absent", id); return false; }
+        String[] targets = switch (id) {
+            case "expatternprovider" -> new String[]{
+                    "com.glodblock.github.extendedae.common.me.InscriberThread#tick#()Lappeng/api/networking/ticking/TickRateModulation;",
+                    "com.glodblock.github.extendedae.common.tileentities.TileCircuitCutter#getInput#()Lappeng/util/inv/AppEngInternalInventory;"};
+            case "advanced_ae" -> new String[]{"net.pedroksl.advanced_ae.common.entities.ReactionChamberEntity#getTask#()Lnet/pedroksl/advanced_ae/recipes/ReactionChamberRecipe;"};
+            case "ae2cs" -> new String[]{
+                    "io.github.lounode.ae2cs.common.block.entity.CircuitEtcherBlockEntity#serverTick#()V",
+                    "io.github.lounode.ae2cs.common.block.entity.CrystalAggregatorBlockEntity#serverTick#()V",
+                    "io.github.lounode.ae2cs.common.block.entity.CrystalPulverizerBlockEntity#serverTick#()V",
+                    "io.github.lounode.ae2cs.common.block.entity.EntropyVariationReactionChamberBlockEntity#serverTick#()V"};
+            default -> new String[0];
+        };
         try {
-            LoadingModList list = LoadingModList.get();
-            biggerStacksLoaded = list != null && list.getModFileById(BIGGER_STACKS_MOD_ID) != null;
-        } catch (Throwable t) {
-            biggerStacksLoaded = false;
-        }
-        if (biggerStacksLoaded) {
-            LOGGER.info("Detected biggerstacks; MixinFriendlyByteBuf will be skipped to avoid protocol conflict.");
-        }
-    }
-
-    @Override
-    public String getRefMapperConfig() {
-        return null;
-    }
-
-    @Override
-    public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        String modId = null;
-        if (targetClassName.startsWith("com.glodblock.github.extendedae.")) modId = "expatternprovider";
-        else if (targetClassName.startsWith("net.pedroksl.advanced_ae.")) modId = "advanced_ae";
-        else if (targetClassName.startsWith("io.github.lounode.ae2cs.")) modId = "ae2cs";
-        if (modId != null) {
-            LoadingModList list = LoadingModList.get();
-            if (list == null || list.getModFileById(modId) == null) return false;
-        }
-        if (biggerStacksLoaded && FRIENDLY_BYTE_BUF_MIXIN.equals(mixinClassName)) {
+            for (String signature : targets) {
+                String[] parts = signature.split("#");
+                var node = MixinService.getService().getBytecodeProvider().getClassNode(parts[0], false);
+                if (node.methods.stream().noneMatch(method -> method.name.equals(parts[1]) && method.desc.equals(parts[2])))
+                    throw new IllegalStateException("Missing signature: " + signature);
+            }
+            logger.info("Compatibility {} enabled; versions {}", id, file.getMods().stream().map(mod -> mod.getVersion().toString()).toList());
+            return true;
+        } catch (Exception failure) {
+            logger.error("Compatibility {} disabled: {}", id, failure.getMessage());
             return false;
         }
-        return true;
-    }
-
-    @Override
-    public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) {
-    }
-
-    @Override
-    public List<String> getMixins() {
-        return null;
-    }
-
-    @Override
-    public void preApply(String targetClassName, org.objectweb.asm.tree.ClassNode targetClass,
-                         String mixinClassName, IMixinInfo mixinInfo) {
-    }
-
-    @Override
-    public void postApply(String targetClassName, org.objectweb.asm.tree.ClassNode targetClass,
-                          String mixinClassName, IMixinInfo mixinInfo) {
     }
 }

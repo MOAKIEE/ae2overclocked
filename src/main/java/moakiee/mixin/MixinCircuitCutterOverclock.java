@@ -44,17 +44,27 @@ public abstract class MixinCircuitCutterOverclock {
 
     @Inject(method = {"saveAdditional", "m_183515_"}, at = @At("TAIL"), require = 1)
     private void ae2oc_save(CompoundTag tag, CallbackInfo ci) {
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.save(ae2oc_items(), tag, "ae2ocLongSlots");
         if (ae2oc_adapter != null) ae2oc_adapter.save(tag);
     }
 
     @Inject(method = "loadTag", at = @At("TAIL"))
     private void ae2oc_load(CompoundTag tag, CallbackInfo ci) {
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.load(ae2oc_items(), tag, "ae2ocLongSlots");
         if (tag.contains("ae2ocProcessing")) ae2oc_adapter().load(tag);
     }
 
     @Inject(method = "addAdditionalDrops", at = @At("TAIL"))
     private void ae2oc_drops(Level level, BlockPos pos, List<ItemStack> drops, CallbackInfo ci) {
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.addHiddenDrops(ae2oc_items(), drops);
         if (ae2oc_adapter != null) ae2oc_adapter.addDrops(drops);
     }
+    @Unique private appeng.api.inventories.InternalInventory ae2oc_items() {
+        var self = (TileCircuitCutter) (Object) this;
+        return new appeng.util.inv.CombinedInternalInventory(self.getInput(), self.getOutput());
+    }
+    @Inject(method = "<init>", at = @At("TAIL"))
+    private void ae2oc_attachItems(CallbackInfo ci) {
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.attach(ae2oc_items(), (TileCircuitCutter) (Object) this);
+    }
 }
-

@@ -21,6 +21,9 @@ public class ModItems {
     public static final DeferredRegister<CreativeModeTab> TABS =
             DeferredRegister.create(Registries.CREATIVE_MODE_TAB, Ae2Overclocked.MODID);
 
+    public static final RegistryObject<moakiee.item.StoredResourcesItem> STORED_RESOURCES =
+            ITEMS.register("stored_resources", moakiee.item.StoredResourcesItem::new);
+
     // ── 堆叠卡（单一等级）──────────────────────────────────────────
     public static final RegistryObject<CapacityCard> CAPACITY_CARD =
             ITEMS.register("capacity_card", CapacityCard::new);

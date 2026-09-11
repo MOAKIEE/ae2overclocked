@@ -20,6 +20,55 @@ import net.minecraftforge.registries.ForgeRegistries;
 @PrefixGameTestTemplate(false)
 public final class RefactorGameTests {
     @GameTest(template = "empty")
+    public static void menuProjectionCannotEscapeToCursor(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());
+        var machine = (appeng.blockentity.misc.InscriberBlockEntity) helper.getBlockEntity(pos);
+        var ports = moakiee.ae2oc.compat.ae2.ManagedItemStorages.slots(machine.getInternalInventory());
+        ports.get(3).write(new ResourceAmount<>(AEItemKey.of(Items.IRON_INGOT), 1000000));
+        var player = helper.makeMockPlayer();
+        var menu = new appeng.menu.implementations.InscriberMenu(1, player.getInventory(), machine);
+        int index = -1;
+        for (var slot : menu.slots) if (slot instanceof moakiee.ae2oc.client.LogicalMenuSlot logical && logical.amount() == 1000000) index = slot.index;
+        helper.assertTrue(index >= 0, "Large output slot was not bound to presentation proxy");
+        var wrapped = appeng.api.stacks.GenericStack.unwrapItemStack(menu.getSlot(index).getItem());
+        helper.assertTrue(wrapped != null && wrapped.amount() == 1000000, "Menu quantity projection is incorrect");
+        menu.clicked(index, 40, net.minecraft.world.inventory.ClickType.SWAP, player);
+        helper.assertTrue(menu.getCarried().isEmpty() && ports.get(3).read().amount() == 1000000, "Offhand swap bypassed large-slot guard");
+        menu.clicked(index, 0, net.minecraft.world.inventory.ClickType.PICKUP, player);
+        helper.assertTrue(menu.getCarried().getCount() == 64 && !appeng.api.stacks.GenericStack.isWrapped(menu.getCarried()), "Cursor received presentation wrapper or oversized stack");
+        helper.assertTrue(ports.get(3).read().amount() == 1000000 - 64, "Menu pickup did not conserve resources");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void longItemProjectionAndSave(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());
+        var machine = (appeng.blockentity.misc.InscriberBlockEntity) helper.getBlockEntity(pos);
+        var ports = moakiee.ae2oc.compat.ae2.ManagedItemStorages.slots(machine.getInternalInventory());
+        var resource = new ResourceAmount<AEKey>(AEItemKey.of(Items.IRON_INGOT), Integer.MAX_VALUE);
+        ports.get(2).write(resource);
+        helper.assertTrue(machine.getInternalInventory().getStackInSlot(2).getCount() == 64, "Projection is not a legal stack");
+        var saved = machine.saveWithFullMetadata();
+        machine.load(saved);
+        helper.assertTrue(ports.get(2).read().equals(resource), "Save/load lost logical item quantity");
+        var extracted = machine.getInternalInventory().extractItem(2, Integer.MAX_VALUE, false);
+        helper.assertTrue(extracted.getCount() <= 64, "Extraction produced oversized carried stack");
+        helper.assertTrue(ports.get(2).read().amount() + extracted.getCount() == Integer.MAX_VALUE, "Extraction lost resources");
+        var oldTag = new net.minecraft.nbt.CompoundTag();
+        var legacy = new net.minecraft.world.item.ItemStack(Items.IRON_INGOT).save(new net.minecraft.nbt.CompoundTag());
+        legacy.putInt("ae2ocCount", 1234567);
+        oldTag.getCompound("inv");
+        var invTag = new net.minecraft.nbt.CompoundTag();
+        invTag.put("item2", legacy);
+        oldTag.put("inv", invTag);
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.load(machine.getInternalInventory(), oldTag, "ae2ocLongSlots");
+        helper.assertTrue(ports.get(2).read().amount() == 1234567, "Legacy quantity migration failed");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void managedFluidRemovalPreservesResources(GameTestHelper helper) {
         var tank = new appeng.helpers.externalstorage.GenericStackInv(null,
                 appeng.helpers.externalstorage.GenericStackInv.Mode.STORAGE, 1);

@@ -11,8 +11,6 @@
     "MixinExIOPortSuperSpeed",
     "MixinExInscriberThreadOverclock",
     "MixinCircuitCutterOverclock",
-    "MixinTileCircuitCutterNetwork",
-    "MixinInscriberThreadNetwork",
     "MixinExInscriberPersistence"
   ],
   "client": [

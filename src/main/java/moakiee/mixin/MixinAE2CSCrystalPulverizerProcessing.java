@@ -23,7 +23,7 @@ public abstract class MixinAE2CSCrystalPulverizerProcessing {
             ae2oc_adapter = new MachineProcessorAdapter(self, self, self.getOutputInv(), () -> {
                 if (self.getLevel() == null) return null;
                 var inv = self.getInputInv();
-                var input = SingleItemStackRecipeInput.of(inv.getStackInSlot(0));
+                var input = SingleItemStackRecipeInput.of(moakiee.ae2oc.compat.ae2.ManagedItemStorages.recipeStack(inv, 0));
                 var found = self.getLevel().getRecipeManager().getRecipeFor(AECSRecipeTypes.CRYSTAL_PULVERIZER.get(), input, self.getLevel());
                 if (found.isEmpty()) return null;
                 var recipe = found.get();
@@ -49,6 +49,15 @@ public abstract class MixinAE2CSCrystalPulverizerProcessing {
     @Inject(method = "addAdditionalDrops", at = @At("TAIL"))
     private void ae2oc_drops(net.minecraft.world.level.Level level, net.minecraft.core.BlockPos pos,
                             java.util.List<net.minecraft.world.item.ItemStack> drops, CallbackInfo ci) {
+        var self = (CrystalPulverizerBlockEntity) (Object) this;
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.addHiddenDrops(self.getInputInv(), drops);
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.addHiddenDrops(self.getOutputInv(), drops);
         if (ae2oc_adapter != null) ae2oc_adapter.addDrops(drops);
+    }
+    @Inject(method = "<init>", at = @At("TAIL"))
+    private void ae2oc_attach(CallbackInfo ci) {
+        var self = (CrystalPulverizerBlockEntity) (Object) this;
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.attach(self.getInputInv(), self);
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.attach(self.getOutputInv(), self);
     }
 }

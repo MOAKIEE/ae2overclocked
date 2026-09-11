@@ -22,6 +22,8 @@ public abstract class MixinExInscriberPersistence {
 
     @Inject(method = {"saveAdditional", "m_183515_"}, at = @At("TAIL"), require = 1)
     private void ae2oc_save(CompoundTag tag, CallbackInfo ci) {
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.save(
+                ((com.glodblock.github.extendedae.common.tileentities.TileExInscriber) (Object) this).getInternalInventory(), tag, "ae2ocLongSlots");
         for (int i = 0; i < threads.length; i++) {
             var child = new CompoundTag();
             ((InscriberThreadState) threads[i]).ae2oc$getAdapter().save(child);
@@ -31,6 +33,8 @@ public abstract class MixinExInscriberPersistence {
 
     @Inject(method = "loadTag", at = @At("TAIL"))
     private void ae2oc_load(CompoundTag tag, CallbackInfo ci) {
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.load(
+                ((com.glodblock.github.extendedae.common.tileentities.TileExInscriber) (Object) this).getInternalInventory(), tag, "ae2ocLongSlots");
         for (int i = 0; i < threads.length; i++) {
             ((InscriberThreadState) threads[i]).ae2oc$getAdapter().load(tag.getCompound("ae2ocThread" + i));
         }
@@ -38,6 +42,7 @@ public abstract class MixinExInscriberPersistence {
 
     @Inject(method = "addAdditionalDrops", at = @At("TAIL"))
     private void ae2oc_drops(Level level, BlockPos pos, List<ItemStack> drops, CallbackInfo ci) {
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.addHiddenDrops(((com.glodblock.github.extendedae.common.tileentities.TileExInscriber) (Object) this).getInternalInventory(), drops);
         for (var thread : threads) ((InscriberThreadState) thread).ae2oc$getAdapter().addDrops(drops);
     }
 }
