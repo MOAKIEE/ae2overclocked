@@ -57,4 +57,16 @@ public final class AE2CSGameTests {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
         AE2CSEntropyRecipes.destructionDrops(helper);
     }
+
+    @GameTest(template = "empty", timeoutTicks = 400)
+    public static void processorKeepsProcessingWhileNodeIsInactive(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSEnergySemantics.keepsProcessingWhileNodeIsInactive(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 400)
+    public static void processorStallsWithoutEnergyThenResumes(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSEnergySemantics.stallsWithoutEnergyThenResumes(helper);
+    }
 }

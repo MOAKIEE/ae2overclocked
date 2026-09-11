@@ -68,7 +68,12 @@ public class MachineProcessorAdapter {
         boolean overclock = profile.overclock();
         int multiplier = profile.parallelLimit();
         if (processor.snapshot() == null && !overclock && multiplier <= 1) return null;
-        if (!((IGridConnectedBlockEntity) host).getMainNode().isActive() || host.getLevel() == null) return TickRateModulation.IDLE;
+        // Upstream machines never gate on the main node being active: they keep draining their own
+        // internal buffer while disconnected and only stall once nothing is left to pay with. Mirror
+        // that contract so a machine that still owns a paid batch keeps progressing (or reports a slow
+        // retry) instead of freezing, and so the grid energy service stays an optional top-up rather
+        // than a precondition for work. The grid is also only ever an output target, never a requirement.
+        if (host.getLevel() == null) return TickRateModulation.IDLE;
         long now = host.getLevel().getGameTime();
         if (now < retryAt) return TickRateModulation.SLOWER;
         boolean progressed = false;
