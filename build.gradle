@@ -26,6 +26,10 @@ base {
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 sourceSets {
+    restartTest {
+        compileClasspath += main.output + main.compileClasspath
+        runtimeClasspath += main.output + main.runtimeClasspath
+    }
     clientSmoke {
         compileClasspath += main.output + main.compileClasspath
         runtimeClasspath += output + compileClasspath + main.runtimeClasspath
@@ -115,6 +119,14 @@ minecraft {
         server {
             property 'forge.enabledGameTestNamespaces', mod_id
             args '--nogui'
+            if (project.hasProperty('restartPhase')) {
+                if (!(compatibilityRuntime in ['ae2cs', 'all'])) {
+                    throw new GradleException('Restart verification requires AE2CS')
+                }
+                workingDirectory project.file(providers.gradleProperty('restartDirectory').get())
+                property 'ae2oc.restartPhase', providers.gradleProperty('restartPhase').get()
+                mods { "${mod_id}" { source sourceSets.restartTest } }
+            }
         }
 
         // This run config launches GameTestServer and runs all registered gametests, then exits.
@@ -312,7 +324,7 @@ tasks.register('verifyReleaseContents') {
                     throw new GradleException("Release jar ships develop-time scaffolding: ${shipped}")
                 }
             }
-            ['GameTests', 'GameTestServer', 'ClientSmoke', 'ContractTest'].each { needle ->
+            ['GameTests', 'GameTestServer', 'ClientSmoke', 'ContractTest', 'RestartVerification'].each { needle ->
                 def shipped = entries.findAll { it.contains(needle) }
                 if (shipped) {
                     throw new GradleException("Release jar ships test scaffolding: ${shipped}")
@@ -331,7 +343,10 @@ tasks.register('verifyReleaseContents') {
         }
     }
 }
-tasks.named('check') { dependsOn 'coreContractTest', 'verifyArchitecture', 'verifyReleaseContents' }
+tasks.named('check') { dependsOn 'coreContractTest', 'verifyArchitecture', 'verifyReleaseContents', 'restartTestClasses' }
 if (project.hasProperty('clientSmoke')) {
     tasks.matching { it.name == 'runClient' }.configureEach { dependsOn 'clientSmokeClasses' }
+}
+if (project.hasProperty('restartPhase')) {
+    tasks.matching { it.name == 'runServer' }.configureEach { dependsOn 'restartTestClasses' }
 }
