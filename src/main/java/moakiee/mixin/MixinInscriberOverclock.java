@@ -45,7 +45,17 @@ public abstract class MixinInscriberOverclock {
     @Inject(method = "tickingRequest", at = @At("HEAD"), cancellable = true)
     private void ae2oc_tick(IGridNode node, int elapsed, CallbackInfoReturnable<TickRateModulation> cir) {
         var result = ae2oc_adapter().tick();
-        if (result != null) cir.setReturnValue(result);
+        if (result != null) {
+            if (moakiee.ae2oc.compat.ae2.InscriberExport.push((InscriberBlockEntity) (Object) this))
+                result = TickRateModulation.URGENT;
+            cir.setReturnValue(result);
+        }
+    }
+
+    @Inject(method = "pushOutResult", at = @At("HEAD"), cancellable = true)
+    private void ae2oc_exportLogicalOutput(CallbackInfoReturnable<Boolean> cir) {
+        if (moakiee.ae2oc.compat.ae2.ManagedItemStorages.isManaged(getInternalInventory()))
+            cir.setReturnValue(moakiee.ae2oc.compat.ae2.InscriberExport.push((InscriberBlockEntity) (Object) this));
     }
 
     @Inject(method = {"saveAdditional", "m_183515_"}, at = @At("TAIL"), require = 1)
