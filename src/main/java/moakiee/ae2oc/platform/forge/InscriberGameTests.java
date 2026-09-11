@@ -47,6 +47,12 @@ public final class InscriberGameTests {
         ExtendedInscriberRecipes.laneExportIsolation(helper);
     }
 
+    @GameTest(template = "empty", timeoutTicks = 1200)
+    public static void extendedInscriberRecipeWithAutoExport(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedInscriberRecipes.recipeWithAutoExport(helper);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 200)
     public static void inscriberRecipeSurvivesReloadAndCardRemoval(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
