@@ -23,6 +23,12 @@ import net.minecraftforge.gametest.PrefixGameTestTemplate;
 @GameTestHolder(Ae2Overclocked.MODID)
 @PrefixGameTestTemplate(false)
 public final class InscriberGameTests {
+    @GameTest(template = "empty", timeoutTicks = 1200)
+    public static void extendedInscriberRecipeMatrix(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedInscriberRecipes.run(helper, 0);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 200)
     public static void inscriberRecipeSurvivesReloadAndCardRemoval(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);

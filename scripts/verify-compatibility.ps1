@@ -20,7 +20,7 @@ try {
     if ($output -notmatch $success) { throw "Runtime did not report test completion; see $report" }
     if (!$ClientSmoke) {
         $testCount = [regex]::Match($output, 'All ([0-9]+) required tests passed').Groups[1].Value
-        if ([int]$testCount -lt 13) { throw "Expected at least 13 GameTests, found $testCount; see $report" }
+        if ([int]$testCount -lt 14) { throw "Expected at least 14 GameTests, found $testCount; see $report" }
     }
     if ($output -match 'Compatibility \S+ disabled: (?!mod absent)') {
         throw "A compatibility adapter failed its startup contract; see $report"
