@@ -2,11 +2,21 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'maven-publish'
-    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'net.minecraftforge.gradle' version '6.0.54'
 }
 
 version = mod_version
 group = mod_group_id
+
+def compatibilityRuntime = providers.gradleProperty('compatRuntime').getOrElse('none')
+if (!(compatibilityRuntime in ['none', 'extendedae', 'advancedae', 'ae2cs', 'all'])) {
+    throw new GradleException("Unknown compatRuntime: ${compatibilityRuntime}")
+}
+dependencyLocking {
+    lockAllConfigurations()
+    lockMode = LockMode.STRICT
+    lockFile = file("gradle/locks/${compatibilityRuntime}.lockfile")
+}
 
 base {
     archivesName = mod_id
@@ -190,6 +200,8 @@ tasks.named('processResources', ProcessResources).configure {
 
 // Example for how to get properties into the manifest for reading at runtime.
 tasks.named('jar', Jar).configure {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
     manifest {
         attributes([
                 'Specification-Title'      : mod_id,
@@ -198,7 +210,6 @@ tasks.named('jar', Jar).configure {
                 'Implementation-Title'     : project.name,
                 'Implementation-Version'   : project.jar.archiveVersion,
                 'Implementation-Vendor'    : mod_authors,
-                'Implementation-Timestamp' : new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
                 'MixinConfigs'             : 'ae2_overclocked.mixins.json,ae2_overclocked.extendedae.mixins.json,ae2_overclocked.advancedae.mixins.json,ae2_overclocked.ae2cs.mixins.json'
         ])
     }
@@ -235,7 +246,25 @@ tasks.register('coreContractTest', JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'moakiee.ae2oc.core.CoreContractTest'
 }
-tasks.named('check') { dependsOn 'coreContractTest' }
+tasks.register('verifyArchitecture') {
+    def sources = fileTree('src/main/java') { include '**/*.java' }
+    inputs.files(sources)
+    doLast {
+        sources.each { source ->
+            def text = source.getText('UTF-8')
+            ['java.lang.reflect', 'sun.misc.Unsafe', '@Overwrite'].each { forbidden ->
+                if (text.contains(forbidden)) throw new GradleException("Forbidden integration mechanism ${forbidden}: ${source}")
+            }
+            def path = source.path.replace('\\', '/')
+            if (path.contains('/ae2oc/core/') || path.contains('/ae2oc/api/')) {
+                if (text =~ /(?m)^import (?:static )?(appeng|net\.minecraft|net\.minecraftforge|io\.github|com\.glodblock|net\.pedroksl)\./) {
+                    throw new GradleException("Domain code imports a platform or optional mod: ${source}")
+                }
+            }
+        }
+    }
+}
+tasks.named('check') { dependsOn 'coreContractTest', 'verifyArchitecture' }
 if (project.hasProperty('clientSmoke')) {
     tasks.matching { it.name == 'runClient' }.configureEach { dependsOn 'clientSmokeClasses' }
 }
