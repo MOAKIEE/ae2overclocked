@@ -23,6 +23,83 @@ import net.minecraftforge.gametest.PrefixGameTestTemplate;
 @GameTestHolder(Ae2Overclocked.MODID)
 @PrefixGameTestTemplate(false)
 public final class InscriberGameTests {
+    @GameTest(template = "empty", timeoutTicks = 1200)
+    public static void inscriberInscriptionRecipeMatrix(GameTestHelper helper) {
+        recipeScenario(helper, false, 0);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 1200)
+    public static void inscriberPressRecipeMatrix(GameTestHelper helper) {
+        recipeScenario(helper, true, 0);
+    }
+
+    private static void recipeScenario(GameTestHelper helper, boolean press, int scenario) {
+        if (scenario == 12) { helper.succeed(); return; }
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, Blocks.AIR);
+        helper.setBlock(pos.west(), AEBlocks.CREATIVE_ENERGY_CELL.block());
+        helper.setBlock(pos, AEBlocks.INSCRIBER.block());
+        var machine = (InscriberBlockEntity) helper.getBlockEntity(pos);
+        // Allow real grid creation and power propagation before manually driving machine ticks.
+        helper.runAfterDelay(40, () -> {
+            helper.assertTrue(machine.getMainNode().isActive(), "Recipe test grid did not become active");
+            var cards = new net.minecraft.world.item.Item[] {null, ModItems.PARALLEL_CARD.get(),
+                    ModItems.PARALLEL_CARD_8X.get(), ModItems.PARALLEL_CARD_64X.get(),
+                    ModItems.PARALLEL_CARD_1024X.get(), ModItems.PARALLEL_CARD_MAX.get()};
+            int tier = scenario / 2;
+            boolean overclock = scenario % 2 != 0;
+            if (cards[tier] != null) machine.getUpgrades().setItemDirect(0, new ItemStack(cards[tier]));
+            if (overclock) machine.getUpgrades().setItemDirect(1, new ItemStack(ModItems.OVERCLOCK_CARD.get()));
+            machine.getConfigManager().putSetting(Settings.AUTO_EXPORT, YesNo.NO);
+            var slots = ManagedItemStorages.slots(machine.getInternalInventory());
+            var middle = AEItemKey.of(press ? Items.REDSTONE : Items.GOLD_INGOT);
+            var result = AEItemKey.of(press ? appeng.core.definitions.AEItems.LOGIC_PROCESSOR.asItem()
+                    : appeng.core.definitions.AEItems.LOGIC_PROCESSOR_PRINT.asItem());
+            int operations = new int[] {70, 5, 17, 130, 2050, 8193}[tier];
+            slots.get(0).write(new ResourceAmount<AEKey>(AEItemKey.of(press
+                    ? appeng.core.definitions.AEItems.LOGIC_PROCESSOR_PRINT.asItem()
+                    : appeng.core.definitions.AEItems.LOGIC_PROCESSOR_PRESS.asItem()), press ? operations : 1));
+            if (press) slots.get(1).write(new ResourceAmount<AEKey>(AEItemKey.of(appeng.core.definitions.AEItems.SILICON_PRINT.asItem()), operations));
+            slots.get(2).write(new ResourceAmount<AEKey>(middle, operations));
+            var recipe = machine.getTask();
+            String label = "press=" + press + ", tier=" + tier + ", overclock=" + overclock;
+            helper.assertTrue(recipe != null && recipe.getId().toString().equals(press
+                    ? "ae2:inscriber/logic_processor" : "ae2:inscriber/logic_processor_print"), "Missing real recipe: " + label);
+            long collected = 0;
+            int ticks = 0;
+            while (collected < operations && ticks++ < 20000) {
+                machine.tickingRequest(machine.getMainNode().getNode(), 1);
+                if (ticks == 1 && (tier > 0 || overclock)) {
+                    var profile = moakiee.ae2oc.compat.ae2.UpgradeProfileCache.of(machine);
+                    long expected = Math.min(operations, Math.min(profile.parallelLimit(), moakiee.Ae2OcConfig.getMaxRecipeOperationsPerMachineTick()));
+                    helper.assertTrue(operations - amount(slots.get(2)) == expected, "Wrong initial parallel batch: " + label);
+                }
+                var output = machine.getInternalInventory().extractItem(3, 64, false);
+                helper.assertTrue(output.isEmpty() || (result.matches(output) && output.getCount() <= output.getMaxStackSize()), "Wrong or oversized recipe output: " + label);
+                collected += output.getCount();
+                var saved = machine.saveWithFullMetadata();
+                long pending = 0;
+                if (saved.contains("ae2ocProcessing")) {
+                    var batch = moakiee.ae2oc.compat.ae2.ProcessingCodec.read(saved.getCompound("ae2ocProcessing"));
+                    pending = batch.finished() ? batch.outputs().stream().mapToLong(ResourceAmount::amount).sum()
+                            : batch.inputs().stream().filter(input -> input.key().equals(middle)).mapToLong(ResourceAmount::amount).sum();
+                }
+                helper.assertTrue(collected + amount(slots.get(3)) + pending + amount(slots.get(2)) == operations,
+                        "Recipe conservation failed at tick " + ticks + ": " + label);
+            }
+            helper.assertTrue(collected == operations, "Recipe did not complete: " + label);
+            helper.assertTrue(amount(slots.get(0)) == (press ? 0 : 1) && amount(slots.get(1)) == 0,
+                    "Recipe consumed a mold or retained press ingredients: " + label);
+            helper.assertTrue(!machine.saveWithFullMetadata().contains("ae2ocProcessing"), "Completed recipe retained a batch: " + label);
+            recipeScenario(helper, press, scenario + 1);
+        });
+    }
+
+    private static long amount(moakiee.ae2oc.compat.ae2.LocalResourceSlot slot) {
+        var resource = slot.read();
+        return resource == null ? 0 : resource.amount();
+    }
+
     @GameTest(template = "empty")
     public static void upgradedInscriberStillExports(GameTestHelper helper) {
         exportConservation(helper, true);
