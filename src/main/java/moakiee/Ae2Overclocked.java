@@ -61,7 +61,7 @@ public class Ae2Overclocked {
 
     @SubscribeEvent
     public void onRegisterCommands(RegisterCommandsEvent event) {
-        moakiee.support.ProcessingDiagnosticsCommand.register(event.getDispatcher());
+        moakiee.support.Ae2OcCommands.register(event.getDispatcher());
     }
 
     @SubscribeEvent

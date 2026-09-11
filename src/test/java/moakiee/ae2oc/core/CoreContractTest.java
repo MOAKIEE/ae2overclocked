@@ -9,6 +9,9 @@ import moakiee.ae2oc.core.execution.BatchProcessor;
 import moakiee.ae2oc.core.execution.RetryBackoff;
 import moakiee.ae2oc.core.observability.ProcessingMetrics;
 import moakiee.ae2oc.core.planning.MachineBudget;
+import moakiee.ae2oc.migration.MigrationInspection;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import moakiee.ae2oc.core.execution.ProcessingState;
 import moakiee.ae2oc.core.planning.BatchPlanner;
 import moakiee.ae2oc.core.quantity.SaturatedMath;
@@ -16,6 +19,7 @@ import moakiee.ae2oc.core.quantity.SaturatedMath;
 /** Dependency-free deterministic property checks, executed by Gradle check. */
 public final class CoreContractTest {
     public static void main(String[] args) {
+        migrationInspectionIsReadOnlyAndRecursive();
         retryBackoffIsBoundedAndResettable();
         logicalSlots();
         processing();
@@ -40,6 +44,27 @@ public final class CoreContractTest {
         rejects(() -> SaturatedMath.floorDivToLong(Double.NaN, 1));
         rejects(() -> BatchPlanner.plan(OptionalLong.empty(), 1, 1, 1, 1, Double.NaN));
         System.out.println("Core contracts passed: boundaries and 10000 deterministic quantity/planner cases");
+    }
+
+    private static void migrationInspectionIsReadOnlyAndRecursive() {
+        var root = new CompoundTag();
+        root.put("ae2ocLongSlots", new ListTag());
+        var processing = new CompoundTag();
+        processing.putInt("dataVersion", 1);
+        var nested = new CompoundTag();
+        nested.putInt("ae2ocCount", 70);
+        nested.putInt("ae2ocDataVersion", 99);
+        processing.put("nested", nested);
+        root.put("ae2ocProcessing", processing);
+        var before = root.copy();
+        var report = MigrationInspection.inspect(root);
+        check(root.equals(before));
+        check(report.logicalInventories() == 1);
+        check(report.processingBatches() == 1);
+        check(report.legacyCountFields() == 1);
+        check(report.currentDataVersions() == 1);
+        check(report.unknownDataVersions() == 1);
+        check(report.hasAe2OcData());
     }
 
     private static void retryBackoffIsBoundedAndResettable() {
