@@ -4,7 +4,7 @@ import appeng.api.config.Actionable;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.AEKeyType;
 import appeng.api.stacks.GenericStack;
-import moakiee.support.OverstackingRegistry;
+import moakiee.ae2oc.compat.ae2.ManagedGenericInventory;
 import moakiee.ae2oc.core.quantity.SaturatedMath;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -19,10 +19,10 @@ import java.util.Objects;
  * 注入 GenericStackInv 的核心方法，绕过堆叠限制。
  */
 @Mixin(value = appeng.helpers.externalstorage.GenericStackInv.class, remap = false)
-public abstract class MixinGenericStackInv implements moakiee.ae2oc.compat.ae2.ManagedGenericInventory {
+public abstract class MixinGenericStackInv implements ManagedGenericInventory {
     @org.spongepowered.asm.mixin.Unique private boolean ae2oc_managed;
     @Override public boolean ae2oc$isManaged() { return ae2oc_managed; }
-    @Override public void ae2oc$setManaged(boolean managed) { ae2oc_managed = managed; }
+    @Override public void ae2oc$markManaged() { ae2oc_managed = true; }
     
     @Shadow
     protected GenericStack[] stacks;
@@ -51,13 +51,7 @@ public abstract class MixinGenericStackInv implements moakiee.ae2oc.compat.ae2.M
     // ===== setStack 注入 - 绕过 clamp 逻辑 =====
     @Inject(method = "setStack", at = @At("HEAD"), cancellable = true)
     private void ae2oc_setStack(int slot, GenericStack stack, CallbackInfo ci) {
-        // 检查是否是超堆叠场景：数量 > 64 或已注册
-        boolean shouldBypass = false;
-        if (OverstackingRegistry.shouldAllowOverstacking(this)) {
-            shouldBypass = true;
-        }
-        
-        if (!shouldBypass) {
+        if (!ae2oc$isManaged()) {
             return;
         }
         
@@ -74,7 +68,7 @@ public abstract class MixinGenericStackInv implements moakiee.ae2oc.compat.ae2.M
     @Inject(method = "insert(ILappeng/api/stacks/AEKey;JLappeng/api/config/Actionable;)J", at = @At("HEAD"), cancellable = true)
     private void ae2oc_insert(int slot, AEKey what, long amount, Actionable mode, CallbackInfoReturnable<Long> cir) {
         // 只在注册的 inventory 中生效（在放入时，判断当前数量可能还是 0）
-        if (!OverstackingRegistry.shouldAllowOverstacking(this)) {
+        if (!ae2oc$isManaged()) {
             return;
         }
         
@@ -112,14 +106,7 @@ public abstract class MixinGenericStackInv implements moakiee.ae2oc.compat.ae2.M
     // ===== extract 注入 - 确保正确提取 =====
     @Inject(method = "extract(ILappeng/api/stacks/AEKey;JLappeng/api/config/Actionable;)J", at = @At("HEAD"), cancellable = true)
     private void ae2oc_extract(int slot, AEKey what, long amount, Actionable mode, CallbackInfoReturnable<Long> cir) {
-        // 检查是否是超堆叠场景：当前数量 > 64 或已注册
-        long currentAmount = getAmount(slot);
-        boolean shouldBypass = false;
-        if (OverstackingRegistry.shouldAllowOverstacking(this)) {
-            shouldBypass = true;
-        }
-        
-        if (!shouldBypass) {
+        if (!ae2oc$isManaged()) {
             return;
         }
         
@@ -135,6 +122,7 @@ public abstract class MixinGenericStackInv implements moakiee.ae2oc.compat.ae2.M
             return;
         }
         
+        long currentAmount = getAmount(slot);
         long canExtract = Math.min(currentAmount, amount);
         
         if (canExtract > 0) {

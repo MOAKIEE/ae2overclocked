@@ -4,7 +4,7 @@ import appeng.api.stacks.AEKeyType;
 import appeng.helpers.externalstorage.GenericStackInv;
 import moakiee.ae2oc.compat.ae2.MachineFeatures;
 import moakiee.ae2oc.compat.ae2.UpgradeProfileCache;
-import moakiee.support.OverstackingRegistry;
+import moakiee.ae2oc.compat.ae2.ManagedGenericInventory;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Shadow;
@@ -25,7 +25,7 @@ public abstract class MixinAE2CSEntropyVariationReactionChamberCapacity implemen
         GenericStackInv[] inventories = {getInputInv(), getOutputInv()};
         for (int i = 0; i < inventories.length; i++) {
             var inv = inventories[i];
-            OverstackingRegistry.register(inv);
+            ((ManagedGenericInventory) inv).ae2oc$markManaged();
             long items = profile.capacity() ? profile.capacityLimit() : ae2oc_base[2 * i];
             long fluids = profile.capacity() ? profile.capacityLimit() : ae2oc_base[2 * i + 1];
             if (inv.getCapacity(AEKeyType.items()) != items) inv.setCapacity(AEKeyType.items(), items);

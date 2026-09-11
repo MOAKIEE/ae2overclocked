@@ -160,10 +160,19 @@ public final class RefactorGameTests {
 
     @GameTest(template = "empty")
     public static void managedFluidRemovalPreservesResources(GameTestHelper helper) {
+        var ordinary = new appeng.helpers.externalstorage.GenericStackInv(null,
+                appeng.helpers.externalstorage.GenericStackInv.Mode.STORAGE, 1);
+        var ordinaryOwnership = (moakiee.ae2oc.compat.ae2.ManagedGenericInventory) ordinary;
+        helper.assertTrue(!ordinaryOwnership.ae2oc$isManaged(), "Ordinary inventory acquired machine ownership");
         var tank = new appeng.helpers.externalstorage.GenericStackInv(null,
                 appeng.helpers.externalstorage.GenericStackInv.Mode.STORAGE, 1);
-        moakiee.support.OverstackingRegistry.register(tank);
+        ((moakiee.ae2oc.compat.ae2.ManagedGenericInventory) tank).ae2oc$markManaged();
         var key = appeng.api.stacks.AEFluidKey.of(net.minecraft.world.level.material.Fluids.WATER);
+        ordinary.setCapacity(key.getType(), 16000);
+        ordinary.setStack(0, new appeng.api.stacks.GenericStack(key, 32000));
+        helper.assertTrue(ordinary.getAmount(0) == 16000, "Ordinary inventory bypassed upstream capacity");
+        helper.assertTrue(!ordinaryOwnership.ae2oc$isManaged(), "Ownership leaked between inventory instances");
+        ((moakiee.ae2oc.compat.ae2.ManagedGenericInventory) tank).ae2oc$markManaged();
         tank.setCapacity(key.getType(), Long.MAX_VALUE);
         tank.setStack(0, new appeng.api.stacks.GenericStack(key, Long.MAX_VALUE));
         tank.setCapacity(key.getType(), 16000);
@@ -172,6 +181,11 @@ public final class RefactorGameTests {
         helper.assertTrue(tank.extract(0, key, Long.MAX_VALUE - 16000, appeng.api.config.Actionable.MODULATE) == Long.MAX_VALUE - 16000,
                 "Frozen tank lost resources on extraction");
         helper.assertTrue(tank.getAmount(0) == 16000, "Wrong remaining fluid");
+        tank.extract(0, key, 1, appeng.api.config.Actionable.MODULATE);
+        helper.assertTrue(tank.insert(0, key, 2, appeng.api.config.Actionable.SIMULATE) == 1
+                        && tank.getAmount(0) == 15999, "Insertion simulation changed recovered tank");
+        helper.assertTrue(tank.insert(0, key, 2, appeng.api.config.Actionable.MODULATE) == 1
+                        && tank.getAmount(0) == 16000, "Insertion did not resume at base capacity");
         helper.succeed();
     }
 
