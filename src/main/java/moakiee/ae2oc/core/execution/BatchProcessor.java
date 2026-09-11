@@ -33,6 +33,7 @@ public final class BatchProcessor<K> {
         int ticks = state.ticksRemaining();
         if (total == state.energyRequired() && ticks > 0) ticks--;
         boolean progress = paid > 0 || ticks != state.ticksRemaining();
+        if (!progress) return false;
         state = new ProcessingState<>(state.recipe(), state.inputs(), state.outputs(),
                 state.energyRequired(), total, ticks);
         return progress;

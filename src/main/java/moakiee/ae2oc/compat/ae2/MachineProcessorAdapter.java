@@ -67,12 +67,13 @@ public class MachineProcessorAdapter {
             progressed = reserve(overclock, multiplier);
             if (!progressed) return blocked(now);
         }
+        var before = processor.snapshot();
         try {
             progressed |= processor.advance(this::extractEnergy);
             progressed |= processor.drain(Ae2OcConfig.getMaxTransferAmountPerMachineTick() / budgetShares, 64 / budgetShares, this::insertOutput);
         } finally {
             // Includes partial energy payments and each accepted output, even after a later failure.
-            host.saveChanges();
+            if (processor.snapshot() != before) host.saveChanges();
         }
         if (!progressed) return blocked(now);
         retryDelay = 5;

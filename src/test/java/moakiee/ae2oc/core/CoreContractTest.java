@@ -58,6 +58,9 @@ public final class CoreContractTest {
         BatchProcessor<String> processor = new BatchProcessor<>();
         processor.begin(new ProcessingState<>("test:recipe", List.of(new ResourceAmount<>("input", 8)),
                 List.of(new ResourceAmount<>("output", 16)), 80, 0, 5));
+        var stalled = processor.snapshot();
+        check(!processor.advance(request -> 0));
+        check(processor.snapshot() == stalled);
         double[] charged = {0};
         for (int tick = 0; tick < 12; tick++) {
             processor.advance(request -> { double paid = Math.min(request, 10); charged[0] += paid; return paid; });
