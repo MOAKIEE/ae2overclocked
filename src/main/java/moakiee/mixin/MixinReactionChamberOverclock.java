@@ -1,12 +1,12 @@
 package moakiee.mixin;
 
-import appeng.api.inventories.InternalInventory;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.ticking.TickRateModulation;
+import appeng.me.storage.CompositeStorage;
+import net.minecraft.core.Direction;
 import net.pedroksl.advanced_ae.common.entities.ReactionChamberEntity;
 import moakiee.ae2oc.compat.advancedae.ReactionAdapter;
 import org.spongepowered.asm.mixin.Pseudo;
-import appeng.recipes.handlers.InscriberRecipe;
 import moakiee.ae2oc.compat.ae2.MachineProcessorAdapter;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.core.BlockPos;
@@ -14,8 +14,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.item.ItemStack;
 import java.util.List;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.gen.Invoker;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -27,6 +27,10 @@ public abstract class MixinReactionChamberOverclock {
 
 
     @Unique private MachineProcessorAdapter ae2oc_adapter;
+
+    /** Upstream export target for one configured output side. */
+    @Invoker("getTarget")
+    protected abstract CompositeStorage ae2oc$target(Direction direction);
 
     @Unique private MachineProcessorAdapter ae2oc_adapter() {
         if (ae2oc_adapter == null) {
@@ -48,7 +52,11 @@ public abstract class MixinReactionChamberOverclock {
     @Inject(method = "tickingRequest", at = @At("HEAD"), cancellable = true)
     private void ae2oc_tick(IGridNode node, int elapsed, CallbackInfoReturnable<TickRateModulation> cir) {
         var result = ae2oc_adapter().tick();
-        if (result != null) cir.setReturnValue(result);
+        if (result != null) {
+            if (moakiee.ae2oc.compat.advancedae.ReactionExport.push((ReactionChamberEntity) (Object) this, this::ae2oc$target))
+                result = TickRateModulation.URGENT;
+            cir.setReturnValue(result);
+        }
     }
 
     @Inject(method = {"saveAdditional", "m_183515_"}, at = @At("TAIL"), require = 1)
@@ -66,6 +74,13 @@ public abstract class MixinReactionChamberOverclock {
     @Inject(method = "addAdditionalDrops", at = @At("TAIL"))
     private void ae2oc_drops(Level level, BlockPos pos, List<ItemStack> drops, CallbackInfo ci) {
         moakiee.ae2oc.compat.ae2.ManagedItemStorages.addHiddenDrops(ae2oc_items(), drops);
+        // Upstream calls AEKey#addDrops on both tank slots, which is a no-op for fluids and would destroy them.
+        var tank = ((ReactionChamberEntity) (Object) this).getTank();
+        for (int slot = 0; slot < tank.size(); slot++) {
+            var fluid = tank.getStack(slot);
+            if (fluid != null && fluid.amount() > 0)
+                drops.add(moakiee.item.StoredResourcesItem.pack(fluid.what(), fluid.amount()));
+        }
         if (ae2oc_adapter != null) ae2oc_adapter.addDrops(drops);
     }
     @Unique private appeng.api.inventories.InternalInventory ae2oc_items() {
