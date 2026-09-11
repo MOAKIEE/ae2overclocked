@@ -18,7 +18,7 @@ import java.util.Objects;
 /**
  * 注入 GenericStackInv 的核心方法，绕过堆叠限制。
  */
-@Mixin(targets = "appeng.helpers.externalstorage.GenericStackInv", remap = false)
+@Mixin(value = appeng.helpers.externalstorage.GenericStackInv.class, remap = false)
 public abstract class MixinGenericStackInv implements moakiee.ae2oc.compat.ae2.ManagedGenericInventory {
     @org.spongepowered.asm.mixin.Unique private boolean ae2oc_managed;
     @Override public boolean ae2oc$isManaged() { return ae2oc_managed; }

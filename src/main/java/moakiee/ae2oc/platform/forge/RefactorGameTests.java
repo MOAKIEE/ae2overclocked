@@ -90,7 +90,7 @@ public final class RefactorGameTests {
         helper.assertTrue(!moakiee.ae2oc.compat.ae2.UpgradeProfileCache.of(machine).energy(), "Removed energy card remained cached");
         for (String id : List.of("ae2cs:circuit_etcher", "ae2cs:crystal_pulverizer",
                 "ae2cs:crystal_aggregator", "ae2cs:entropy_variation_reaction_chamber")) {
-            var key = new ResourceLocation(id);
+            var key = ResourceLocation.parse(id);
             if (!ForgeRegistries.BLOCKS.containsKey(key)) continue;
             helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(key));
             var host = helper.getBlockEntity(pos);
@@ -190,7 +190,7 @@ public final class RefactorGameTests {
                 "advanced_ae:reaction_chamber", "ae2cs:circuit_etcher", "ae2cs:crystal_pulverizer",
                 "ae2cs:crystal_aggregator", "ae2cs:entropy_variation_reaction_chamber"};
         for (String id : ids) {
-            var key = new ResourceLocation(id);
+            var key = ResourceLocation.parse(id);
             if (!ForgeRegistries.BLOCKS.containsKey(key)) continue;
             var block = ForgeRegistries.BLOCKS.getValue(key);
             helper.setBlock(new BlockPos(1, 1, 1), block);

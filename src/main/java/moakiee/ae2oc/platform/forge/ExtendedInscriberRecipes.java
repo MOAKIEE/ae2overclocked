@@ -28,7 +28,7 @@ final class ExtendedInscriberRecipes {
         var pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos, Blocks.AIR);
         helper.setBlock(pos.west(), AEBlocks.CREATIVE_ENERGY_CELL.block());
-        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation("expatternprovider:ex_inscriber")));
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "ex_inscriber")));
         var machine = (TileExInscriber) helper.getBlockEntity(pos);
         helper.runAfterDelay(40, () -> {
             helper.assertTrue(machine.getMainNode().isActive(), "Extended inscriber grid is inactive");
@@ -108,7 +108,7 @@ final class ExtendedInscriberRecipes {
     static void exportConservation(GameTestHelper helper, boolean upgraded) {
         var pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos, Blocks.AIR);
-        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation("expatternprovider:ex_inscriber")));
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "ex_inscriber")));
         helper.setBlock(pos.east(), Blocks.CHEST);
         var machine = (TileExInscriber) helper.getBlockEntity(pos);
         var chest = (ChestBlockEntity) helper.getBlockEntity(pos.east());
@@ -143,7 +143,7 @@ final class ExtendedInscriberRecipes {
     static void laneExportIsolation(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos, Blocks.AIR);
-        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation("expatternprovider:ex_inscriber")));
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "ex_inscriber")));
         helper.setBlock(pos.east(), Blocks.CHEST);
         var machine = (TileExInscriber) helper.getBlockEntity(pos);
         var chest = (ChestBlockEntity) helper.getBlockEntity(pos.east());
@@ -178,7 +178,7 @@ final class ExtendedInscriberRecipes {
         var pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos, Blocks.AIR);
         helper.setBlock(pos.west(), AEBlocks.CREATIVE_ENERGY_CELL.block());
-        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation("expatternprovider:ex_inscriber")));
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "ex_inscriber")));
         helper.setBlock(pos.east(), Blocks.CHEST);
         var machine = (TileExInscriber) helper.getBlockEntity(pos);
         var chest = (ChestBlockEntity) helper.getBlockEntity(pos.east());
@@ -261,7 +261,7 @@ final class ExtendedInscriberRecipes {
         var pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos, Blocks.AIR);
         helper.setBlock(pos.west(), AEBlocks.CREATIVE_ENERGY_CELL.block());
-        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation("expatternprovider:ex_inscriber")));
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "ex_inscriber")));
         helper.setBlock(pos.east(), Blocks.CHEST);
         var machine = (TileExInscriber) helper.getBlockEntity(pos);
         var chest = (ChestBlockEntity) helper.getBlockEntity(pos.east());
@@ -340,7 +340,7 @@ final class ExtendedInscriberRecipes {
     /** Additional drops contain only projection overflow and the resources currently owned by batches. */
     static void dropPackaging(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
-        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation("expatternprovider:ex_inscriber")));
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "ex_inscriber")));
         var machine = (TileExInscriber) helper.getBlockEntity(pos);
         var iron = AEItemKey.of(Items.IRON_INGOT);
         var gold = AEItemKey.of(Items.GOLD_INGOT);
@@ -380,7 +380,7 @@ final class ExtendedInscriberRecipes {
     /** Server destruction must combine upstream visible stacks with our overflow and batch packages. */
     static void destructionDrops(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
-        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation("expatternprovider:ex_inscriber")));
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "ex_inscriber")));
         var machine = (TileExInscriber) helper.getBlockEntity(pos);
         var iron = AEItemKey.of(Items.IRON_INGOT);
         var diamond = AEItemKey.of(Items.DIAMOND);

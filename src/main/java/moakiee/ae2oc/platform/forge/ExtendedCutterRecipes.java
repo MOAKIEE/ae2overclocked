@@ -46,7 +46,7 @@ final class ExtendedCutterRecipes {
     private static TileCircuitCutter place(GameTestHelper helper, BlockPos pos) {
         helper.setBlock(pos, Blocks.AIR);
         helper.setBlock(pos.west(), AEBlocks.CREATIVE_ENERGY_CELL.block());
-        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation("expatternprovider:circuit_cutter")));
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "circuit_cutter")));
         return (TileCircuitCutter) helper.getBlockEntity(pos);
     }
 
@@ -185,7 +185,7 @@ final class ExtendedCutterRecipes {
      */
     static void destructionDrops(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
-        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation("expatternprovider:circuit_cutter")));
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "circuit_cutter")));
         var machine = (TileCircuitCutter) helper.getBlockEntity(pos);
         outputSlot(machine).write(new ResourceAmount<AEKey>(PRINT, 130));
         machine.getTank().setStack(0, new GenericStack(WATER, 4000));

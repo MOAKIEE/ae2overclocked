@@ -17,7 +17,6 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
@@ -32,11 +31,11 @@ public class Ae2Overclocked {
     public static final String MODID = "ae2_overclocked";
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    public Ae2Overclocked() {
-        IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
+    public Ae2Overclocked(FMLJavaModLoadingContext context) {
+        IEventBus modEventBus = context.getModEventBus();
 
         // 注册通用配置文件：ae2_overclocked-common.toml
-        ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, Ae2OcConfig.SPEC);
+        context.registerConfig(ModConfig.Type.COMMON, Ae2OcConfig.SPEC);
 
         // 注册所有物品
         ModItems.ITEMS.register(modEventBus);
