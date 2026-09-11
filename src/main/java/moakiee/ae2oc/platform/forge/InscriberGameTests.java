@@ -23,6 +23,53 @@ import net.minecraftforge.gametest.PrefixGameTestTemplate;
 @GameTestHolder(Ae2Overclocked.MODID)
 @PrefixGameTestTemplate(false)
 public final class InscriberGameTests {
+    @GameTest(template = "empty", timeoutTicks = 200)
+    public static void inscriberRecipeSurvivesReloadAndCardRemoval(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos.west(), AEBlocks.CREATIVE_ENERGY_CELL.block());
+        helper.setBlock(pos, AEBlocks.INSCRIBER.block());
+        var machine = (InscriberBlockEntity) helper.getBlockEntity(pos);
+        helper.runAfterDelay(40, () -> {
+            helper.assertTrue(machine.getMainNode().isActive(), "Lifecycle test grid did not become active");
+            machine.getUpgrades().setItemDirect(0, new ItemStack(ModItems.PARALLEL_CARD_8X.get()));
+            machine.getConfigManager().putSetting(Settings.AUTO_EXPORT, YesNo.NO);
+            var slots = ManagedItemStorages.slots(machine.getInternalInventory());
+            var print = AEItemKey.of(appeng.core.definitions.AEItems.LOGIC_PROCESSOR_PRINT.asItem());
+            slots.get(0).write(new ResourceAmount<AEKey>(AEItemKey.of(appeng.core.definitions.AEItems.LOGIC_PROCESSOR_PRESS.asItem()), 1));
+            slots.get(2).write(new ResourceAmount<AEKey>(AEItemKey.of(Items.GOLD_INGOT), 8));
+            slots.get(3).write(new ResourceAmount<AEKey>(print, 63));
+            machine.tickingRequest(machine.getMainNode().getNode(), 1);
+            var reserved = machine.saveWithFullMetadata();
+            var batch = moakiee.ae2oc.compat.ae2.ProcessingCodec.read(reserved.getCompound("ae2ocProcessing"));
+            helper.assertTrue(batch.inputs().get(0).amount() == 8 && batch.energyPaid() > 0 && !batch.finished(),
+                    "Real recipe did not reserve and pay for eight operations");
+            machine.load(reserved);
+            machine.load(reserved);
+            helper.assertTrue(moakiee.support.MachineBreakProtection.getInternalItemTotalCount(machine) == 72,
+                    "Repeated recipe reload changed held resources");
+            machine.getUpgrades().setItemDirect(0, ItemStack.EMPTY);
+            for (int tick = 0; tick < 120; tick++) machine.tickingRequest(machine.getMainNode().getNode(), 1);
+            var blocked = machine.saveWithFullMetadata();
+            var pending = moakiee.ae2oc.compat.ae2.ProcessingCodec.read(blocked.getCompound("ae2ocProcessing"));
+            helper.assertTrue(pending.finished() && pending.outputs().get(0).amount() == 7 && amount(slots.get(3)) == 64,
+                    "Full output did not preserve the seven pending results after card removal");
+            helper.assertTrue(pending.energyPaid() == batch.energyRequired(), "Reload changed the recipe payment");
+            var extracted = machine.getInternalInventory().extractItem(3, 64, false);
+            helper.assertTrue(print.matches(extracted) && extracted.getCount() == 64, "Could not extract legal completed output");
+            // Persist after extraction: replaying an older world snapshot is not a supported transaction.
+            var resume = machine.saveWithFullMetadata();
+            machine.load(resume);
+            machine.load(resume);
+            machine.tickingRequest(machine.getMainNode().getNode(), 1);
+            var rest = machine.getInternalInventory().extractItem(3, 64, false);
+            helper.assertTrue(print.matches(rest) && rest.getCount() == 7, "Pending results were lost or replayed");
+            for (int tick = 0; tick < 5; tick++) machine.tickingRequest(machine.getMainNode().getNode(), 1);
+            helper.assertTrue(amount(slots.get(0)) == 1 && amount(slots.get(2)) == 0 && amount(slots.get(3)) == 0
+                    && !machine.saveWithFullMetadata().contains("ae2ocProcessing"), "Completed recipe retained resources or replayed output");
+            helper.succeed();
+        });
+    }
+
     @GameTest(template = "empty", timeoutTicks = 1200)
     public static void inscriberInscriptionRecipeMatrix(GameTestHelper helper) {
         recipeScenario(helper, false, 0);
