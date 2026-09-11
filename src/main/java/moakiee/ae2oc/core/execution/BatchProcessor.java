@@ -6,7 +6,12 @@ import java.util.function.ToDoubleFunction;
 import java.util.function.ToLongFunction;
 import moakiee.ae2oc.api.ResourceAmount;
 
-/** Server-thread processor. Resource ports must return the exact amount actually transferred. */
+/**
+ * Server-thread processor. Resource ports must return the exact amount actually transferred.
+ * A throwing port must have transferred nothing in that call. Side effects followed by an
+ * exception (or an inaccurate return value) cannot be reconciled without a transactional port.
+ * Successful earlier calls remain accounted for when a later call fails.
+ */
 public final class BatchProcessor<K> {
     private ProcessingState<K> state;
 

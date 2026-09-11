@@ -21,6 +21,7 @@ import moakiee.support.ParallelCardRuntime;
 import moakiee.ae2oc.api.ResourceAmount;
 import moakiee.ae2oc.core.execution.BatchProcessor;
 import moakiee.ae2oc.core.execution.ProcessingState;
+import moakiee.ae2oc.core.execution.SlotTransaction;
 import moakiee.ae2oc.core.planning.BatchPlanner;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
@@ -118,14 +119,10 @@ public class MachineProcessorAdapter {
         var outputs = recipe.outputs().stream().map(output -> new ResourceAmount<>(output.key(), count * output.amount())).toList();
         var state = new ProcessingState<AEKey>(recipe.id(), inputs, outputs, plan.energyCost(), 0,
                 overclock ? Ae2OcConfig.getOverclockCardProcessTicks() : recipe.normalTicks());
-        try {
-            for (var debit : recipe.inputs()) if (debit.consumed() > 0) {
-                debit.slot().write(new ResourceAmount<>(debit.before().key(), debit.before().amount() - count * debit.consumed()));
-            }
-        } catch (RuntimeException failure) {
-            for (var debit : recipe.inputs()) debit.slot().write(debit.before());
-            throw failure;
-        }
+        SlotTransaction.apply(recipe.inputs().stream().filter(debit -> debit.consumed() > 0)
+                .map(debit -> new SlotTransaction.Write<>(debit.slot()::write, debit.before(),
+                        new ResourceAmount<>(debit.before().key(), debit.before().amount() - count * debit.consumed())))
+                .toList());
         processor.begin(state);
         host.saveChanges();
         return true;
