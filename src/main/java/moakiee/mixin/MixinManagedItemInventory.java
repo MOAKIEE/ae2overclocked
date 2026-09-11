@@ -17,7 +17,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Only explicitly attached processing inventories use logical storage. */
 @Mixin(value = AppEngInternalInventory.class, remap = false)
-public abstract class MixinManagedItemInventory extends BaseInternalInventory implements ManagedItemInventory {
+public abstract class MixinManagedItemInventory extends BaseInternalInventory implements ManagedItemInventory, moakiee.ae2oc.compat.ae2.UpgradeRevision {
+    @Unique private long ae2oc_revision;
+    @Override public long ae2oc$upgradeRevision() { return ae2oc_revision; }
+    @Inject(method = "onContentsChanged", at = @At("HEAD"))
+    private void ae2oc_upgradeChanged(int slot, CallbackInfo ci) {
+        if (this instanceof appeng.api.upgrades.IUpgradeInventory) ae2oc_revision++;
+    }
+    @Inject(method = "readFromNBT", at = @At("RETURN"))
+    private void ae2oc_upgradeLoaded(net.minecraft.nbt.CompoundTag tag, String name, CallbackInfo ci) {
+        if (this instanceof appeng.api.upgrades.IUpgradeInventory) ae2oc_revision++;
+    }
     @Unique private LongItemStorage ae2oc_storage;
     @Shadow private IAEItemFilter filter;
     @Shadow protected abstract void onContentsChanged(int slot);

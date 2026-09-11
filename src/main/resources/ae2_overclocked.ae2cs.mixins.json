@@ -5,7 +5,7 @@
   "plugin": "moakiee.mixin.Ae2OcMixinPlugin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
-    "MixinAE2CSItemMachinesCapacity",
+    "MixinAE2CSMachineFeatures",
     "MixinAE2CSEntropyVariationReactionChamberCapacity",
     "MixinAE2CSEnergyComponent",
     "MixinAE2CSCircuitEtcherProcessing",

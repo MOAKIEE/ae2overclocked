@@ -20,6 +20,39 @@ import net.minecraftforge.registries.ForgeRegistries;
 @PrefixGameTestTemplate(false)
 public final class RefactorGameTests {
     @GameTest(template = "empty")
+    public static void upgradeChangesInvalidateProfileAndClampEnergy(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());
+        var machine = (appeng.blockentity.misc.InscriberBlockEntity) helper.getBlockEntity(pos);
+        double base = machine.getInternalMaxPower();
+        var first = moakiee.ae2oc.compat.ae2.UpgradeProfileCache.of(machine);
+        machine.getUpgrades().setItemDirect(0, new net.minecraft.world.item.ItemStack(moakiee.ModItems.SUPER_ENERGY_CARD.get()));
+        var upgraded = moakiee.ae2oc.compat.ae2.UpgradeProfileCache.of(machine);
+        helper.assertTrue(!first.energy() && upgraded.energy(), "Upgrade change did not invalidate profile");
+        machine.injectAEPower(base * 10, appeng.api.config.Actionable.MODULATE);
+        helper.assertTrue(machine.getInternalCurrentPower() > base, "Energy card did not expand internal buffer");
+        machine.getUpgrades().setItemDirect(0, net.minecraft.world.item.ItemStack.EMPTY);
+        helper.assertTrue(machine.getInternalCurrentPower() == base, "Energy removal did not immediately clamp to base capacity");
+        helper.assertTrue(!moakiee.ae2oc.compat.ae2.UpgradeProfileCache.of(machine).energy(), "Removed energy card remained cached");
+        for (String id : List.of("ae2cs:circuit_etcher", "ae2cs:crystal_pulverizer",
+                "ae2cs:crystal_aggregator", "ae2cs:entropy_variation_reaction_chamber")) {
+            var key = new ResourceLocation(id);
+            if (!ForgeRegistries.BLOCKS.containsKey(key)) continue;
+            helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(key));
+            var host = helper.getBlockEntity(pos);
+            var upgrades = ((appeng.api.upgrades.IUpgradeableObject) host).getUpgrades();
+            var energy = (appeng.api.networking.energy.IAEPowerStorage) host;
+            double original = energy.getAEMaxPower();
+            upgrades.setItemDirect(0, new net.minecraft.world.item.ItemStack(moakiee.ModItems.SUPER_ENERGY_CARD.get()));
+            energy.injectAEPower(original * 10, appeng.api.config.Actionable.MODULATE);
+            helper.assertTrue(energy.getAECurrentPower() > original, "Energy buffer did not expand: " + id);
+            upgrades.setItemDirect(0, net.minecraft.world.item.ItemStack.EMPTY);
+            helper.assertTrue(energy.getAECurrentPower() == original, "Energy removal did not clamp immediately: " + id);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void menuProjectionCannotEscapeToCursor(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());

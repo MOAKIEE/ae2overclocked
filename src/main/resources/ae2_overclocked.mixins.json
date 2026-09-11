@@ -5,7 +5,6 @@
   "plugin": "moakiee.mixin.Ae2OcMixinPlugin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
-    "MixinAEBaseBlockEntityCapacityHook",
     "MixinConfigInventory",
     "MixinGenericStackInv",
     "MixinIOBusPartSuperSpeed",
@@ -16,7 +15,8 @@
     "MixinManagedItemInventory",
     "AccessorCombinedInventory",
     "AccessorAppEngSlot",
-    "MixinLogicalMenu"
+    "MixinLogicalMenu",
+    "MixinMachineFeatures"
   ],
   "client": [],
   "injectors": {

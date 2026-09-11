@@ -47,7 +47,7 @@ public final class Ae2OcMixinPlugin implements IMixinConfigPlugin {
         try {
             for (String signature : targets) {
                 String[] parts = signature.split("#");
-                var node = MixinService.getService().getBytecodeProvider().getClassNode(parts[0], false);
+                var node = MixinService.getService().getBytecodeProvider().getClassNode(parts[0]);
                 if (node.methods.stream().noneMatch(method -> method.name.equals(parts[1]) && method.desc.equals(parts[2])))
                     throw new IllegalStateException("Missing signature: " + signature);
             }

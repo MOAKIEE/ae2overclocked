@@ -55,9 +55,9 @@ public class MachineProcessorAdapter {
 
     /** Null delegates a completely unmodified machine to upstream. */
     public TickRateModulation tick() {
-        boolean disabled = Ae2OcConfig.isMachineDisabled(host);
-        boolean overclock = !disabled && upgrades.getUpgrades().getInstalledUpgrades(ModItems.OVERCLOCK_CARD.get()) > 0;
-        int multiplier = disabled ? 1 : ParallelCardRuntime.getParallelMultiplier(host);
+        var profile = UpgradeProfileCache.of(host);
+        boolean overclock = profile.overclock();
+        int multiplier = profile.parallelLimit();
         if (processor.snapshot() == null && !overclock && multiplier <= 1) return null;
         if (!((IGridConnectedBlockEntity) host).getMainNode().isActive() || host.getLevel() == null) return TickRateModulation.IDLE;
         long now = host.getLevel().getGameTime();

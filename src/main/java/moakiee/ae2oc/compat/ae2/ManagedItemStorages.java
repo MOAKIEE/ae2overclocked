@@ -49,9 +49,8 @@ public final class ManagedItemStorages {
             int[] base = new int[app.size()];
             var initial = new net.minecraft.world.item.ItemStack[app.size()];
             for (int i = 0; i < base.length; i++) { base[i] = app.getSlotLimit(i); initial[i] = app.getStackInSlot(i).copy(); }
-            var storage = new LongItemStorage(app.size(), slot -> !Ae2OcConfig.isMachineDisabled(host)
-                    && host.getUpgrades().getInstalledUpgrades(ModItems.CAPACITY_CARD.get()) > 0
-                    ? Ae2OcConfig.getCapacityCardSlotLimit() : base[slot]);
+            var storage = new LongItemStorage(app.size(), slot -> UpgradeProfileCache.of(host).capacity()
+                    ? UpgradeProfileCache.of(host).capacityLimit() : base[slot]);
             for (int i = 0; i < base.length; i++) if (!initial[i].isEmpty())
                 storage.slot(i).restore(appeng.api.stacks.AEItemKey.of(initial[i]), initial[i].getCount());
             managed.ae2oc$attach(storage);

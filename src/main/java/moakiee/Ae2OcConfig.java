@@ -141,6 +141,8 @@ public final class Ae2OcConfig {
     }
 
     private static volatile java.util.Set<ResourceLocation> disabledIds = java.util.Set.of();
+    private static volatile long configRevision;
+    public static long revision() { return configRevision; }
 
     public static void reload(net.minecraftforge.fml.event.config.ModConfigEvent event) {
         if (event.getConfig().getSpec() != SPEC) return;
@@ -151,6 +153,7 @@ public final class Ae2OcConfig {
             else parsed.add(id);
         }
         disabledIds = java.util.Set.copyOf(parsed);
+        configRevision++;
     }
 
     public static boolean isMachineDisabled(Object machine) {
