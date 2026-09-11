@@ -73,6 +73,12 @@ minecraft {
             // You can set various levels here.
             // Please read: https://stackoverflow.com/questions/2031163/when-to-use-the-different-log-levels
             property 'forge.logging.console.level', 'debug'
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
+            args '--mixin', 'ae2_overclocked.mixins.json',
+                    '--mixin', 'ae2_overclocked.extendedae.mixins.json',
+                    '--mixin', 'ae2_overclocked.advancedae.mixins.json',
+                    '--mixin', 'ae2_overclocked.ae2cs.mixins.json'
 
             mods {
                 "${mod_id}" {
@@ -129,6 +135,7 @@ dependencies {
 
     // AE2 (Applied Energistics 2) - 必选前置
     implementation fg.deobf("curse.maven:applied-energistics-2-223794:${ae2_file_id}")
+    runtimeOnly fg.deobf("curse.maven:guideme-1173950:${guideme_file_id}")
     // ExtendedAE (Ex Pattern Provider) - 可选兼容
     compileOnly fg.deobf("curse.maven:ex-pattern-provider-892005:${extendedae_file_id}")
     // AdvancedAE - 可选兼容
@@ -141,9 +148,11 @@ dependencies {
     }
     if (providers.gradleProperty('compatRuntime').getOrElse('none') in ['extendedae', 'all']) {
         runtimeOnly fg.deobf("curse.maven:ex-pattern-provider-892005:${extendedae_file_id}")
+        runtimeOnly fg.deobf("curse.maven:glodium-957920:${glodium_file_id}")
     }
     if (providers.gradleProperty('compatRuntime').getOrElse('none') in ['advancedae', 'all']) {
         runtimeOnly fg.deobf("curse.maven:advancedae-1084104:${advancedae_file_id}")
+        runtimeOnly fg.deobf("curse.maven:geckolib-388172:${geckolib_file_id}")
     }
 
     // Mixin annotation processor

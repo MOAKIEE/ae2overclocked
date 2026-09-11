@@ -19,7 +19,10 @@ import java.util.Objects;
  * 注入 GenericStackInv 的核心方法，绕过堆叠限制。
  */
 @Mixin(targets = "appeng.helpers.externalstorage.GenericStackInv", remap = false)
-public abstract class MixinGenericStackInv {
+public abstract class MixinGenericStackInv implements moakiee.ae2oc.compat.ae2.ManagedGenericInventory {
+    @org.spongepowered.asm.mixin.Unique private boolean ae2oc_managed;
+    @Override public boolean ae2oc$isManaged() { return ae2oc_managed; }
+    @Override public void ae2oc$setManaged(boolean managed) { ae2oc_managed = managed; }
     
     @Shadow
     protected GenericStack[] stacks;
@@ -50,9 +53,7 @@ public abstract class MixinGenericStackInv {
     private void ae2oc_setStack(int slot, GenericStack stack, CallbackInfo ci) {
         // 检查是否是超堆叠场景：数量 > 64 或已注册
         boolean shouldBypass = false;
-        if (stack != null && stack.amount() > 64) {
-            shouldBypass = true;
-        } else if (OverstackingRegistry.shouldAllowOverstacking(this)) {
+        if (OverstackingRegistry.shouldAllowOverstacking(this)) {
             shouldBypass = true;
         }
         
@@ -114,9 +115,7 @@ public abstract class MixinGenericStackInv {
         // 检查是否是超堆叠场景：当前数量 > 64 或已注册
         long currentAmount = getAmount(slot);
         boolean shouldBypass = false;
-        if (currentAmount > 64) {
-            shouldBypass = true;
-        } else if (OverstackingRegistry.shouldAllowOverstacking(this)) {
+        if (OverstackingRegistry.shouldAllowOverstacking(this)) {
             shouldBypass = true;
         }
         

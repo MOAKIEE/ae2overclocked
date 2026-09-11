@@ -37,29 +37,7 @@ public final class CapacityCardRuntime {
             ? defaultCapacity
             : (getInstalledCapacityCards(host) > 0 ? upgradedCapacity : defaultCapacity);
         inv.setCapacity(AEKeyType.fluids(), targetCapacity);
-        clampFluidToCapacity(inv, targetCapacity);
-    }
-
-    private static void clampFluidToCapacity(GenericStackInv inv, long targetCapacity) {
-        long safeCapacity = Math.max(targetCapacity, 0L);
-
-        for (int i = 0; i < inv.size(); i++) {
-            GenericStack stack = inv.getStack(i);
-            if (stack == null || stack.what() == null || stack.what().getType() != AEKeyType.fluids()) {
-                continue;
-            }
-
-            long amount = stack.amount();
-            if (amount <= safeCapacity) {
-                continue;
-            }
-
-            if (safeCapacity <= 0L) {
-                inv.setStack(i, null);
-            } else {
-                inv.setStack(i, new GenericStack(stack.what(), safeCapacity));
-            }
-        }
+        OverstackingRegistry.register(inv);
     }
 
     private static int getInstalledCapacityCards(@Nullable Object target, int depth) {
