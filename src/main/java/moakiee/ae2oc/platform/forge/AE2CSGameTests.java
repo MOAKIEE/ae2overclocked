@@ -45,4 +45,16 @@ public final class AE2CSGameTests {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
         AE2CSCircuitEtcherRecipes.destructionDrops(helper);
     }
+
+    @GameTest(template = "empty", timeoutTicks = 2000)
+    public static void entropyChamberRealRecipeMatrix(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSEntropyRecipes.recipeMatrix(helper, 0);
+    }
+
+    @GameTest(template = "empty")
+    public static void entropyChamberDestructionReturnsOwnedResources(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSEntropyRecipes.destructionDrops(helper);
+    }
 }
