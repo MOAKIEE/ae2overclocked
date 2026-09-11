@@ -377,6 +377,41 @@ final class ExtendedInscriberRecipes {
         helper.succeed();
     }
 
+    /** Server destruction must combine upstream visible stacks with our overflow and batch packages. */
+    static void destructionDrops(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation("expatternprovider:ex_inscriber")));
+        var machine = (TileExInscriber) helper.getBlockEntity(pos);
+        var iron = AEItemKey.of(Items.IRON_INGOT);
+        var diamond = AEItemKey.of(Items.DIAMOND);
+        var emerald = AEItemKey.of(Items.EMERALD);
+        ManagedItemStorages.slots(machine.getIndexInventory(0)).get(3)
+                .write(new ResourceAmount<AEKey>(iron, 130));
+        var saved = machine.saveWithFullMetadata();
+        var unfinished = new moakiee.ae2oc.core.execution.ProcessingState<AEKey>("test:break-unfinished",
+                java.util.List.of(new ResourceAmount<>(diamond, 128)),
+                java.util.List.of(new ResourceAmount<>(emerald, 999)), 100, 25, 4);
+        var finished = new moakiee.ae2oc.core.execution.ProcessingState<AEKey>("test:break-finished",
+                java.util.List.of(new ResourceAmount<>(diamond, 999)),
+                java.util.List.of(new ResourceAmount<>(emerald, 256)), 100, 100, 0);
+        var lane2 = new CompoundTag();
+        lane2.put("ae2ocProcessing", ProcessingCodec.write(unfinished));
+        saved.put("ae2ocThread2", lane2);
+        var lane3 = new CompoundTag();
+        lane3.put("ae2ocProcessing", ProcessingCodec.write(finished));
+        saved.put("ae2ocThread3", lane3);
+        machine.load(saved);
+
+        helper.getLevel().destroyBlock(helper.absolutePos(pos), true, helper.makeMockPlayer());
+        helper.runAfterDelay(2, () -> {
+            var entities = helper.getEntities(net.minecraft.world.entity.EntityType.ITEM, pos, 3);
+            helper.assertTrue(entityAmount(entities, iron) == 130, "Destroyed machine did not return all logical output");
+            helper.assertTrue(entityAmount(entities, diamond) == 128, "Destroyed machine did not return reserved input");
+            helper.assertTrue(entityAmount(entities, emerald) == 256, "Destroyed machine did not return pending output");
+            helper.succeed();
+        });
+    }
+
     private static long chestCount(ChestBlockEntity chest, AEItemKey key) {
         long total = 0;
         for (int slot = 0; slot < chest.getContainerSize(); slot++)
@@ -390,6 +425,18 @@ final class ExtendedInscriberRecipes {
             if (!drop.is(moakiee.ModItems.STORED_RESOURCES.get()) || !drop.hasTag()) continue;
             var resource = AEKey.fromTagGeneric(drop.getTag().getCompound("resource"));
             if (key.equals(resource)) total += Math.max(0, drop.getTag().getLong("amount"));
+        }
+        return total;
+    }
+
+    private static long entityAmount(java.util.List<net.minecraft.world.entity.item.ItemEntity> entities, AEItemKey key) {
+        long total = 0;
+        for (var entity : entities) {
+            var stack = entity.getItem();
+            if (key.matches(stack)) total += stack.getCount();
+            else if (stack.is(moakiee.ModItems.STORED_RESOURCES.get()) && stack.hasTag()
+                    && key.equals(AEKey.fromTagGeneric(stack.getTag().getCompound("resource"))))
+                total += Math.max(0, stack.getTag().getLong("amount"));
         }
         return total;
     }
