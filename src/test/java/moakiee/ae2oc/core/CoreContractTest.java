@@ -16,6 +16,7 @@ public final class CoreContractTest {
         logicalSlots();
         processing();
         SlotTransactionTest.run();
+        ProcessorFaultTest.run();
         long[] edges = {0, 1, 2, Integer.MAX_VALUE, Long.MAX_VALUE - 1, Long.MAX_VALUE};
         for (long a : edges) for (long b : edges) arithmetic(a, b);
         Random random = new Random(0xAE20C);
