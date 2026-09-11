@@ -33,4 +33,16 @@ public final class AE2CSGameTests {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
         AE2CSAggregatorRecipes.destructionDrops(helper);
     }
+
+    @GameTest(template = "empty", timeoutTicks = 2000)
+    public static void circuitEtcherRealRecipeMatrix(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSCircuitEtcherRecipes.recipeMatrix(helper, 0);
+    }
+
+    @GameTest(template = "empty")
+    public static void circuitEtcherDestructionReturnsOwnedResources(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSCircuitEtcherRecipes.destructionDrops(helper);
+    }
 }
