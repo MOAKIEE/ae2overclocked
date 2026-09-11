@@ -1,56 +1,16 @@
-/*
- * This file includes code adapted from MakeAE2Better by QiuYe.
- * Licensed under the MIT License.
- * Original Source: https://github.com/qiuye2024github/MaekAE2Better
- * Full license text: src/main/resources/LICENSE_MakeAE2Better.txt
- */
 package moakiee.support;
 
 import moakiee.Ae2OcConfig;
 import moakiee.ae2oc.core.quantity.SaturatedMath;
 
-import java.lang.reflect.Field;
-
+/** Applies only our card multiplier; upstream already owns its native speed factors. */
 public final class SuperSpeedNumberUtil {
-
-    private SuperSpeedNumberUtil() {
-    }
-
+    private SuperSpeedNumberUtil() {}
     public static int convertLongToIntSaturating(long value) {
-        long result = boostLongSaturating(value);
-        if (result > Integer.MAX_VALUE) {
-            return Integer.MAX_VALUE;
-        } else if (result < Integer.MIN_VALUE) {
-            return Integer.MIN_VALUE;
-        } else {
-            return (int) result;
-        }
+        return (int) Math.min(boostLongSaturating(value), Ae2OcConfig.getMaxRecipeOperationsPerMachineTick());
     }
-
     public static long boostLongSaturating(long value) {
-        long multiplier = SaturatedMath.multiplyNonNegative(ae2oc_getSuperSpeedMultiplier(), ae2oc_getExtendedAeBusSpeed());
-        if (value <= 0L || multiplier <= 0L) {
-            return 0L;
-        }
-        if (value > Long.MAX_VALUE / multiplier) {
-            return Long.MAX_VALUE;
-        }
-        return value * multiplier;
-    }
-
-    private static int ae2oc_getExtendedAeBusSpeed() {
-        try {
-            Class<?> eppConfigClass = Class.forName("com.glodblock.github.extendedae.config.EPPConfig");
-            Field busSpeedField = eppConfigClass.getDeclaredField("busSpeed");
-            busSpeedField.setAccessible(true);
-            int value = busSpeedField.getInt(null);
-            return Math.max(value, 1);
-        } catch (Throwable ignored) {
-            return 1;
-        }
-    }
-
-    private static int ae2oc_getSuperSpeedMultiplier() {
-        return Math.max(Ae2OcConfig.getSuperSpeedCardMultiplier(), 1);
+        return Math.min(SaturatedMath.multiplyNonNegative(Math.max(0, value),
+                Ae2OcConfig.getSuperSpeedCardMultiplier()), Ae2OcConfig.getMaxTransferAmountPerMachineTick());
     }
 }

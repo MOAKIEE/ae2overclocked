@@ -69,7 +69,7 @@ public class MachineProcessorAdapter {
         }
         try {
             progressed |= processor.advance(this::extractEnergy);
-            progressed |= processor.drain(1_048_576 / budgetShares, 64 / budgetShares, this::insertOutput);
+            progressed |= processor.drain(Ae2OcConfig.getMaxTransferAmountPerMachineTick() / budgetShares, 64 / budgetShares, this::insertOutput);
         } finally {
             // Includes partial energy payments and each accepted output, even after a later failure.
             host.saveChanges();
@@ -99,7 +99,7 @@ public class MachineProcessorAdapter {
         if (outputAmount == 0) return false;
         var limit = multiplier == Integer.MAX_VALUE ? OptionalLong.empty() : OptionalLong.of(multiplier);
         var plan = BatchPlanner.plan(limit, materialLimit, 1_048_576L / outputAmount,
-                4096 / budgetShares, simulateEnergy(), recipe.unitEnergy());
+                Ae2OcConfig.getMaxRecipeOperationsPerMachineTick() / budgetShares, simulateEnergy(), recipe.unitEnergy());
         long count = plan.operations();
         if (count == 0) return false;
         List<ResourceAmount<AEKey>> inputs = new ArrayList<>();

@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Pseudo
 @Mixin(targets = "com.glodblock.github.extendedae.common.parts.PartExImportBus", remap = false)
-public abstract class MixinExImportBusSuperSpeed extends ImportBusPart {
+public abstract class MixinExImportBusSuperSpeed extends ImportBusPart implements moakiee.ae2oc.compat.ae2.OwnsTransferScaling {
 
     public MixinExImportBusSuperSpeed(IPartItem<?> partItem) {
         super(partItem);

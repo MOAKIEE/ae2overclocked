@@ -19,6 +19,7 @@ public abstract class MixinIOBusPartSuperSpeed implements IUpgradeableObject {
 
     @Inject(method = "getOperationsPerTick", at = @At("RETURN"), cancellable = true, remap = false)
     private void ae2oc_boostBySuperSpeedCard(CallbackInfoReturnable<Integer> cir) {
+        if (this instanceof moakiee.ae2oc.compat.ae2.OwnsTransferScaling) return;
         int superSpeedUpgrades = getInstalledUpgrades(ModItems.SUPER_SPEED_CARD.get());
         if (superSpeedUpgrades <= 0) {
             return;
