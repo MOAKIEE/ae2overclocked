@@ -38,4 +38,9 @@ public abstract class MixinExInscriberThreadOverclock implements InscriberThread
         var result = ae2oc$getAdapter().tick();
         if (result != null) cir.setReturnValue(result);
     }
+
+    @Inject(method = "isSleep", at = @At("HEAD"), cancellable = true)
+    private void ae2oc_keepOwnedBatchScheduled(CallbackInfoReturnable<Boolean> cir) {
+        if (ae2oc_adapter != null && ae2oc_adapter.hasPendingBatch()) cir.setReturnValue(false);
+    }
 }

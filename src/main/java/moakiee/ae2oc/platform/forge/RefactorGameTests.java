@@ -208,6 +208,9 @@ public final class RefactorGameTests {
             machine.load(saved);
             helper.assertTrue(moakiee.support.MachineBreakProtection.getInternalItemTotalCount(machine) == 128,
                     "Repeated loading duplicated or lost the owned batch: " + id);
+            if (machine instanceof appeng.api.networking.ticking.IGridTickable ticking) {
+                helper.assertTrue(!ticking.getTickingRequest(null).isSleeping(), "Reloaded owned batch was put to sleep");
+            }
             machine.load(empty);
             helper.assertTrue(moakiee.support.MachineBreakProtection.getInternalItemTotalCount(machine) == 0,
                     "Loading an empty snapshot retained the previous batch: " + id);

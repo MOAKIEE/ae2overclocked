@@ -36,6 +36,15 @@ public abstract class MixinReactionChamberOverclock {
         return ae2oc_adapter;
     }
 
+    @Inject(method = "getTickingRequest", at = @At("RETURN"), cancellable = true)
+    private void ae2oc_keepOwnedBatchScheduled(IGridNode node,
+            CallbackInfoReturnable<appeng.api.networking.ticking.TickingRequest> cir) {
+        if (ae2oc_adapter == null || !ae2oc_adapter.hasPendingBatch()) return;
+        var request = cir.getReturnValue();
+        cir.setReturnValue(new appeng.api.networking.ticking.TickingRequest(
+                request.minTickRate(), request.maxTickRate(), false, request.canBeAlerted(), request.initialTickRate()));
+    }
+
     @Inject(method = "tickingRequest", at = @At("HEAD"), cancellable = true)
     private void ae2oc_tick(IGridNode node, int elapsed, CallbackInfoReturnable<TickRateModulation> cir) {
         var result = ae2oc_adapter().tick();

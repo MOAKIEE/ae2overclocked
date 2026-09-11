@@ -59,6 +59,8 @@ public class MachineProcessorAdapter {
         });
     }
 
+    public boolean hasPendingBatch() { return !processor.isIdle(); }
+
     /** Null delegates a completely unmodified machine to upstream. */
     public TickRateModulation tick() {
         var profile = UpgradeProfileCache.of(host);
