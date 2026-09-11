@@ -198,6 +198,33 @@ tasks.named('processResources', ProcessResources).configure {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Release artifact trimming
+// ---------------------------------------------------------------------------
+// GameTest holders and the recipe fixtures they drive stay in the main source set, because
+// the develop-time game test server discovers them through the mod's own classpath. They are
+// development scaffolding, not part of the shipped mod, so the published jar drops them.
+//
+// Everything under the package below is develop-time only. A class placed there by mistake
+// would be silently trimmed, so verifyReleaseContents fails on any name it does not know.
+def devOnlyPackages = ['moakiee/ae2oc/platform/forge/']
+def devOnlyClasses = [
+        'AE2CSGameTests',
+        'AE2CSNaturalScheduling',
+        'AE2CSEnergySemantics',
+        'AE2CSPulverizerRecipes',
+        'AE2CSAggregatorRecipes',
+        'AE2CSCircuitEtcherRecipes',
+        'AE2CSEntropyRecipes',
+        'InscriberGameTests',
+        'ExtendedInscriberRecipes',
+        'CutterGameTests',
+        'ExtendedCutterRecipes',
+        'ReactionChamberGameTests',
+        'AdvancedReactionRecipes',
+        'RefactorGameTests',
+]
+
 // Example for how to get properties into the manifest for reading at runtime.
 tasks.named('jar', Jar).configure {
     preserveFileTimestamps = false
@@ -213,6 +240,8 @@ tasks.named('jar', Jar).configure {
                 'MixinConfigs'             : 'ae2_overclocked.mixins.json,ae2_overclocked.extendedae.mixins.json,ae2_overclocked.advancedae.mixins.json,ae2_overclocked.ae2cs.mixins.json'
         ])
     }
+
+    devOnlyPackages.each { exclude it + '**' }
 
     // This is the preferred method to reobfuscate your jar file
     finalizedBy 'reobfJar'
@@ -264,7 +293,45 @@ tasks.register('verifyArchitecture') {
         }
     }
 }
-tasks.named('check') { dependsOn 'coreContractTest', 'verifyArchitecture' }
+// Proves the published artifact carries no develop-time scaffolding. The other test source
+// sets (clientSmoke, test) are separate source sets and therefore already absent, but they
+// are asserted here too so the trimming policy stays explicit and regression-proof.
+tasks.register('verifyReleaseContents') {
+    dependsOn 'reobfJar'
+    def archive = tasks.named('jar', Jar).flatMap { it.archiveFile }
+    def devOnlySources = fileTree('src/main/java/moakiee/ae2oc/platform/forge') { include '**/*.java' }
+    inputs.file(archive)
+    inputs.files(devOnlySources)
+    doLast {
+        def zip = new java.util.zip.ZipFile(archive.get().asFile)
+        try {
+            def entries = zip.entries().collect { it.name }
+            devOnlyPackages.each { prefix ->
+                def shipped = entries.findAll { it.startsWith(prefix) }
+                if (shipped) {
+                    throw new GradleException("Release jar ships develop-time scaffolding: ${shipped}")
+                }
+            }
+            ['GameTests', 'GameTestServer', 'ClientSmoke', 'ContractTest'].each { needle ->
+                def shipped = entries.findAll { it.contains(needle) }
+                if (shipped) {
+                    throw new GradleException("Release jar ships test scaffolding: ${shipped}")
+                }
+            }
+            devOnlySources.each { source ->
+                def name = source.name.replace('.java', '')
+                if (!devOnlyClasses.contains(name)) {
+                    throw new GradleException(
+                            "${source} is inside a develop-only package but is not a known GameTest fixture; " +
+                                    "move it out or add it to devOnlyClasses in build.gradle")
+                }
+            }
+        } finally {
+            zip.close()
+        }
+    }
+}
+tasks.named('check') { dependsOn 'coreContractTest', 'verifyArchitecture', 'verifyReleaseContents' }
 if (project.hasProperty('clientSmoke')) {
     tasks.matching { it.name == 'runClient' }.configureEach { dependsOn 'clientSmokeClasses' }
 }
