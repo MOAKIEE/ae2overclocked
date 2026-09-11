@@ -20,6 +20,27 @@ import net.minecraftforge.registries.ForgeRegistries;
 @PrefixGameTestTemplate(false)
 public final class RefactorGameTests {
     @GameTest(template = "empty")
+    public static void breakProtectionIncludesHiddenAndReservedItems(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());
+        var host = (appeng.blockentity.misc.InscriberBlockEntity) helper.getBlockEntity(pos);
+        var ports = moakiee.ae2oc.compat.ae2.ManagedItemStorages.slots(host.getInternalInventory());
+        ports.get(2).write(new ResourceAmount<AEKey>(AEItemKey.of(Items.IRON_INGOT), Integer.MAX_VALUE));
+        var adapter = new moakiee.ae2oc.compat.ae2.MachineProcessorAdapter(host, host, host.getInternalInventory(), () -> null);
+        var saved = new net.minecraft.nbt.CompoundTag();
+        saved.put("ae2ocProcessing", ProcessingCodec.write(new ProcessingState<AEKey>("test:reserved",
+                List.of(new ResourceAmount<>(AEItemKey.of(Items.GOLD_INGOT), 1024)),
+                List.of(new ResourceAmount<>(AEItemKey.of(Items.DIAMOND), 2048)), 100, 50, 4)));
+        adapter.load(saved);
+        helper.assertTrue(moakiee.support.MachineBreakProtection.getInternalItemTotalCount(host) == (long) Integer.MAX_VALUE + 1024,
+                "Protection missed hidden or reserved items, or overflowed int");
+        ports.get(3).write(new ResourceAmount<AEKey>(AEItemKey.of(Items.DIAMOND), Long.MAX_VALUE));
+        helper.assertTrue(moakiee.support.MachineBreakProtection.getInternalItemTotalCount(host) == Long.MAX_VALUE,
+                "Protection count overflowed long");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void malformedStorageDoesNotPartiallyReplaceInventory(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());
@@ -172,6 +193,7 @@ public final class RefactorGameTests {
             helper.setBlock(new BlockPos(1, 1, 1), block);
             var machine = helper.getBlockEntity(new BlockPos(1, 1, 1));
             helper.assertTrue(machine != null, "Missing machine entity: " + id);
+            helper.assertTrue(moakiee.support.MachineBreakProtection.isProtectedMachine(machine), "Machine inventories were not registered: " + id);
             var saved = machine.saveWithFullMetadata();
             machine.load(saved);
             helper.assertTrue(machine.getType() == helper.getBlockEntity(new BlockPos(1, 1, 1)).getType(), "Machine type changed: " + id);

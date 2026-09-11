@@ -51,6 +51,12 @@ public class MachineProcessorAdapter {
         if (budgetShares < 1 || budgetShares > 64) throw new IllegalArgumentException("Invalid machine budget shares");
         this.budgetShares = budgetShares;
         this.outputSlot = outputSlot;
+        if (host instanceof MachineItemContents.Owner owner) owner.ae2oc$itemContents().register(processor, () -> {
+            long total = 0;
+            for (var resource : processor.ownedResources()) if (resource.key() instanceof AEItemKey)
+                total = moakiee.ae2oc.core.quantity.SaturatedMath.addNonNegative(total, resource.amount());
+            return total;
+        });
     }
 
     /** Null delegates a completely unmodified machine to upstream. */

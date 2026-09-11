@@ -11,7 +11,12 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(value = AEBaseBlockEntity.class, remap = false)
-public abstract class MixinMachineFeatures implements UpgradeProfileOwner {
+public abstract class MixinMachineFeatures implements UpgradeProfileOwner, moakiee.ae2oc.compat.ae2.MachineItemContents.Owner {
+    @Unique private moakiee.ae2oc.compat.ae2.MachineItemContents ae2oc_items;
+    @Override public moakiee.ae2oc.compat.ae2.MachineItemContents ae2oc$itemContents() {
+        if (ae2oc_items == null) ae2oc_items = new moakiee.ae2oc.compat.ae2.MachineItemContents();
+        return ae2oc_items;
+    }
     @Unique private UpgradeProfileCache ae2oc_profiles;
     @Unique private boolean ae2oc_refreshing;
     @Override public UpgradeProfileCache ae2oc$upgradeCache() {

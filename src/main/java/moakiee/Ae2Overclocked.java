@@ -74,7 +74,7 @@ public class Ae2Overclocked {
             return;
         }
 
-        int totalItems = MachineBreakProtection.getInternalItemTotalCount(blockEntity);
+        long totalItems = MachineBreakProtection.getInternalItemTotalCount(blockEntity);
         int threshold = Ae2OcConfig.getBreakProtectionItemThreshold();
         if (totalItems <= threshold) {
             return;

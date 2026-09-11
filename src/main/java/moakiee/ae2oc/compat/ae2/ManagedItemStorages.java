@@ -54,6 +54,7 @@ public final class ManagedItemStorages {
             for (int i = 0; i < base.length; i++) if (!initial[i].isEmpty())
                 storage.slot(i).restore(appeng.api.stacks.AEItemKey.of(initial[i]), initial[i].getCount());
             managed.ae2oc$attach(storage);
+            MachineItemContents.register(host, storage);
         }
     }
     public static void save(InternalInventory inventory, CompoundTag tag, String name) {

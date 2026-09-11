@@ -34,6 +34,8 @@ public abstract class MixinAE2CSEntropyVariationReactionChamberCapacity implemen
     }
     @Inject(method = "<init>", at = @At("TAIL"))
     private void ae2oc_construct(CallbackInfo ci) {
+        moakiee.ae2oc.compat.ae2.MachineItemContents.register(this, getInputInv());
+        moakiee.ae2oc.compat.ae2.MachineItemContents.register(this, getOutputInv());
         ae2oc_base = new long[]{getInputInv().getCapacity(AEKeyType.items()), getInputInv().getCapacity(AEKeyType.fluids()),
                 getOutputInv().getCapacity(AEKeyType.items()), getOutputInv().getCapacity(AEKeyType.fluids())};
         ae2oc$refreshCapacity();
