@@ -8,6 +8,7 @@ import moakiee.ae2oc.api.ResourceAmount;
 import moakiee.ae2oc.core.execution.BatchProcessor;
 import moakiee.ae2oc.core.execution.RetryBackoff;
 import moakiee.ae2oc.core.observability.ProcessingMetrics;
+import moakiee.ae2oc.core.planning.MachineBudget;
 import moakiee.ae2oc.core.execution.ProcessingState;
 import moakiee.ae2oc.core.planning.BatchPlanner;
 import moakiee.ae2oc.core.quantity.SaturatedMath;
@@ -42,6 +43,11 @@ public final class CoreContractTest {
     }
 
     private static void retryBackoffIsBoundedAndResettable() {
+        check(MachineBudget.share(1, 4) == 1);
+        check(MachineBudget.share(64, 4) == 16);
+        check(MachineBudget.share(Long.MAX_VALUE, 64) == Long.MAX_VALUE / 64);
+        rejects(() -> MachineBudget.share(0, 1));
+        rejects(() -> MachineBudget.share(1, 0));
         var retries = new RetryBackoff(5, 100);
         check(retries.ready(0));
         retries.blocked(10);

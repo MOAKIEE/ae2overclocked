@@ -36,6 +36,7 @@ public final class Ae2OcConfig {
     private static final ForgeConfigSpec.IntValue OVERCLOCK_CARD_PROCESS_TICKS;
     private static final ForgeConfigSpec.IntValue BREAK_PROTECTION_ITEM_THRESHOLD;
     private static final ForgeConfigSpec.IntValue MAX_RECIPE_OPERATIONS;
+    private static final ForgeConfigSpec.LongValue MAX_PENDING_OUTPUT_AMOUNT;
     private static final ForgeConfigSpec.IntValue MAX_TRANSFER_KEYS;
     private static final ForgeConfigSpec.LongValue MAX_TRANSFER_AMOUNT;
     private static final ForgeConfigSpec.IntValue BLOCKED_RETRY_MIN_TICKS;
@@ -99,6 +100,8 @@ public final class Ae2OcConfig {
         builder.push("performance");
         MAX_RECIPE_OPERATIONS = builder.comment("Maximum recipe or bus operations per machine tick, including Max cards.")
                 .defineInRange("maxRecipeOperationsPerMachineTick", 4096, 1, 1048576);
+        MAX_PENDING_OUTPUT_AMOUNT = builder.comment("Maximum resource units a machine may reserve in its persistent pending-output buffer.")
+                .defineInRange("maxPendingOutputAmountPerMachine", 1048576L, 1L, Integer.MAX_VALUE);
         MAX_TRANSFER_KEYS = builder.comment("Maximum distinct resource keys transferred per machine tick.")
                 .defineInRange("maxTransferKeysPerMachineTick", 64, 1, 4096);
         MAX_TRANSFER_AMOUNT = builder.comment("Maximum resource units transferred per machine tick.")
@@ -115,6 +118,7 @@ public final class Ae2OcConfig {
     }
 
     public static int getMaxRecipeOperationsPerMachineTick() { return MAX_RECIPE_OPERATIONS.get(); }
+    public static long getMaxPendingOutputAmountPerMachine() { return MAX_PENDING_OUTPUT_AMOUNT.get(); }
     public static int getMaxTransferKeysPerMachineTick() { return MAX_TRANSFER_KEYS.get(); }
     public static long getMaxTransferAmountPerMachineTick() { return MAX_TRANSFER_AMOUNT.get(); }
     public static int getBlockedRetryMinTicks() { return BLOCKED_RETRY_MIN_TICKS.get(); }

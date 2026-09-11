@@ -24,6 +24,7 @@ import moakiee.ae2oc.core.execution.ProcessingState;
 import moakiee.ae2oc.core.execution.RetryBackoff;
 import moakiee.ae2oc.core.execution.SlotTransaction;
 import moakiee.ae2oc.core.planning.BatchPlanner;
+import moakiee.ae2oc.core.planning.MachineBudget;
 import moakiee.ae2oc.core.observability.ProcessingMetrics;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
@@ -91,8 +92,8 @@ public class MachineProcessorAdapter {
         var before = processor.snapshot();
         try {
             progressed |= processor.advance(this::extractEnergy);
-            progressed |= processor.drain(Ae2OcConfig.getMaxTransferAmountPerMachineTick() / budgetShares,
-                    Math.max(1, Ae2OcConfig.getMaxTransferKeysPerMachineTick() / budgetShares), this::insertOutput);
+            progressed |= processor.drain(MachineBudget.share(Ae2OcConfig.getMaxTransferAmountPerMachineTick(), budgetShares),
+                    MachineBudget.share(Ae2OcConfig.getMaxTransferKeysPerMachineTick(), budgetShares), this::insertOutput);
         } finally {
             // Includes partial energy payments and each accepted output, even after a later failure.
             if (processor.snapshot() != before) host.saveChanges();
@@ -130,8 +131,11 @@ public class MachineProcessorAdapter {
         for (var output : recipe.outputs()) outputAmount = moakiee.ae2oc.core.quantity.SaturatedMath.addNonNegative(outputAmount, output.amount());
         if (outputAmount == 0) return false;
         var limit = multiplier == Integer.MAX_VALUE ? OptionalLong.empty() : OptionalLong.of(multiplier);
-        var plan = BatchPlanner.plan(limit, materialLimit, 1_048_576L / outputAmount,
-                Ae2OcConfig.getMaxRecipeOperationsPerMachineTick() / budgetShares, simulateEnergy(), recipe.unitEnergy());
+        long outputLimit = MachineBudget.share(Ae2OcConfig.getMaxPendingOutputAmountPerMachine(), budgetShares)
+                / outputAmount;
+        var plan = BatchPlanner.plan(limit, materialLimit, outputLimit,
+                MachineBudget.share(Ae2OcConfig.getMaxRecipeOperationsPerMachineTick(), budgetShares),
+                simulateEnergy(), recipe.unitEnergy());
         long count = plan.operations();
         if (count == 0) return false;
         List<ResourceAmount<AEKey>> inputs = new ArrayList<>();

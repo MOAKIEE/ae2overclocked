@@ -7,6 +7,7 @@ import com.glodblock.github.extendedae.common.tileentities.TileExInscriber;
 import moakiee.Ae2OcConfig;
 import moakiee.ae2oc.compat.ae2.ManagedItemStorages;
 import moakiee.ae2oc.compat.ae2.SidedExport;
+import moakiee.ae2oc.core.planning.MachineBudget;
 
 /**
  * Overflow-safe lane export for the four-thread ExtendedAE inscriber.
@@ -22,7 +23,7 @@ public final class ExtendedInscriberExport {
 
     public static boolean push(TileExInscriber host, InternalInventory lane) {
         if (host.getConfigManager().getSetting(Settings.AUTO_EXPORT) != YesNo.YES) return false;
-        long budget = Math.max(1, Ae2OcConfig.getMaxTransferAmountPerMachineTick() / LANES);
+        long budget = MachineBudget.share(Ae2OcConfig.getMaxTransferAmountPerMachineTick(), LANES);
         return SidedExport.push(host.getLevel(), host.getBlockPos(),
                 ManagedItemStorages.slots(lane).get(3),
                 host.isSeparateSides(), host.getTop(), budget, host::saveChanges);
