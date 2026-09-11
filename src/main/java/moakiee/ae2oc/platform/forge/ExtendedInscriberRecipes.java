@@ -97,4 +97,71 @@ final class ExtendedInscriberRecipes {
         var value = slot.read();
         return value == null ? 0 : value.amount();
     }
+
+    /**
+     * Lane 0 auto-export conservation. The unupgraded lane goes through the upstream tick and its patched
+     * {@code pushOutResult}; the parallel-card lane goes through the custom tick path. Both must deliver a
+     * whole legal stack and preserve the over-capacity remainder instead of reinserting it.
+     */
+    static void exportConservation(GameTestHelper helper, boolean upgraded) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, Blocks.AIR);
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation("expatternprovider:ex_inscriber")));
+        helper.setBlock(pos.east(), Blocks.CHEST);
+        var machine = (TileExInscriber) helper.getBlockEntity(pos);
+        var chest = (net.minecraft.world.level.block.entity.ChestBlockEntity) helper.getBlockEntity(pos.east());
+        if (upgraded) machine.getUpgrades().setItemDirect(0, new net.minecraft.world.item.ItemStack(ModItems.PARALLEL_CARD.get()));
+        var output = ManagedItemStorages.slots(machine.getIndexInventory(0)).get(3);
+        output.write(new ResourceAmount<AEKey>(AEItemKey.of(Items.GOLD_INGOT), 130));
+        for (int slot = 0; slot < chest.getContainerSize(); slot++) chest.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
+        chest.setItem(0, new ItemStack(Items.GOLD_INGOT, 63));
+        machine.getConfigManager().putSetting(Settings.AUTO_EXPORT, YesNo.NO);
+        machine.tickingRequest(null, 1);
+        helper.assertTrue(amount(output) == 130 && chest.getItem(0).getCount() == 63, "Disabled auto-export moved items");
+        machine.getConfigManager().putSetting(Settings.AUTO_EXPORT, YesNo.YES);
+        machine.tickingRequest(null, 1);
+        helper.assertTrue(chest.getItem(0).getCount() == 64, "Auto-export did not deliver to adjacent inventory");
+        helper.assertTrue(amount(output) == 129, "Partial auto-export lost overflow items");
+        machine.tickingRequest(null, 1);
+        helper.assertTrue(amount(output) == 129, "Full destination lost overflow items");
+        helper.setBlock(pos.east(), Blocks.AIR);
+        var top = machine.getTop();
+        helper.setBlock(pos.relative(top), Blocks.CHEST);
+        var topChest = (net.minecraft.world.level.block.entity.ChestBlockEntity) helper.getBlockEntity(pos.relative(top));
+        machine.getConfigManager().putSetting(Settings.INSCRIBER_SEPARATE_SIDES, YesNo.YES);
+        machine.tickingRequest(null, 1);
+        helper.assertTrue(topChest.isEmpty() && amount(output) == 129, "Separate sides exported through the top");
+        machine.getConfigManager().putSetting(Settings.INSCRIBER_SEPARATE_SIDES, YesNo.NO);
+        machine.tickingRequest(null, 1);
+        helper.assertTrue(topChest.getItem(0).getCount() == 64 && amount(output) == 65, "Combined sides did not export a legal stack");
+        helper.succeed();
+    }
+
+    /** Each lane owns its own output slot and exports only that lane's resources. */
+    static void laneExportIsolation(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, Blocks.AIR);
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation("expatternprovider:ex_inscriber")));
+        helper.setBlock(pos.east(), Blocks.CHEST);
+        var machine = (TileExInscriber) helper.getBlockEntity(pos);
+        var chest = (net.minecraft.world.level.block.entity.ChestBlockEntity) helper.getBlockEntity(pos.east());
+        var gold = AEItemKey.of(Items.GOLD_INGOT);
+        var diamond = AEItemKey.of(Items.DIAMOND);
+        var lane0 = ManagedItemStorages.slots(machine.getIndexInventory(0)).get(3);
+        var lane1 = ManagedItemStorages.slots(machine.getIndexInventory(1)).get(3);
+        lane0.write(new ResourceAmount<AEKey>(gold, 64));
+        lane1.write(new ResourceAmount<AEKey>(diamond, 64));
+        machine.getConfigManager().putSetting(Settings.AUTO_EXPORT, YesNo.YES);
+        machine.tickingRequest(null, 1);
+        helper.assertTrue(amount(lane0) == 0 && amount(lane1) == 0, "A lane did not export its own output");
+        long goldInChest = 0, diamondInChest = 0;
+        for (int slot = 0; slot < chest.getContainerSize(); slot++) {
+            var stack = chest.getItem(slot);
+            if (gold.matches(stack)) goldInChest += stack.getCount();
+            if (diamond.matches(stack)) diamondInChest += stack.getCount();
+        }
+        helper.assertTrue(goldInChest == 64 && diamondInChest == 64,
+                "Lane outputs were mixed or lost: gold=" + goldInChest + ", diamond=" + diamondInChest);
+        helper.succeed();
+    }
 }

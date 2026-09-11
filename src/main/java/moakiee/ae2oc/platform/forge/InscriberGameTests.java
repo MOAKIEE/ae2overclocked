@@ -29,6 +29,24 @@ public final class InscriberGameTests {
         ExtendedInscriberRecipes.run(helper, 0);
     }
 
+    @GameTest(template = "empty")
+    public static void extendedInscriberStillExports(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedInscriberRecipes.exportConservation(helper, true);
+    }
+
+    @GameTest(template = "empty")
+    public static void extendedInscriberExportsWithoutLosingOverflow(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedInscriberRecipes.exportConservation(helper, false);
+    }
+
+    @GameTest(template = "empty")
+    public static void extendedInscriberLanesExportIndependently(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedInscriberRecipes.laneExportIsolation(helper);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 200)
     public static void inscriberRecipeSurvivesReloadAndCardRemoval(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
