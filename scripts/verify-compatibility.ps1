@@ -1,7 +1,8 @@
 param(
     [ValidateSet('none', 'extendedae', 'advancedae', 'ae2cs', 'all')]
     [string]$Runtime = 'none',
-    [switch]$ClientSmoke
+    [switch]$ClientSmoke,
+    [switch]$Offline
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
@@ -11,10 +12,21 @@ try {
     New-Item -ItemType Directory -Force -Path $reportDirectory | Out-Null
     $modeName = if ($ClientSmoke) { 'client' } else { 'server' }
     $report = Join-Path $reportDirectory "$Runtime-$modeName.log"
-    $gradle = if ($IsWindows) { '.\gradlew.bat' } else { './gradlew' }
+    # $IsWindows is unavailable in Windows PowerShell 5.1.
+    $gradle = if ($env:OS -eq 'Windows_NT') { '.\gradlew.bat' } else { './gradlew' }
     $arguments = if ($ClientSmoke) { @('runClient', '-PclientSmoke') } else { @('build', 'runGameTestServer') }
-    & $gradle @arguments "-PcompatRuntime=$Runtime" '--dependency-verification=strict' *> $report
-    if ($LASTEXITCODE -ne 0) { throw "Gradle failed; see $report" }
+    if ($Offline) { $arguments += '--offline' }
+    # Native stderr contains normal Gradle/compiler diagnostics. In Windows PowerShell 5.1,
+    # redirecting it with ErrorActionPreference=Stop can terminate an otherwise successful build.
+    $savedErrorPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $gradle @arguments "-PcompatRuntime=$Runtime" '--dependency-verification=strict' *> $report
+        $gradleExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $savedErrorPreference
+    }
+    if ($gradleExitCode -ne 0) { throw "Gradle failed (exit $gradleExitCode); see $report" }
     $output = Get-Content -Raw $report
     $success = if ($ClientSmoke) { 'Client smoke passed:' } else { 'All [1-9][0-9]* required tests passed' }
     if ($output -notmatch $success) { throw "Runtime did not report test completion; see $report" }
