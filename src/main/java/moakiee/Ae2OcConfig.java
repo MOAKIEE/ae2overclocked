@@ -36,7 +36,10 @@ public final class Ae2OcConfig {
     private static final ForgeConfigSpec.IntValue OVERCLOCK_CARD_PROCESS_TICKS;
     private static final ForgeConfigSpec.IntValue BREAK_PROTECTION_ITEM_THRESHOLD;
     private static final ForgeConfigSpec.IntValue MAX_RECIPE_OPERATIONS;
+    private static final ForgeConfigSpec.IntValue MAX_TRANSFER_KEYS;
     private static final ForgeConfigSpec.LongValue MAX_TRANSFER_AMOUNT;
+    private static final ForgeConfigSpec.IntValue BLOCKED_RETRY_MIN_TICKS;
+    private static final ForgeConfigSpec.IntValue BLOCKED_RETRY_MAX_TICKS;
     private static final ForgeConfigSpec.ConfigValue<List<? extends String>> DISABLED_MACHINE_IDS;
 
     static {
@@ -96,8 +99,14 @@ public final class Ae2OcConfig {
         builder.push("performance");
         MAX_RECIPE_OPERATIONS = builder.comment("Maximum recipe or bus operations per machine tick, including Max cards.")
                 .defineInRange("maxRecipeOperationsPerMachineTick", 4096, 1, 1048576);
+        MAX_TRANSFER_KEYS = builder.comment("Maximum distinct resource keys transferred per machine tick.")
+                .defineInRange("maxTransferKeysPerMachineTick", 64, 1, 4096);
         MAX_TRANSFER_AMOUNT = builder.comment("Maximum resource units transferred per machine tick.")
                 .defineInRange("maxTransferAmountPerMachineTick", 1048576L, 1L, Integer.MAX_VALUE);
+        BLOCKED_RETRY_MIN_TICKS = builder.comment("Initial retry delay after a machine is blocked.")
+                .defineInRange("blockedRetryMinTicks", 5, 1, 1200);
+        BLOCKED_RETRY_MAX_TICKS = builder.comment("Maximum retry delay after repeated blocked attempts.")
+                .defineInRange("blockedRetryMaxTicks", 100, 1, 1200);
         builder.pop();
         SPEC = builder.build();
     }
@@ -106,7 +115,12 @@ public final class Ae2OcConfig {
     }
 
     public static int getMaxRecipeOperationsPerMachineTick() { return MAX_RECIPE_OPERATIONS.get(); }
+    public static int getMaxTransferKeysPerMachineTick() { return MAX_TRANSFER_KEYS.get(); }
     public static long getMaxTransferAmountPerMachineTick() { return MAX_TRANSFER_AMOUNT.get(); }
+    public static int getBlockedRetryMinTicks() { return BLOCKED_RETRY_MIN_TICKS.get(); }
+    public static int getBlockedRetryMaxTicks() {
+        return Math.max(BLOCKED_RETRY_MAX_TICKS.get(), getBlockedRetryMinTicks());
+    }
 
     public static int getCapacityCardSlotLimit() {
         int configured = CAPACITY_SLOT_LIMIT.get();

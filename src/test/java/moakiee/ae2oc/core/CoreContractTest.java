@@ -6,6 +6,7 @@ import java.util.Random;
 import java.util.List;
 import moakiee.ae2oc.api.ResourceAmount;
 import moakiee.ae2oc.core.execution.BatchProcessor;
+import moakiee.ae2oc.core.execution.RetryBackoff;
 import moakiee.ae2oc.core.execution.ProcessingState;
 import moakiee.ae2oc.core.planning.BatchPlanner;
 import moakiee.ae2oc.core.quantity.SaturatedMath;
@@ -13,6 +14,7 @@ import moakiee.ae2oc.core.quantity.SaturatedMath;
 /** Dependency-free deterministic property checks, executed by Gradle check. */
 public final class CoreContractTest {
     public static void main(String[] args) {
+        retryBackoffIsBoundedAndResettable();
         logicalSlots();
         processing();
         SlotTransactionTest.run();
@@ -36,6 +38,19 @@ public final class CoreContractTest {
         rejects(() -> SaturatedMath.floorDivToLong(Double.NaN, 1));
         rejects(() -> BatchPlanner.plan(OptionalLong.empty(), 1, 1, 1, 1, Double.NaN));
         System.out.println("Core contracts passed: boundaries and 10000 deterministic quantity/planner cases");
+    }
+
+    private static void retryBackoffIsBoundedAndResettable() {
+        var retries = new RetryBackoff(5, 100);
+        check(retries.ready(0));
+        retries.blocked(10);
+        check(!retries.ready(14) && retries.ready(15));
+        retries.blocked(15);
+        check(!retries.ready(24) && retries.ready(25));
+        for (int i = 0; i < 10; i++) retries.blocked(1_000 + i * 100L);
+        check(!retries.ready(1_999) && retries.ready(2_000));
+        retries.reset();
+        check(retries.ready(0));
     }
 
     private static void logicalSlots() {

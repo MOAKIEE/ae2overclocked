@@ -21,6 +21,7 @@ import moakiee.support.ParallelCardRuntime;
 import moakiee.ae2oc.api.ResourceAmount;
 import moakiee.ae2oc.core.execution.BatchProcessor;
 import moakiee.ae2oc.core.execution.ProcessingState;
+import moakiee.ae2oc.core.execution.RetryBackoff;
 import moakiee.ae2oc.core.execution.SlotTransaction;
 import moakiee.ae2oc.core.planning.BatchPlanner;
 import net.minecraft.nbt.CompoundTag;
@@ -35,8 +36,8 @@ public class MachineProcessorAdapter {
     private final int budgetShares;
     private final int outputSlot;
     private final BatchProcessor<AEKey> processor = new BatchProcessor<>();
-    private long retryAt;
-    private int retryDelay = 5;
+    private RetryBackoff retryBackoff;
+    private long retryConfigRevision = Long.MIN_VALUE;
 
     public MachineProcessorAdapter(AEBaseBlockEntity host, IUpgradeableObject upgrades,
                             InternalInventory inventory, Supplier<RecipeBatch> recipeSource) {
@@ -75,7 +76,8 @@ public class MachineProcessorAdapter {
         // than a precondition for work. The grid is also only ever an output target, never a requirement.
         if (host.getLevel() == null) return TickRateModulation.IDLE;
         long now = host.getLevel().getGameTime();
-        if (now < retryAt) return TickRateModulation.SLOWER;
+        RetryBackoff retries = retryBackoff();
+        if (!retries.ready(now)) return TickRateModulation.SLOWER;
         boolean progressed = false;
         if (processor.snapshot() == null) {
             progressed = reserve(overclock, multiplier);
@@ -84,21 +86,30 @@ public class MachineProcessorAdapter {
         var before = processor.snapshot();
         try {
             progressed |= processor.advance(this::extractEnergy);
-            progressed |= processor.drain(Ae2OcConfig.getMaxTransferAmountPerMachineTick() / budgetShares, 64 / budgetShares, this::insertOutput);
+            progressed |= processor.drain(Ae2OcConfig.getMaxTransferAmountPerMachineTick() / budgetShares,
+                    Math.max(1, Ae2OcConfig.getMaxTransferKeysPerMachineTick() / budgetShares), this::insertOutput);
         } finally {
             // Includes partial energy payments and each accepted output, even after a later failure.
             if (processor.snapshot() != before) host.saveChanges();
         }
         if (!progressed) return blocked(now);
-        retryDelay = 5;
-        retryAt = 0;
+        retries.reset();
         return TickRateModulation.URGENT;
     }
 
     private TickRateModulation blocked(long now) {
-        retryAt = now + retryDelay;
-        retryDelay = Math.min(100, retryDelay * 2);
+        retryBackoff().blocked(now);
         return TickRateModulation.SLOWER;
+    }
+
+    private RetryBackoff retryBackoff() {
+        long revision = Ae2OcConfig.revision();
+        if (retryBackoff == null || retryConfigRevision != revision) {
+            retryBackoff = new RetryBackoff(Ae2OcConfig.getBlockedRetryMinTicks(),
+                    Ae2OcConfig.getBlockedRetryMaxTicks());
+            retryConfigRevision = revision;
+        }
+        return retryBackoff;
     }
 
     private boolean reserve(boolean overclock, int multiplier) {
@@ -174,8 +185,7 @@ public class MachineProcessorAdapter {
         // Decode fully before replacing live ownership. This method belongs to full host save loading.
         var saved = tag.contains("ae2ocProcessing") ? ProcessingCodec.read(tag.getCompound("ae2ocProcessing")) : null;
         processor.restore(saved);
-        retryAt = 0;
-        retryDelay = 5;
+        if (retryBackoff != null) retryBackoff.reset();
     }
 
     public void addDrops(List<ItemStack> drops) {
