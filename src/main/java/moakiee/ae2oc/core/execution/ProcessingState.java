@@ -10,7 +10,8 @@ public record ProcessingState<K>(String recipe, List<ResourceAmount<K>> inputs,
     public ProcessingState {
         Objects.requireNonNull(recipe);
         inputs = List.copyOf(inputs);
-        outputs = List.copyOf(outputs);
+        // Empty recipe entries own no resources and must not block later outputs.
+        outputs = List.copyOf(outputs).stream().filter(resource -> resource.amount() > 0).toList();
         if (!Double.isFinite(energyRequired) || energyRequired < 0 || !Double.isFinite(energyPaid)
                 || energyPaid < 0 || energyPaid > energyRequired || ticksRemaining < 0) {
             throw new IllegalArgumentException("Invalid persisted processing state");

@@ -62,7 +62,10 @@ public final class BatchProcessor<K> {
             amountBudget -= accepted;
             progress = true;
         }
-        if (state != null && state.outputs().isEmpty()) state = null;
+        if (state != null && state.outputs().isEmpty()) {
+            state = null;
+            progress = true;
+        }
         return progress;
     }
 

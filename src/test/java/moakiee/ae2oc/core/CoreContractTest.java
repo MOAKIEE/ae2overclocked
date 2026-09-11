@@ -55,6 +55,18 @@ public final class CoreContractTest {
     }
 
     private static void processing() {
+        var emptyOutput = new BatchProcessor<String>();
+        emptyOutput.restore(new ProcessingState<>("test:empty-output", List.of(),
+                List.of(new ResourceAmount<>("empty", 0), new ResourceAmount<>("real", 4)), 0, 0, 0));
+        check(emptyOutput.drain(4, 1, resource -> {
+            check(resource.key().equals("real") && resource.amount() == 4);
+            return 4;
+        }));
+        check(emptyOutput.isIdle());
+        emptyOutput.restore(new ProcessingState<>("test:only-empty", List.of(),
+                List.of(new ResourceAmount<>("empty", 0)), 0, 0, 0));
+        check(emptyOutput.drain(0, 0, resource -> { throw new AssertionError("Empty output called a port"); }));
+        check(emptyOutput.isIdle());
         BatchProcessor<String> processor = new BatchProcessor<>();
         processor.begin(new ProcessingState<>("test:recipe", List.of(new ResourceAmount<>("input", 8)),
                 List.of(new ResourceAmount<>("output", 16)), 80, 0, 5));
