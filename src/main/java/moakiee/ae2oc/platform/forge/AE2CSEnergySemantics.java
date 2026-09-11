@@ -63,6 +63,73 @@ final class AE2CSEnergySemantics {
         return ((IAEPowerStorage) machine).injectAEPower(CHARGE, Actionable.MODULATE);
     }
 
+    /** Observe world ticks only: never invoke the machine ticker from the test. */
+    static void naturalScheduling(GameTestHelper helper, boolean destroyNode) {
+        var machine = place(helper, new BlockPos(1, 1, 1), destroyNode);
+        helper.runAfterDelay(40, () -> {
+            installProcessorCards(machine);
+            if (destroyNode) {
+                helper.assertTrue(machine.getMainNode().isActive(), "Expected connected machine before destruction");
+                machine.getMainNode().destroy();
+            }
+            helper.assertTrue(!machine.getMainNode().isActive(), "Natural scheduling requires an inactive node");
+            inputSlot(machine).write(new ResourceAmount<AEKey>(FLINT, OPERATIONS));
+            if (destroyNode) {
+                observeChargedMachine(helper, machine);
+            } else {
+                observeStarvedMachine(helper, machine, 60);
+            }
+        });
+    }
+
+    private static void observeStarvedMachine(GameTestHelper helper, CrystalPulverizerBlockEntity machine,
+            int remaining) {
+        helper.assertTrue(inputAmount(machine) == OPERATIONS && machine.getOutputInv().getStackInSlot(0).isEmpty(),
+                "Natural unpowered tick consumed resources");
+        helper.assertTrue(!machine.saveWithFullMetadata().contains("ae2ocProcessing"),
+                "Natural unpowered tick reserved inputs");
+        helper.assertTrue(((IAEPowerStorage) machine).getAECurrentPower() == 0, "Unexpected external power");
+        if (remaining == 0) observeChargedMachine(helper, machine);
+        else helper.runAfterDelay(1, () -> observeStarvedMachine(helper, machine, remaining - 1));
+    }
+
+    private static void observeChargedMachine(GameTestHelper helper, CrystalPulverizerBlockEntity machine) {
+        charge(machine);
+        double initialEnergy = ((IAEPowerStorage) machine).getAECurrentPower();
+        helper.assertTrue(initialEnergy >= OPERATIONS * 8000, "Insufficient internal energy for scenario");
+        observeProduction(helper, machine, initialEnergy, 0, 0);
+    }
+
+    private static void observeProduction(GameTestHelper helper, CrystalPulverizerBlockEntity machine,
+            double initialEnergy, long collected, int elapsed) {
+        var output = machine.getOutputInv().extractItem(0, 64, false);
+        helper.assertTrue(output.isEmpty() || GUNPOWDER.matches(output), "Unexpected natural tick output");
+        long produced = collected + output.getCount();
+        var tag = machine.saveWithFullMetadata();
+        var state = tag.contains("ae2ocProcessing")
+                ? moakiee.ae2oc.compat.ae2.ProcessingCodec.read(tag.getCompound("ae2ocProcessing")) : null;
+        long held = 0;
+        if (state != null) {
+            helper.assertTrue(state.recipe().equals("ae2cs:pulverizer/gunpowder"), "Unexpected natural tick recipe");
+            for (var resource : state.finished() ? state.outputs() : state.inputs()) {
+                helper.assertTrue(resource.key().equals(state.finished() ? GUNPOWDER : FLINT), "Unexpected held resource");
+                held += resource.amount();
+            }
+        }
+        helper.assertTrue(inputAmount(machine) + held + produced == OPERATIONS,
+                "Natural tick resource conservation failed at tick " + elapsed);
+        if (produced == OPERATIONS) {
+            helper.assertTrue(state == null, "Natural tick retained a completed batch");
+            double spent = initialEnergy - ((IAEPowerStorage) machine).getAECurrentPower();
+            helper.assertTrue(Math.abs(spent - OPERATIONS * 8000) < 0.001,
+                    "Natural tick charged unexpected energy: " + spent);
+            helper.succeed();
+            return;
+        }
+        helper.assertTrue(elapsed < 400, "Natural scheduler did not finish within 400 world ticks: " + produced);
+        helper.runAfterDelay(1, () -> observeProduction(helper, machine, initialEnergy, produced, elapsed + 1));
+    }
+
     /**
      * Upstream machines keep draining their own buffer while the main node is inactive and only stall once
      * nothing is left to pay with. Destroying the node removes both the grid tick manager and the grid

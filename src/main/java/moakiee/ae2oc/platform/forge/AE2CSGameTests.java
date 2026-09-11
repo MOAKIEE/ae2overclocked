@@ -10,6 +10,18 @@ import net.minecraftforge.gametest.PrefixGameTestTemplate;
 @GameTestHolder(Ae2Overclocked.MODID)
 @PrefixGameTestTemplate(false)
 public final class AE2CSGameTests {
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void processorNaturallyResumesAfterEnergyArrives(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSEnergySemantics.naturalScheduling(helper, false);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void processorNaturallyRunsAfterNodeDestruction(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSEnergySemantics.naturalScheduling(helper, true);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 2000)
     public static void pulverizerRealRecipeMatrix(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
