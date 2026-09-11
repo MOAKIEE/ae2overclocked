@@ -11,6 +11,37 @@ import net.minecraftforge.gametest.PrefixGameTestTemplate;
 @PrefixGameTestTemplate(false)
 public final class AE2CSGameTests {
     @GameTest(template = "empty", timeoutTicks = 600)
+    public static void aggregatorNaturallyResumesAfterEnergyArrives(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.run(helper, "crystal_aggregator", false);
+    }
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void aggregatorNaturallyRunsAfterNodeDestruction(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.run(helper, "crystal_aggregator", true);
+    }
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void circuitEtcherNaturallyResumesAfterEnergyArrives(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.run(helper, "circuit_etcher", false);
+    }
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void circuitEtcherNaturallyRunsAfterNodeDestruction(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.run(helper, "circuit_etcher", true);
+    }
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void entropyChamberNaturallyResumesAfterEnergyArrives(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.run(helper, "entropy_variation_reaction_chamber", false);
+    }
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void entropyChamberNaturallyRunsAfterNodeDestruction(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.run(helper, "entropy_variation_reaction_chamber", true);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 600)
     public static void processorNaturallyResumesAfterEnergyArrives(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
         AE2CSEnergySemantics.naturalScheduling(helper, false);
