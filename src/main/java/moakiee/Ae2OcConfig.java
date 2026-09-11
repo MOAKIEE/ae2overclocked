@@ -9,6 +9,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.List;
 import java.util.Locale;
+import moakiee.ae2oc.api.PerformanceBudget;
 
 /**
  * AE2 Overclocked common configuration.
@@ -126,6 +127,27 @@ public final class Ae2OcConfig {
         return Math.max(BLOCKED_RETRY_MAX_TICKS.get(), getBlockedRetryMinTicks());
     }
 
+    private static volatile PerformanceBudget performanceBudget;
+
+    /** One immutable read for machine tick hot paths; replaced atomically on config reload. */
+    public static PerformanceBudget performance() {
+        var snapshot = performanceBudget;
+        if (snapshot == null) {
+            synchronized (Ae2OcConfig.class) {
+                snapshot = performanceBudget;
+                if (snapshot == null) performanceBudget = snapshot = readPerformanceBudget();
+            }
+        }
+        return snapshot;
+    }
+
+    private static PerformanceBudget readPerformanceBudget() {
+        int retryMin = getBlockedRetryMinTicks();
+        return new PerformanceBudget(getMaxRecipeOperationsPerMachineTick(), getMaxPendingOutputAmountPerMachine(),
+                getMaxTransferKeysPerMachineTick(), getMaxTransferAmountPerMachineTick(), retryMin,
+                Math.max(getBlockedRetryMaxTicks(), retryMin));
+    }
+
     public static int getCapacityCardSlotLimit() {
         int configured = CAPACITY_SLOT_LIMIT.get();
         return Math.max(configured, 64);
@@ -171,6 +193,7 @@ public final class Ae2OcConfig {
             else parsed.add(id);
         }
         disabledIds = java.util.Set.copyOf(parsed);
+        performanceBudget = readPerformanceBudget();
         configRevision++;
     }
 

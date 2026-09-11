@@ -5,6 +5,7 @@ import java.util.OptionalLong;
 import java.util.Random;
 import java.util.List;
 import moakiee.ae2oc.api.ResourceAmount;
+import moakiee.ae2oc.api.PerformanceBudget;
 import moakiee.ae2oc.core.execution.BatchProcessor;
 import moakiee.ae2oc.core.execution.RetryBackoff;
 import moakiee.ae2oc.core.observability.ProcessingMetrics;
@@ -68,6 +69,10 @@ public final class CoreContractTest {
     }
 
     private static void retryBackoffIsBoundedAndResettable() {
+        var budget = new PerformanceBudget(4096, 1_048_576, 64, 1_048_576, 5, 100);
+        check(budget.retryMaxTicks() == 100 && budget.transferKeys() == 64);
+        rejects(() -> new PerformanceBudget(0, 1, 1, 1, 1, 1));
+        rejects(() -> new PerformanceBudget(1, 1, 1, 1, 10, 5));
         check(MachineBudget.share(1, 4) == 1);
         check(MachineBudget.share(64, 4) == 16);
         check(MachineBudget.share(Long.MAX_VALUE, 64) == Long.MAX_VALUE / 64);

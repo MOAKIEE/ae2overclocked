@@ -19,6 +19,7 @@ import moakiee.ModItems;
 import moakiee.Ae2OcConfig;
 import moakiee.support.ParallelCardRuntime;
 import moakiee.ae2oc.api.ResourceAmount;
+import moakiee.ae2oc.api.PerformanceBudget;
 import moakiee.ae2oc.core.execution.BatchProcessor;
 import moakiee.ae2oc.core.execution.ProcessingState;
 import moakiee.ae2oc.core.execution.RetryBackoff;
@@ -79,47 +80,47 @@ public class MachineProcessorAdapter {
         // than a precondition for work. The grid is also only ever an output target, never a requirement.
         if (host.getLevel() == null) return TickRateModulation.IDLE;
         long now = host.getLevel().getGameTime();
-        RetryBackoff retries = retryBackoff();
+        PerformanceBudget budget = Ae2OcConfig.performance();
+        RetryBackoff retries = retryBackoff(budget);
         if (!retries.ready(now)) {
             ProcessingMetrics.backoffSkipped();
             return TickRateModulation.SLOWER;
         }
         boolean progressed = false;
         if (processor.snapshot() == null) {
-            progressed = reserve(overclock, multiplier);
-            if (!progressed) return blocked(now);
+            progressed = reserve(overclock, multiplier, budget);
+            if (!progressed) return blocked(now, retries);
         }
         var before = processor.snapshot();
         try {
             progressed |= processor.advance(this::extractEnergy);
-            progressed |= processor.drain(MachineBudget.share(Ae2OcConfig.getMaxTransferAmountPerMachineTick(), budgetShares),
-                    MachineBudget.share(Ae2OcConfig.getMaxTransferKeysPerMachineTick(), budgetShares), this::insertOutput);
+            progressed |= processor.drain(MachineBudget.share(budget.transferAmount(), budgetShares),
+                    MachineBudget.share(budget.transferKeys(), budgetShares), this::insertOutput);
         } finally {
             // Includes partial energy payments and each accepted output, even after a later failure.
             if (processor.snapshot() != before) host.saveChanges();
         }
-        if (!progressed) return blocked(now);
+        if (!progressed) return blocked(now, retries);
         retries.reset();
         return TickRateModulation.URGENT;
     }
 
-    private TickRateModulation blocked(long now) {
+    private TickRateModulation blocked(long now, RetryBackoff retries) {
         ProcessingMetrics.blocked();
-        retryBackoff().blocked(now);
+        retries.blocked(now);
         return TickRateModulation.SLOWER;
     }
 
-    private RetryBackoff retryBackoff() {
+    private RetryBackoff retryBackoff(PerformanceBudget budget) {
         long revision = Ae2OcConfig.revision();
         if (retryBackoff == null || retryConfigRevision != revision) {
-            retryBackoff = new RetryBackoff(Ae2OcConfig.getBlockedRetryMinTicks(),
-                    Ae2OcConfig.getBlockedRetryMaxTicks());
+            retryBackoff = new RetryBackoff(budget.retryMinTicks(), budget.retryMaxTicks());
             retryConfigRevision = revision;
         }
         return retryBackoff;
     }
 
-    private boolean reserve(boolean overclock, int multiplier) {
+    private boolean reserve(boolean overclock, int multiplier, PerformanceBudget budget) {
         RecipeBatch recipe = recipeSource.get();
         if (recipe == null || recipe.outputs().isEmpty()) return false;
         long materialLimit = Long.MAX_VALUE;
@@ -131,10 +132,9 @@ public class MachineProcessorAdapter {
         for (var output : recipe.outputs()) outputAmount = moakiee.ae2oc.core.quantity.SaturatedMath.addNonNegative(outputAmount, output.amount());
         if (outputAmount == 0) return false;
         var limit = multiplier == Integer.MAX_VALUE ? OptionalLong.empty() : OptionalLong.of(multiplier);
-        long outputLimit = MachineBudget.share(Ae2OcConfig.getMaxPendingOutputAmountPerMachine(), budgetShares)
-                / outputAmount;
+        long outputLimit = MachineBudget.share(budget.pendingOutputAmount(), budgetShares) / outputAmount;
         var plan = BatchPlanner.plan(limit, materialLimit, outputLimit,
-                MachineBudget.share(Ae2OcConfig.getMaxRecipeOperationsPerMachineTick(), budgetShares),
+                MachineBudget.share(budget.recipeOperations(), budgetShares),
                 simulateEnergy(), recipe.unitEnergy());
         long count = plan.operations();
         if (count == 0) return false;

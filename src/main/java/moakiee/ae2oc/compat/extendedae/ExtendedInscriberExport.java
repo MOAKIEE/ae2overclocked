@@ -23,7 +23,7 @@ public final class ExtendedInscriberExport {
 
     public static boolean push(TileExInscriber host, InternalInventory lane) {
         if (host.getConfigManager().getSetting(Settings.AUTO_EXPORT) != YesNo.YES) return false;
-        long budget = MachineBudget.share(Ae2OcConfig.getMaxTransferAmountPerMachineTick(), LANES);
+        long budget = MachineBudget.share(Ae2OcConfig.performance().transferAmount(), LANES);
         return SidedExport.push(host.getLevel(), host.getBlockPos(),
                 ManagedItemStorages.slots(lane).get(3),
                 host.isSeparateSides(), host.getTop(), budget, host::saveChanges);
