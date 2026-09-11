@@ -152,6 +152,9 @@ public final class RefactorGameTests {
         oldTag.put("inv", invTag);
         moakiee.ae2oc.compat.ae2.ManagedItemStorages.load(machine.getInternalInventory(), oldTag, "ae2ocLongSlots");
         helper.assertTrue(ports.get(2).read().amount() == 1234567, "Legacy quantity migration failed");
+        helper.assertTrue(moakiee.ae2oc.compat.ae2.ManagedItemStorages.projectedConsumption(
+                        Long.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE - 1) == 1,
+                "Recipe projection consumed hidden logical inventory");
         helper.succeed();
     }
 

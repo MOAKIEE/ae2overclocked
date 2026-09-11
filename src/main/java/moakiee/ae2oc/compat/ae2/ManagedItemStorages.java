@@ -34,6 +34,13 @@ public final class ManagedItemStorages {
         return value == null ? net.minecraft.world.item.ItemStack.EMPTY
                 : ((appeng.api.stacks.AEItemKey) value.key()).toStack((int) Math.min(Integer.MAX_VALUE, value.amount()));
     }
+    public static long projectedConsumption(long logicalAmount, int projectedBefore, int projectedAfter) {
+        if (logicalAmount < 0 || projectedBefore < 0 || projectedAfter < 0
+                || projectedAfter > projectedBefore || projectedBefore > logicalAmount) {
+            throw new IllegalArgumentException("Invalid recipe projection");
+        }
+        return (long) projectedBefore - projectedAfter;
+    }
     public static List<LocalResourceSlot> slots(InternalInventory inventory) {
         List<LocalResourceSlot> result = new ArrayList<>();
         if (inventory instanceof AccessorCombinedInventory combined) {

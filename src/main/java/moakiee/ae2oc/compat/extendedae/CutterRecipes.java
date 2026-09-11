@@ -39,7 +39,8 @@ public final class CutterRecipes implements Supplier<RecipeBatch> {
         var itemBefore = itemPort.read();
         var fluidBefore = fluidPort.read();
         if (itemBefore == null || recipe.output.isEmpty()) return null;
-        var item = ((AEItemKey) itemBefore.key()).toStack(Math.toIntExact(itemBefore.amount()));
+        var item = ((AEItemKey) itemBefore.key()).toStack((int) Math.min(Integer.MAX_VALUE, itemBefore.amount()));
+        int itemInitial = item.getCount();
         var fluid = fluidBefore != null && fluidBefore.key() instanceof AEFluidKey key
                 ? key.toStack((int) Math.min(Integer.MAX_VALUE, fluidBefore.amount())) : FluidStack.EMPTY;
         int fluidInitial = fluid.getAmount();
@@ -49,7 +50,9 @@ public final class CutterRecipes implements Supplier<RecipeBatch> {
             if (!ingredient.isEmpty()) return null;
         }
         var debits = new ArrayList<RecipeBatch.Debit>();
-        debits.add(new RecipeBatch.Debit(itemPort, itemBefore, itemBefore.amount() - item.getCount()));
+        debits.add(new RecipeBatch.Debit(itemPort, itemBefore,
+                moakiee.ae2oc.compat.ae2.ManagedItemStorages.projectedConsumption(
+                        itemBefore.amount(), itemInitial, item.getCount())));
         if (fluidBefore != null) debits.add(new RecipeBatch.Debit(fluidPort, fluidBefore, fluidInitial - fluid.getAmount()));
         int speed = switch (host.getUpgrades().getInstalledUpgrades(AEItems.SPEED_CARD)) {
             case 1 -> 3; case 2 -> 5; case 3 -> 10; case 4 -> 50; default -> 2;

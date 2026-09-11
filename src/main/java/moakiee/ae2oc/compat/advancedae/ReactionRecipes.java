@@ -37,7 +37,11 @@ public final class ReactionRecipes implements Supplier<RecipeBatch> {
         if (recipe.output == null || recipe.output.amount() <= 0) return null;
         var input = host.getInput();
         ItemStack[] items = new ItemStack[input.size()];
-        for (int slot = 0; slot < items.length; slot++) items[slot] = moakiee.ae2oc.compat.ae2.ManagedItemStorages.recipeStack(input, slot);
+        int[] itemInitial = new int[input.size()];
+        for (int slot = 0; slot < items.length; slot++) {
+            items[slot] = moakiee.ae2oc.compat.ae2.ManagedItemStorages.recipeStack(input, slot);
+            itemInitial[slot] = items[slot].getCount();
+        }
         var fluidPort = LocalResourceSlot.generic(host.getTank(), 1);
         var fluidBefore = fluidPort.read();
         var fluid = fluidBefore != null && fluidBefore.key() instanceof AEFluidKey key
@@ -56,7 +60,9 @@ public final class ReactionRecipes implements Supplier<RecipeBatch> {
         for (int slot = 0; slot < items.length; slot++) {
             var port = LocalResourceSlot.item(input, slot);
             var before = port.read();
-            if (before != null) debits.add(new RecipeBatch.Debit(port, before, before.amount() - items[slot].getCount()));
+            if (before != null) debits.add(new RecipeBatch.Debit(port, before,
+                    moakiee.ae2oc.compat.ae2.ManagedItemStorages.projectedConsumption(
+                            before.amount(), itemInitial[slot], items[slot].getCount())));
         }
         if (fluidBefore != null) debits.add(new RecipeBatch.Debit(fluidPort, fluidBefore, fluidInitial - fluid.getAmount()));
         int speed = switch (host.getUpgrades().getInstalledUpgrades(AEItems.SPEED_CARD)) {
