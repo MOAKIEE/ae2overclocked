@@ -337,10 +337,60 @@ final class ExtendedInscriberRecipes {
         });
     }
 
+    /** Additional drops contain only projection overflow and the resources currently owned by batches. */
+    static void dropPackaging(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation("expatternprovider:ex_inscriber")));
+        var machine = (TileExInscriber) helper.getBlockEntity(pos);
+        var iron = AEItemKey.of(Items.IRON_INGOT);
+        var gold = AEItemKey.of(Items.GOLD_INGOT);
+        var diamond = AEItemKey.of(Items.DIAMOND);
+        var emerald = AEItemKey.of(Items.EMERALD);
+        ManagedItemStorages.slots(machine.getIndexInventory(0)).get(3)
+                .write(new ResourceAmount<AEKey>(iron, 130));
+        ManagedItemStorages.slots(machine.getIndexInventory(1)).get(2)
+                .write(new ResourceAmount<AEKey>(gold, 10));
+
+        var saved = machine.saveWithFullMetadata();
+        var unfinished = new moakiee.ae2oc.core.execution.ProcessingState<AEKey>("test:unfinished",
+                java.util.List.of(new ResourceAmount<>(diamond, 128)),
+                java.util.List.of(new ResourceAmount<>(emerald, 256)), 100, 25, 4);
+        var finished = new moakiee.ae2oc.core.execution.ProcessingState<AEKey>("test:finished",
+                java.util.List.of(new ResourceAmount<>(gold, 64)),
+                java.util.List.of(new ResourceAmount<>(emerald, 256)), 100, 100, 0);
+        var lane2 = new CompoundTag();
+        lane2.put("ae2ocProcessing", ProcessingCodec.write(unfinished));
+        saved.put("ae2ocThread2", lane2);
+        var lane3 = new CompoundTag();
+        lane3.put("ae2ocProcessing", ProcessingCodec.write(finished));
+        saved.put("ae2ocThread3", lane3);
+        machine.load(saved);
+
+        var drops = new java.util.ArrayList<ItemStack>();
+        machine.addAdditionalDrops(helper.getLevel(), helper.absolutePos(pos), drops);
+        helper.assertTrue(storedAmount(drops, iron) == 66, "Logical projection overflow was not packaged exactly once");
+        helper.assertTrue(storedAmount(drops, diamond) == 128, "Unfinished batch did not return its reserved input");
+        helper.assertTrue(storedAmount(drops, emerald) == 256, "Finished batch did not return its pending output");
+        helper.assertTrue(storedAmount(drops, gold) == 0, "Visible input or consumed finished-batch input was packaged twice");
+        helper.assertTrue(drops.stream().filter(stack -> stack.is(moakiee.ModItems.STORED_RESOURCES.get())).count() == 3,
+                "Unexpected number of stored-resource drops: " + drops.size());
+        helper.succeed();
+    }
+
     private static long chestCount(ChestBlockEntity chest, AEItemKey key) {
         long total = 0;
         for (int slot = 0; slot < chest.getContainerSize(); slot++)
             if (key.matches(chest.getItem(slot))) total += chest.getItem(slot).getCount();
+        return total;
+    }
+
+    private static long storedAmount(java.util.List<ItemStack> drops, AEItemKey key) {
+        long total = 0;
+        for (var drop : drops) {
+            if (!drop.is(moakiee.ModItems.STORED_RESOURCES.get()) || !drop.hasTag()) continue;
+            var resource = AEKey.fromTagGeneric(drop.getTag().getCompound("resource"));
+            if (key.equals(resource)) total += Math.max(0, drop.getTag().getLong("amount"));
+        }
         return total;
     }
 
