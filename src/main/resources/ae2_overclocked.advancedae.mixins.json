@@ -9,7 +9,7 @@
     "MixinReactionChamberOverclock"
   ],
   "client": [
-    "MixinReactionChamberScreen"
+    "MixinReactionChamberFluidWidget"
   ],
   "injectors": {
     "defaultRequire": 1

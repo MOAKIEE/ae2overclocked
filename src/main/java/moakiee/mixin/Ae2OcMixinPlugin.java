@@ -22,7 +22,7 @@ public final class Ae2OcMixinPlugin implements IMixinConfigPlugin {
     @Override public void postApply(String name, ClassNode target, String mixin, IMixinInfo info) {}
     @Override public boolean shouldApplyMixin(String target, String mixin) {
         String id = target.startsWith("com.glodblock.github.extendedae.") ? "expatternprovider"
-                : target.startsWith("net.pedroksl.advanced_ae.") ? "advanced_ae"
+                : target.startsWith("net.pedroksl.advanced_ae.") || target.startsWith("net.pedroksl.ae2addonlib.") ? "advanced_ae"
                 : target.startsWith("io.github.lounode.ae2cs.") ? "ae2cs" : null;
         if (id == null) return true;
         return ENABLED.computeIfAbsent(id, Ae2OcMixinPlugin::validate);

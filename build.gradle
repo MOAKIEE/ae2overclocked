@@ -15,6 +15,13 @@ base {
 // Mojang ships Java 17 to end users in 1.18+, so your mod should target Java 17.
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
+sourceSets {
+    clientSmoke {
+        compileClasspath += main.output + main.compileClasspath
+        runtimeClasspath += output + compileClasspath + main.runtimeClasspath
+    }
+}
+
 println "Java: ${System.getProperty 'java.version'}, JVM: ${System.getProperty 'java.vm.version'} (${System.getProperty 'java.vendor'}), Arch: ${System.getProperty 'os.arch'}"
 minecraft {
     // The mappings can be changed at any time and must be in the following format.
@@ -90,6 +97,9 @@ minecraft {
         client {
             // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
             property 'forge.enabledGameTestNamespaces', mod_id
+            if (project.hasProperty('clientSmoke')) {
+                mods { "${mod_id}" { source sourceSets.clientSmoke } }
+            }
         }
 
         server {
@@ -226,3 +236,6 @@ tasks.register('coreContractTest', JavaExec) {
     mainClass = 'moakiee.ae2oc.core.CoreContractTest'
 }
 tasks.named('check') { dependsOn 'coreContractTest' }
+if (project.hasProperty('clientSmoke')) {
+    tasks.matching { it.name == 'runClient' }.configureEach { dependsOn 'clientSmokeClasses' }
+}
