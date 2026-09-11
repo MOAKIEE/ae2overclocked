@@ -12,6 +12,7 @@ import net.minecraft.server.packs.repository.PackSource;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.AddPackFindersEvent;
+import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.event.level.BlockEvent;
@@ -56,6 +57,11 @@ public class Ae2Overclocked {
 
     private void commonSetup(final FMLCommonSetupEvent event) {
         ModUpgrades.register(event);
+    }
+
+    @SubscribeEvent
+    public void onRegisterCommands(RegisterCommandsEvent event) {
+        moakiee.support.ProcessingDiagnosticsCommand.register(event.getDispatcher());
     }
 
     @SubscribeEvent

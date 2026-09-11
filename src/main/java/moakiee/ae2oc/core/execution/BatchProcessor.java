@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.function.ToDoubleFunction;
 import java.util.function.ToLongFunction;
 import moakiee.ae2oc.api.ResourceAmount;
+import moakiee.ae2oc.core.observability.ProcessingMetrics;
 
 /**
  * Server-thread processor. Resource ports must return the exact amount actually transferred.
@@ -39,6 +40,8 @@ public final class BatchProcessor<K> {
         if (total == state.energyRequired() && ticks > 0) ticks--;
         boolean progress = paid > 0 || ticks != state.ticksRemaining();
         if (!progress) return false;
+        if (paid > 0) ProcessingMetrics.energyPaid(paid);
+        if (ticks != state.ticksRemaining()) ProcessingMetrics.processTick();
         state = new ProcessingState<>(state.recipe(), state.inputs(), state.outputs(),
                 state.energyRequired(), total, ticks);
         return progress;
@@ -65,10 +68,12 @@ public final class BatchProcessor<K> {
             state = new ProcessingState<>(state.recipe(), List.of(), pending,
                     state.energyRequired(), state.energyPaid(), 0);
             amountBudget -= accepted;
+            ProcessingMetrics.outputDrained(accepted);
             progress = true;
         }
         if (state != null && state.outputs().isEmpty()) {
             state = null;
+            ProcessingMetrics.batchCompleted();
             progress = true;
         }
         return progress;

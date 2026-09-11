@@ -24,6 +24,7 @@ import moakiee.ae2oc.core.execution.ProcessingState;
 import moakiee.ae2oc.core.execution.RetryBackoff;
 import moakiee.ae2oc.core.execution.SlotTransaction;
 import moakiee.ae2oc.core.planning.BatchPlanner;
+import moakiee.ae2oc.core.observability.ProcessingMetrics;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
 
@@ -69,6 +70,7 @@ public class MachineProcessorAdapter {
         boolean overclock = profile.overclock();
         int multiplier = profile.parallelLimit();
         if (processor.snapshot() == null && !overclock && multiplier <= 1) return null;
+        ProcessingMetrics.tickCalled();
         // Upstream machines never gate on the main node being active: they keep draining their own
         // internal buffer while disconnected and only stall once nothing is left to pay with. Mirror
         // that contract so a machine that still owns a paid batch keeps progressing (or reports a slow
@@ -77,7 +79,10 @@ public class MachineProcessorAdapter {
         if (host.getLevel() == null) return TickRateModulation.IDLE;
         long now = host.getLevel().getGameTime();
         RetryBackoff retries = retryBackoff();
-        if (!retries.ready(now)) return TickRateModulation.SLOWER;
+        if (!retries.ready(now)) {
+            ProcessingMetrics.backoffSkipped();
+            return TickRateModulation.SLOWER;
+        }
         boolean progressed = false;
         if (processor.snapshot() == null) {
             progressed = reserve(overclock, multiplier);
@@ -98,6 +103,7 @@ public class MachineProcessorAdapter {
     }
 
     private TickRateModulation blocked(long now) {
+        ProcessingMetrics.blocked();
         retryBackoff().blocked(now);
         return TickRateModulation.SLOWER;
     }
@@ -140,6 +146,7 @@ public class MachineProcessorAdapter {
                         new ResourceAmount<>(debit.before().key(), debit.before().amount() - count * debit.consumed())))
                 .toList());
         processor.begin(state);
+        ProcessingMetrics.batchReserved(count);
         host.saveChanges();
         return true;
     }

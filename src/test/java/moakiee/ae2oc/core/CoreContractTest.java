@@ -7,6 +7,7 @@ import java.util.List;
 import moakiee.ae2oc.api.ResourceAmount;
 import moakiee.ae2oc.core.execution.BatchProcessor;
 import moakiee.ae2oc.core.execution.RetryBackoff;
+import moakiee.ae2oc.core.observability.ProcessingMetrics;
 import moakiee.ae2oc.core.execution.ProcessingState;
 import moakiee.ae2oc.core.planning.BatchPlanner;
 import moakiee.ae2oc.core.quantity.SaturatedMath;
@@ -51,6 +52,18 @@ public final class CoreContractTest {
         check(!retries.ready(1_999) && retries.ready(2_000));
         retries.reset();
         check(retries.ready(0));
+
+        var before = ProcessingMetrics.snapshot();
+        ProcessingMetrics.tickCalled();
+        ProcessingMetrics.backoffSkipped();
+        ProcessingMetrics.blocked();
+        ProcessingMetrics.batchReserved(7);
+        var after = ProcessingMetrics.snapshot();
+        check(after.tickCalls() == before.tickCalls() + 1);
+        check(after.backoffSkips() == before.backoffSkips() + 1);
+        check(after.blockedAttempts() == before.blockedAttempts() + 1);
+        check(after.batchesReserved() == before.batchesReserved() + 1);
+        check(after.operationsReserved() == before.operationsReserved() + 7);
     }
 
     private static void logicalSlots() {
