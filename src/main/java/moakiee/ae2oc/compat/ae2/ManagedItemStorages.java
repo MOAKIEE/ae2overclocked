@@ -71,28 +71,34 @@ public final class ManagedItemStorages {
             if (tag.contains("inv", Tag.TAG_COMPOUND)) {
                 var legacy = tag.getCompound("inv");
                 var ports = slots(inventory);
+                var restored = new java.util.HashMap<Integer, moakiee.ae2oc.api.ResourceAmount<appeng.api.stacks.AEKey>>();
                 for (int i = 0; i < ports.size(); i++) {
                     var item = legacy.getCompound("item" + i);
-                    if (!item.isEmpty()) ports.get(i).write(readLegacyItem(item));
+                    if (!item.isEmpty()) restored.put(i, readLegacyItem(item));
                 }
+                restored.forEach((slot, value) -> ports.get(slot).write(value));
             }
             return;
         }
         var slots = slots(inventory);
         var list = tag.getList(name, Tag.TAG_COMPOUND);
         if (list.size() != slots.size()) throw new IllegalArgumentException("Logical inventory shape changed");
+        var restored = new ArrayList<moakiee.ae2oc.api.ResourceAmount<appeng.api.stacks.AEKey>>(slots.size());
         for (int i = 0; i < slots.size(); i++) {
             var entry = list.getCompound(i);
-            if (!entry.contains("key")) slots.get(i).write(null);
+            if (!entry.contains("key")) restored.add(null);
             else {
                 var key = appeng.api.stacks.AEKey.fromTagGeneric(entry.getCompound("key"));
                 if (!(key instanceof appeng.api.stacks.AEItemKey)) throw new IllegalArgumentException("Unknown saved item");
-                slots.get(i).write(new moakiee.ae2oc.api.ResourceAmount<>(key, entry.getLong("amount")));
+                restored.add(new moakiee.ae2oc.api.ResourceAmount<>(key, entry.getLong("amount")));
             }
         }
+        for (int i = 0; i < slots.size(); i++) slots.get(i).write(restored.get(i));
     }
 
     public static moakiee.ae2oc.api.ResourceAmount<appeng.api.stacks.AEKey> readLegacyItem(CompoundTag item) {
+        if (item.contains("ae2ocDataVersion") && item.getInt("ae2ocDataVersion") != 1)
+            throw new IllegalArgumentException("Unsupported item storage version");
         long amount = item.contains("ae2ocAmount") ? item.getLong("ae2ocAmount")
                 : moakiee.ae2oc.migration.LegacyQuantity.resolve(item.getByte("Count"),
                 item.contains("ae2ocCount") ? java.util.OptionalLong.of(item.getInt("ae2ocCount")) : java.util.OptionalLong.empty(),

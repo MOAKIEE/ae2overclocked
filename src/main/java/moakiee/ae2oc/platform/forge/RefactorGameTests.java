@@ -20,6 +20,39 @@ import net.minecraftforge.registries.ForgeRegistries;
 @PrefixGameTestTemplate(false)
 public final class RefactorGameTests {
     @GameTest(template = "empty")
+    public static void malformedStorageDoesNotPartiallyReplaceInventory(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());
+        var machine = (appeng.blockentity.misc.InscriberBlockEntity) helper.getBlockEntity(pos);
+        var inventory = new appeng.util.inv.AppEngInternalInventory(null, 2);
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.attach(inventory, machine);
+        var ports = moakiee.ae2oc.compat.ae2.ManagedItemStorages.slots(inventory);
+        var expected = new ResourceAmount<AEKey>(AEItemKey.of(Items.IRON_INGOT), 1000000);
+        ports.get(0).write(expected);
+        var tag = new net.minecraft.nbt.CompoundTag();
+        inventory.writeToNBT(tag, "items");
+        var items = tag.getList("items", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        var invalid = items.getCompound(0).copy();
+        invalid.putInt("Slot", 9);
+        items.add(invalid);
+        boolean rejected = false;
+        try { inventory.readFromNBT(tag, "items"); }
+        catch (IllegalArgumentException expectedFailure) { rejected = true; }
+        helper.assertTrue(rejected && expected.equals(ports.get(0).read()), "Malformed slots partially replaced live storage");
+        var logical = new net.minecraft.nbt.CompoundTag();
+        moakiee.ae2oc.compat.ae2.ManagedItemStorages.save(inventory, logical, "logical");
+        var entries = logical.getList("logical", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        entries.getCompound(0).putLong("amount", 7);
+        entries.getCompound(1).put("key", AEItemKey.of(Items.GOLD_INGOT).toTagGeneric());
+        entries.getCompound(1).putLong("amount", -1);
+        rejected = false;
+        try { moakiee.ae2oc.compat.ae2.ManagedItemStorages.load(inventory, logical, "logical"); }
+        catch (IllegalArgumentException expectedFailure) { rejected = true; }
+        helper.assertTrue(rejected && expected.equals(ports.get(0).read()), "Invalid quantity partially replaced live storage");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void upgradeChangesInvalidateProfileAndClampEnergy(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());

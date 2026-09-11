@@ -88,13 +88,18 @@ public abstract class MixinManagedItemInventory extends BaseInternalInventory im
     private void ae2oc_load(net.minecraft.nbt.CompoundTag tag, String name, CallbackInfo ci) {
         if (ae2oc_storage == null) return;
         var items = tag.getList(name, net.minecraft.nbt.Tag.TAG_COMPOUND);
-        for (int i = 0; i < ae2oc_storage.size(); i++) ae2oc_storage.slot(i).restore(null, 0);
+        var restored = new java.util.HashMap<Integer, moakiee.ae2oc.api.ResourceAmount<appeng.api.stacks.AEKey>>();
         for (int i = 0; i < items.size(); i++) {
             var entry = items.getCompound(i);
             int slot = entry.getInt("Slot");
             if (slot < 0 || slot >= ae2oc_storage.size()) throw new IllegalArgumentException("Invalid saved slot index");
+            if (restored.containsKey(slot)) throw new IllegalArgumentException("Duplicate saved slot index");
             var value = moakiee.ae2oc.compat.ae2.ManagedItemStorages.readLegacyItem(entry);
-            if (value != null) ae2oc_storage.slot(slot).restore((AEItemKey) value.key(), value.amount());
+            restored.put(slot, value);
+        }
+        for (int i = 0; i < ae2oc_storage.size(); i++) {
+            var value = restored.get(i);
+            ae2oc_storage.slot(i).restore(value == null ? null : (AEItemKey) value.key(), value == null ? 0 : value.amount());
         }
         ci.cancel();
     }
