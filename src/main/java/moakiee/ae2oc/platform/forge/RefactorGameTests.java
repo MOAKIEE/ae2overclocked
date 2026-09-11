@@ -20,6 +20,26 @@ import net.minecraftforge.registries.ForgeRegistries;
 @PrefixGameTestTemplate(false)
 public final class RefactorGameTests {
     @GameTest(template = "empty")
+    public static void parallelCardMutexRejectsSecondCardAndAllowsReplacement(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());
+        var machine = (appeng.blockentity.misc.InscriberBlockEntity) helper.getBlockEntity(pos);
+        var upgrades = machine.getUpgrades();
+        var first = new net.minecraft.world.item.ItemStack(moakiee.ModItems.PARALLEL_CARD.get());
+        helper.assertTrue(upgrades.insertItem(0, first, false).isEmpty(), "First parallel card was rejected");
+        var second = new net.minecraft.world.item.ItemStack(moakiee.ModItems.PARALLEL_CARD_8X.get());
+        var rejected = upgrades.insertItem(1, second, false);
+        helper.assertTrue(rejected.is(moakiee.ModItems.PARALLEL_CARD_8X.get()) && rejected.getCount() == 1
+                && upgrades.getStackInSlot(1).isEmpty(), "Second parallel card bypassed mutual exclusion");
+        helper.assertTrue(upgrades.extractItem(0, 1, false).is(moakiee.ModItems.PARALLEL_CARD.get()),
+                "Existing parallel card could not be removed");
+        helper.assertTrue(upgrades.insertItem(1, second, false).isEmpty()
+                && upgrades.getStackInSlot(1).is(moakiee.ModItems.PARALLEL_CARD_8X.get()),
+                "Replacement parallel tier remained blocked after removal");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void breakProtectionIncludesHiddenAndReservedItems(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());

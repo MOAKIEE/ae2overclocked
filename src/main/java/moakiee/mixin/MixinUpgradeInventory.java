@@ -48,15 +48,11 @@ public abstract class MixinUpgradeInventory {
      * 检测升级库存中是否已安装任何等级的并行卡
      */
     private static boolean ae2oc_hasAnyParallelCard(AppEngInternalInventory inv) {
-        try {
-            // 遍历所有槽位
-            for (int i = 0; i < inv.size(); i++) {
-                ItemStack existing = inv.getStackInSlot(i);
-                if (!existing.isEmpty() && existing.getItem() instanceof ParallelCard) {
-                    return true;
-                }
+        for (int i = 0; i < inv.size(); i++) {
+            ItemStack existing = inv.getStackInSlot(i);
+            if (!existing.isEmpty() && existing.getItem() instanceof ParallelCard) {
+                return true;
             }
-        } catch (Exception ignored) {
         }
         return false;
     }
