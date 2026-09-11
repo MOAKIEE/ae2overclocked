@@ -1,12 +1,10 @@
 package moakiee.mixin;
 
-import appeng.api.inventories.InternalInventory;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.ticking.TickRateModulation;
 import com.glodblock.github.extendedae.common.tileentities.TileCircuitCutter;
 import moakiee.ae2oc.compat.extendedae.CutterRecipes;
 import org.spongepowered.asm.mixin.Pseudo;
-import appeng.recipes.handlers.InscriberRecipe;
 import moakiee.ae2oc.compat.ae2.MachineProcessorAdapter;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.core.BlockPos;
@@ -48,7 +46,17 @@ public abstract class MixinCircuitCutterOverclock {
     @Inject(method = "tickingRequest", at = @At("HEAD"), cancellable = true)
     private void ae2oc_tick(IGridNode node, int elapsed, CallbackInfoReturnable<TickRateModulation> cir) {
         var result = ae2oc_adapter().tick();
-        if (result != null) cir.setReturnValue(result);
+        if (result != null) {
+            if (moakiee.ae2oc.compat.extendedae.CutterExport.push((TileCircuitCutter) (Object) this))
+                result = TickRateModulation.URGENT;
+            cir.setReturnValue(result);
+        }
+    }
+
+    @Inject(method = "pushOutResult", at = @At("HEAD"), cancellable = true)
+    private void ae2oc_exportLogicalOutput(CallbackInfoReturnable<Boolean> cir) {
+        if (moakiee.ae2oc.compat.ae2.ManagedItemStorages.isManaged(ae2oc_items()))
+            cir.setReturnValue(moakiee.ae2oc.compat.extendedae.CutterExport.push((TileCircuitCutter) (Object) this));
     }
 
     @Inject(method = {"saveAdditional", "m_183515_"}, at = @At("TAIL"), require = 1)
@@ -66,6 +74,10 @@ public abstract class MixinCircuitCutterOverclock {
     @Inject(method = "addAdditionalDrops", at = @At("TAIL"))
     private void ae2oc_drops(Level level, BlockPos pos, List<ItemStack> drops, CallbackInfo ci) {
         moakiee.ae2oc.compat.ae2.ManagedItemStorages.addHiddenDrops(ae2oc_items(), drops);
+        // Upstream calls AEKey#addDrops on the tank, which is a no-op for fluids and would destroy them.
+        var fluid = ((TileCircuitCutter) (Object) this).getTank().getStack(0);
+        if (fluid != null && fluid.amount() > 0)
+            drops.add(moakiee.item.StoredResourcesItem.pack(fluid.what(), fluid.amount()));
         if (ae2oc_adapter != null) ae2oc_adapter.addDrops(drops);
     }
     @Unique private appeng.api.inventories.InternalInventory ae2oc_items() {

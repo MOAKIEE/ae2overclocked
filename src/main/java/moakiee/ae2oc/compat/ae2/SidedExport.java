@@ -25,6 +25,15 @@ public final class SidedExport {
      */
     public static boolean push(Level level, BlockPos pos, LocalResourceSlot slot,
                                boolean separateSides, Direction top, long budget, Runnable onChanged) {
+        return push(level, pos, slot, separateSides, top, budget, onChanged, neighbour -> false);
+    }
+
+    /**
+     * @param exclude neighbours that must never receive this slot, matching upstream eject predicates
+     */
+    public static boolean push(Level level, BlockPos pos, LocalResourceSlot slot,
+                               boolean separateSides, Direction top, long budget, Runnable onChanged,
+                               java.util.function.Predicate<net.minecraft.world.level.block.entity.BlockEntity> exclude) {
         if (level == null || slot == null) return false;
         var before = slot.read();
         if (before == null || !(before.key() instanceof AEItemKey key)) return false;
@@ -37,6 +46,8 @@ public final class SidedExport {
             sides.remove(top.getOpposite());
         }
         for (var side : sides) {
+            var neighbour = level.getBlockEntity(pos.relative(side));
+            if (neighbour != null && exclude.test(neighbour)) continue;
             var target = InternalInventory.wrapExternal(level, pos.relative(side), side.getOpposite());
             if (target == null) continue;
             // As with processing ports, a throwing external transfer must have moved nothing.
