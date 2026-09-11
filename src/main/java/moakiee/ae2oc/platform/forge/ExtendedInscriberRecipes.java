@@ -252,6 +252,91 @@ final class ExtendedInscriberRecipes {
         });
     }
 
+    /**
+     * Every lane finishes a real recipe while the adjacent inventory is full and its logical output is
+     * already nearly a stack. The resulting over-capacity output must survive repeated whole-machine
+     * reloads and removal of the parallel card, then drain as legal stacks through the upstream tick path.
+     */
+    static void blockedExportLifecycle(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, Blocks.AIR);
+        helper.setBlock(pos.west(), AEBlocks.CREATIVE_ENERGY_CELL.block());
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(new ResourceLocation("expatternprovider:ex_inscriber")));
+        helper.setBlock(pos.east(), Blocks.CHEST);
+        var machine = (TileExInscriber) helper.getBlockEntity(pos);
+        var chest = (ChestBlockEntity) helper.getBlockEntity(pos.east());
+        helper.runAfterDelay(40, () -> {
+            helper.assertTrue(machine.getMainNode().isActive(), "Blocked-export lifecycle grid is inactive");
+            machine.getUpgrades().setItemDirect(0, new ItemStack(ModItems.PARALLEL_CARD_8X.get()));
+            machine.getConfigManager().putSetting(Settings.AUTO_EXPORT, YesNo.YES);
+            machine.getConfigManager().putSetting(Settings.INSCRIBER_SEPARATE_SIDES, YesNo.NO);
+            for (int slot = 0; slot < chest.getContainerSize(); slot++)
+                chest.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
+
+            final int operations = 8;
+            final long initialOutput = 63;
+            var press = AEItemKey.of(AEItems.LOGIC_PROCESSOR_PRESS.asItem());
+            var print = AEItemKey.of(AEItems.LOGIC_PROCESSOR_PRINT.asItem());
+            var processor = AEItemKey.of(AEItems.LOGIC_PROCESSOR.asItem());
+            var silicon = AEItemKey.of(AEItems.SILICON_PRINT.asItem());
+            for (int lane = 0; lane < 4; lane++) {
+                boolean pressing = lane % 2 != 0;
+                var slots = ManagedItemStorages.slots(machine.getIndexInventory(lane));
+                slots.get(0).write(new ResourceAmount<AEKey>(pressing ? print : press, pressing ? operations : 1));
+                if (pressing) slots.get(1).write(new ResourceAmount<AEKey>(silicon, operations));
+                slots.get(2).write(new ResourceAmount<AEKey>(AEItemKey.of(pressing ? Items.REDSTONE : Items.GOLD_INGOT), operations));
+                slots.get(3).write(new ResourceAmount<AEKey>(pressing ? processor : print, initialOutput));
+            }
+
+            int ticks = 0;
+            while (ticks++ < 4000) {
+                machine.tickingRequest(machine.getMainNode().getNode(), 1);
+                boolean complete = true;
+                var saved = machine.saveWithFullMetadata();
+                for (int lane = 0; lane < 4; lane++) {
+                    var slots = ManagedItemStorages.slots(machine.getIndexInventory(lane));
+                    var result = lane % 2 == 0 ? print : processor;
+                    var held = batch(saved, lane);
+                    complete &= amount(slots.get(3)) + pendingOutputs(saved, lane, result) == initialOutput + operations
+                            && held != null && held.finished();
+                }
+                if (complete) break;
+            }
+            helper.assertTrue(ticks < 4000, "Recipes did not finish against the blocked export target");
+            var blocked = machine.saveWithFullMetadata();
+            for (int lane = 0; lane < 4; lane++) {
+                var result = lane % 2 == 0 ? print : processor;
+                long local = amount(ManagedItemStorages.slots(machine.getIndexInventory(lane)).get(3));
+                long pending = pendingOutputs(blocked, lane, result);
+                helper.assertTrue(local <= 64 && pending > 0 && local + pending == initialOutput + operations,
+                        "Blocked lane " + lane + " did not preserve local and pending output");
+            }
+            machine.load(blocked);
+            machine.load(blocked);
+            machine.getUpgrades().setItemDirect(0, ItemStack.EMPTY);
+            chest.clearContent();
+            helper.runAfterDelay(40, () -> {
+                helper.assertTrue(machine.getMainNode().isActive(), "Reloaded blocked-export grid did not reconnect");
+                for (int tick = 0; tick < 20; tick++) machine.tickingRequest(machine.getMainNode().getNode(), 1);
+
+                long expectedPerType = (initialOutput + operations) * 2;
+                helper.assertTrue(chestCount(chest, print) == expectedPerType && chestCount(chest, processor) == expectedPerType,
+                        "Reloaded overflow did not drain exactly once: print=" + chestCount(chest, print)
+                                + ", processor=" + chestCount(chest, processor));
+                for (int lane = 0; lane < 4; lane++) {
+                    var slots = ManagedItemStorages.slots(machine.getIndexInventory(lane));
+                    boolean pressing = lane % 2 != 0;
+                    helper.assertTrue(amount(slots.get(0)) == (pressing ? 0 : 1) && amount(slots.get(1)) == 0
+                                    && amount(slots.get(2)) == 0 && amount(slots.get(3)) == 0,
+                            "Lane " + lane + " retained resources after reload and card removal");
+                    helper.assertTrue(!machine.saveWithFullMetadata().getCompound("ae2ocThread" + lane).contains("ae2ocProcessing"),
+                            "Lane " + lane + " retained a completed batch");
+                }
+                helper.succeed();
+            });
+        });
+    }
+
     private static long chestCount(ChestBlockEntity chest, AEItemKey key) {
         long total = 0;
         for (int slot = 0; slot < chest.getContainerSize(); slot++)

@@ -53,6 +53,12 @@ public final class InscriberGameTests {
         ExtendedInscriberRecipes.recipeWithAutoExport(helper);
     }
 
+    @GameTest(template = "empty", timeoutTicks = 1200)
+    public static void extendedInscriberBlockedExportSurvivesReloadAndCardRemoval(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedInscriberRecipes.blockedExportLifecycle(helper);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 200)
     public static void inscriberRecipeSurvivesReloadAndCardRemoval(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
