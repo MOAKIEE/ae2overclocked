@@ -44,7 +44,7 @@ public abstract class MixinAE2CSCircuitEtcherProcessing {
     }
     @Inject(method = "loadTag", at = @At("TAIL"))
     private void ae2oc_load(CompoundTag tag, CallbackInfo ci) {
-        if (tag.contains("ae2ocProcessing")) ae2oc_adapter().load(tag);
+        if (ae2oc_adapter != null || tag.contains("ae2ocProcessing")) ae2oc_adapter().load(tag);
     }
     @Inject(method = "addAdditionalDrops", at = @At("TAIL"))
     private void ae2oc_drops(net.minecraft.world.level.Level level, net.minecraft.core.BlockPos pos,

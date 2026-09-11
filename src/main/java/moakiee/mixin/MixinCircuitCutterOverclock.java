@@ -51,7 +51,7 @@ public abstract class MixinCircuitCutterOverclock {
     @Inject(method = "loadTag", at = @At("TAIL"))
     private void ae2oc_load(CompoundTag tag, CallbackInfo ci) {
         moakiee.ae2oc.compat.ae2.ManagedItemStorages.load(ae2oc_items(), tag, "ae2ocLongSlots");
-        if (tag.contains("ae2ocProcessing")) ae2oc_adapter().load(tag);
+        if (ae2oc_adapter != null || tag.contains("ae2ocProcessing")) ae2oc_adapter().load(tag);
     }
 
     @Inject(method = "addAdditionalDrops", at = @At("TAIL"))

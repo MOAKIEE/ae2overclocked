@@ -11,8 +11,8 @@ public final class BatchProcessor<K> {
     private ProcessingState<K> state;
 
     public ProcessingState<K> snapshot() { return state; }
+    /** Replaces the authoritative save snapshot, including an empty completed/legacy save. */
     public void restore(ProcessingState<K> saved) {
-        if (state != null) throw new IllegalStateException("Cannot overwrite an owned batch");
         state = saved;
     }
 

@@ -167,7 +167,11 @@ public class MachineProcessorAdapter {
     }
 
     public void load(CompoundTag tag) {
-        if (tag.contains("ae2ocProcessing")) processor.restore(ProcessingCodec.read(tag.getCompound("ae2ocProcessing")));
+        // Decode fully before replacing live ownership. This method belongs to full host save loading.
+        var saved = tag.contains("ae2ocProcessing") ? ProcessingCodec.read(tag.getCompound("ae2ocProcessing")) : null;
+        processor.restore(saved);
+        retryAt = 0;
+        retryDelay = 5;
     }
 
     public void addDrops(List<ItemStack> drops) {

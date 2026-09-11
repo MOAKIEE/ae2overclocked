@@ -195,7 +195,22 @@ public final class RefactorGameTests {
             helper.assertTrue(machine != null, "Missing machine entity: " + id);
             helper.assertTrue(moakiee.support.MachineBreakProtection.isProtectedMachine(machine), "Machine inventories were not registered: " + id);
             var saved = machine.saveWithFullMetadata();
+            var empty = saved.copy();
+            var batch = ProcessingCodec.write(new ProcessingState<AEKey>("test:reload",
+                    List.of(new ResourceAmount<>(AEItemKey.of(Items.IRON_INGOT), 128)),
+                    List.of(new ResourceAmount<>(AEItemKey.of(Items.GOLD_INGOT), 256)), 100, 25, 4));
+            if (id.equals("expatternprovider:ex_inscriber")) {
+                var thread = new net.minecraft.nbt.CompoundTag();
+                thread.put("ae2ocProcessing", batch);
+                saved.put("ae2ocThread0", thread);
+            } else saved.put("ae2ocProcessing", batch);
             machine.load(saved);
+            machine.load(saved);
+            helper.assertTrue(moakiee.support.MachineBreakProtection.getInternalItemTotalCount(machine) == 128,
+                    "Repeated loading duplicated or lost the owned batch: " + id);
+            machine.load(empty);
+            helper.assertTrue(moakiee.support.MachineBreakProtection.getInternalItemTotalCount(machine) == 0,
+                    "Loading an empty snapshot retained the previous batch: " + id);
             helper.assertTrue(machine.getType() == helper.getBlockEntity(new BlockPos(1, 1, 1)).getType(), "Machine type changed: " + id);
         }
         helper.succeed();
