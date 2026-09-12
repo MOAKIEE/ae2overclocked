@@ -1,9 +1,3 @@
-/*
- * This file includes code adapted from MakeAE2Better by QiuYe.
- * Licensed under the MIT License.
- * Original Source: https://github.com/qiuye2024github/MaekAE2Better
- * Full license text: src/main/resources/LICENSE_MakeAE2Better.txt
- */
 package moakiee.mixin;
 
 import appeng.api.upgrades.IUpgradeableObject;

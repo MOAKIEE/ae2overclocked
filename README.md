@@ -94,9 +94,3 @@ breakProtectionItemThreshold = 1000
 [machines]
 disabledMachineIds = ["ae2:inscriber", "ae2cs:crystal_pulverizer"]
 ```
-
-## 声明与致谢
-
-- 本项目中的超速卡相关思路与部分实现参考了 MakeAE2Better（作者：QiuYe）。
-- 本项目包含基于 MakeAE2Better 的适配代码与资源，并在仓库中保留其许可证文本：`src/main/resources/LICENSE_MakeAE2Better.txt`。
-- 特别感谢 MakeAE2Better 项目为 AE2 生态提供的实践与启发。

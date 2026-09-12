@@ -1,7 +1,3 @@
-/*
- * Includes work adapted from MakeAE2Better by QiuYe, MIT.
- * See src/main/resources/LICENSE_MakeAE2Better.txt.
- */
 package moakiee.mixin;
 
 import appeng.api.upgrades.IUpgradeableObject;
