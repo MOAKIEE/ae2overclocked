@@ -273,6 +273,38 @@ final class AdvancedReactionRecipes {
         });
     }
 
+    /** Card removal must not return overflow through upstream's lossy extract-and-reinsert path. */
+    static void downgradedAutoExportConservation(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.tryParse("advanced_ae:reaction_chamber")));
+        var machine = (ReactionChamberEntity) helper.getBlockEntity(pos);
+        machine.getConfigManager().putSetting(Settings.AUTO_EXPORT, YesNo.YES);
+        machine.updateOutputSides(EnumSet.of(appeng.api.orientation.RelativeSide.TOP));
+        Direction top = machine.getOrientation().getSide(appeng.api.orientation.RelativeSide.TOP);
+        helper.setBlock(pos.relative(top), Blocks.CHEST);
+        var chest = (ChestBlockEntity) helper.getBlockEntity(pos.relative(top));
+        for (int slot = 0; slot < chest.getContainerSize(); slot++) {
+            chest.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
+        }
+
+        upgrade(machine, null, false, true);
+        var output = ManagedItemStorages.slots(machine.getOutput()).get(0);
+        output.write(new ResourceAmount<AEKey>(AEItemKey.of(Items.GOLD_INGOT), 130));
+        machine.getTank().setStack(0, new GenericStack(QUANTUM_INFUSION, 12_000));
+        machine.getUpgrades().setItemDirect(0, ItemStack.EMPTY);
+
+        machine.tickingRequest(null, 1);
+        helper.assertTrue(output.read().amount() == 130, "Rejected item export lost overflow after capacity downgrade");
+        helper.assertTrue(tank(machine, 0) == 12_000, "Rejected fluid export lost overflow after capacity downgrade");
+
+        chest.setItem(0, new ItemStack(Items.GOLD_INGOT, 63));
+        machine.tickingRequest(null, 1);
+        helper.assertTrue(chest.getItem(0).getCount() == 64, "Partial destination did not accept one item");
+        helper.assertTrue(output.read().amount() == 129, "Partial item export did not debit exactly the accepted amount");
+        helper.assertTrue(tank(machine, 0) == 12_000, "Item export changed rejected fluid output");
+        helper.succeed();
+    }
+
     /**
      * Destruction packaging. Both tank slots and the logical output overflow, the finished batch products
      * and the reserved inputs of an unfinished batch must leave the machine as bounded containers.

@@ -65,6 +65,14 @@ public abstract class MixinReactionChamberOverclock {
         }
     }
 
+    @Inject(method = "pushOutResult", at = @At("HEAD"), cancellable = true)
+    private void ae2oc_exportLogicalOutputs(CallbackInfoReturnable<Boolean> cir) {
+        var self = (ReactionChamberEntity) (Object) this;
+        if (moakiee.ae2oc.compat.ae2.ManagedItemStorages.isManaged(self.getOutput())) {
+            cir.setReturnValue(moakiee.ae2oc.compat.advancedae.ReactionExport.push(self, this::ae2oc$target));
+        }
+    }
+
     @Inject(method = {"saveAdditional", "m_183515_"}, at = @At("TAIL"), require = 1)
     private void ae2oc_save(CompoundTag tag, CallbackInfo ci) {
         moakiee.ae2oc.compat.ae2.ManagedItemStorages.save(ae2oc_items(), tag, "ae2ocLongSlots");

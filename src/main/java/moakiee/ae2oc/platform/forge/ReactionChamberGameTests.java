@@ -35,6 +35,12 @@ public final class ReactionChamberGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void downgradedReactionChamberAutoExportConservesOverflow(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("advanced_ae")) { helper.succeed(); return; }
+        AdvancedReactionRecipes.downgradedAutoExportConservation(helper);
+    }
+
+    @GameTest(template = "empty")
     public static void reactionChamberDestructionReturnsTankAndBatchResources(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("advanced_ae")) { helper.succeed(); return; }
         AdvancedReactionRecipes.destructionDrops(helper);
