@@ -23,7 +23,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(targets = "com.glodblock.github.extendedae.common.tileentities.TileCircuitCutter", remap = false)
 public abstract class MixinCircuitCutterOverclock {
 
-
+    @Shadow private ItemStack renderOutput;
     @Unique private MachineProcessorAdapter ae2oc_adapter;
 
     @Unique private MachineProcessorAdapter ae2oc_adapter() {
@@ -59,6 +59,17 @@ public abstract class MixinCircuitCutterOverclock {
                 self.markForUpdate();
             }
             cir.setReturnValue(result);
+        }
+    }
+
+    @Inject(method = "writeToStream", at = @At(value = "FIELD",
+            target = "Lcom/glodblock/github/extendedae/common/tileentities/TileCircuitCutter;renderOutput:Lnet/minecraft/world/item/ItemStack;",
+            opcode = org.objectweb.asm.Opcodes.PUTFIELD, shift = At.Shift.AFTER))
+    private void ae2oc_writeOwnedRecipeVisual(net.minecraft.network.FriendlyByteBuf data, CallbackInfo ci) {
+        var state = ae2oc_adapter == null ? null : ae2oc_adapter.processing();
+        if (state != null && !state.outputs().isEmpty()
+                && state.outputs().get(0).key() instanceof appeng.api.stacks.AEItemKey item) {
+            renderOutput = item.toStack(1);
         }
     }
 

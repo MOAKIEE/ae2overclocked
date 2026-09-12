@@ -1,5 +1,6 @@
 package moakiee.ae2oc.platform.forge;
 
+import java.util.List;
 import appeng.api.config.Settings;
 import appeng.api.config.YesNo;
 import appeng.api.stacks.AEItemKey;
@@ -10,6 +11,9 @@ import moakiee.Ae2Overclocked;
 import moakiee.ModItems;
 import moakiee.ae2oc.api.ResourceAmount;
 import moakiee.ae2oc.compat.ae2.ManagedItemStorages;
+import moakiee.ae2oc.compat.ae2.InscriberVisualState;
+import moakiee.ae2oc.compat.ae2.ProcessingCodec;
+import moakiee.ae2oc.core.execution.ProcessingState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -23,6 +27,46 @@ import net.minecraftforge.gametest.PrefixGameTestTemplate;
 @GameTestHolder(Ae2Overclocked.MODID)
 @PrefixGameTestTemplate(false)
 public final class InscriberGameTests {
+    @GameTest(template = "empty")
+    public static void inscriberCompletionSyncsVisualWithoutServerSettlement(GameTestHelper helper) {
+        var sourcePos = new BlockPos(1, 1, 1);
+        var clientPos = new BlockPos(2, 1, 1);
+        helper.setBlock(sourcePos, AEBlocks.INSCRIBER.block());
+        helper.setBlock(clientPos, AEBlocks.INSCRIBER.block());
+        var source = (InscriberBlockEntity) helper.getBlockEntity(sourcePos);
+        var clientCopy = (InscriberBlockEntity) helper.getBlockEntity(clientPos);
+        var saved = source.saveWithFullMetadata();
+        saved.put("ae2ocProcessing", ProcessingCodec.write(new ProcessingState<AEKey>("test:visual",
+                List.of(new ResourceAmount<>(AEItemKey.of(Items.IRON_INGOT), 1)),
+                List.of(new ResourceAmount<>(AEItemKey.of(Items.GOLD_INGOT), 1)), 100, 100, 1)));
+        source.load(saved);
+
+        source.tickingRequest(null, 1);
+        helper.assertTrue(!source.isSmash(), "Visual completion changed the server settlement flag");
+        clientCopy.load(source.getUpdateTag());
+        var visual = ((InscriberVisualState) clientCopy).ae2oc$visualResult();
+        helper.assertTrue(clientCopy.isSmash(), "Client copy did not receive the completion animation pulse");
+        helper.assertTrue(visual.is(Items.GOLD_INGOT) && visual.getCount() == 1,
+                "Client copy did not receive the completed recipe result");
+        helper.assertTrue(source.getInternalInventory().getStackInSlot(3).is(Items.GOLD_INGOT),
+                "Visual sync changed completed output ownership");
+
+        var second = source.saveWithFullMetadata();
+        second.put("ae2ocProcessing", ProcessingCodec.write(new ProcessingState<AEKey>("test:visual-second",
+                List.of(new ResourceAmount<>(AEItemKey.of(Items.IRON_INGOT), 1)),
+                List.of(new ResourceAmount<>(AEItemKey.of(Items.DIAMOND), 1)), 0, 0, 1)));
+        source.load(second);
+        source.tickingRequest(null, 1);
+        clientCopy.load(source.getUpdateTag());
+        visual = ((InscriberVisualState) clientCopy).ae2oc$visualResult();
+        helper.assertTrue(clientCopy.isSmash() && visual.is(Items.DIAMOND),
+                "A fast consecutive batch did not restart with its own visual result");
+        helper.assertTrue(source.getInternalInventory().getStackInSlot(3).is(Items.GOLD_INGOT)
+                        && source.saveWithFullMetadata().contains("ae2ocProcessing"),
+                "Consecutive visual sync settled or discarded blocked output");
+        helper.succeed();
+    }
+
     @GameTest(template = "empty")
     public static void inscriberRestoredBatchUpdatesProgress(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);

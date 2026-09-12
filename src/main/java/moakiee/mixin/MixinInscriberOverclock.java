@@ -6,7 +6,9 @@ import appeng.api.networking.ticking.TickRateModulation;
 import appeng.blockentity.misc.InscriberBlockEntity;
 import appeng.recipes.handlers.InscriberRecipe;
 import moakiee.ae2oc.compat.ae2.InscriberAdapter;
+import moakiee.ae2oc.compat.ae2.InscriberVisualState;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.item.ItemStack;
@@ -20,11 +22,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value = InscriberBlockEntity.class, remap = false)
-public abstract class MixinInscriberOverclock {
+public abstract class MixinInscriberOverclock implements InscriberVisualState {
     @Shadow public abstract InternalInventory getInternalInventory();
     @Shadow public abstract InscriberRecipe getTask();
     @Shadow private int processingTime;
     @Unique private InscriberAdapter ae2oc_adapter;
+    @Unique private boolean ae2oc_visualSmash;
+    @Unique private ItemStack ae2oc_visualResult = ItemStack.EMPTY;
+
+    @Override
+    public ItemStack ae2oc$visualResult() {
+        return ae2oc_visualResult;
+    }
 
     @Unique private InscriberAdapter ae2oc_adapter() {
         if (ae2oc_adapter == null) {
@@ -51,7 +60,33 @@ public abstract class MixinInscriberOverclock {
                 result = TickRateModulation.URGENT;
             var state = ae2oc_adapter.processing();
             processingTime = state == null ? 0 : state.paidProgress(((InscriberBlockEntity) (Object) this).getMaxProcessingTime());
+            var completed = ae2oc_adapter.pollCompletedPrimaryOutput();
+            if (completed != null && completed.key() instanceof appeng.api.stacks.AEItemKey item) {
+                ae2oc_visualResult = item.toStack(1);
+                ae2oc_visualSmash = true;
+                ((InscriberBlockEntity) (Object) this).markForUpdate();
+            }
             cir.setReturnValue(result);
+        }
+    }
+
+    @Inject(method = "writeToStream", at = @At("TAIL"))
+    private void ae2oc_writeVisualResult(FriendlyByteBuf data, CallbackInfo ci) {
+        data.writeBoolean(ae2oc_visualSmash);
+        data.writeItem(ae2oc_visualResult);
+        ae2oc_visualSmash = false;
+        ae2oc_visualResult = ItemStack.EMPTY;
+    }
+
+    @Inject(method = "readFromStream", at = @At("TAIL"))
+    private void ae2oc_readVisualResult(FriendlyByteBuf data, CallbackInfoReturnable<Boolean> cir) {
+        boolean visualSmash = data.readBoolean();
+        ae2oc_visualResult = data.readItem();
+        if (visualSmash) {
+            var self = (InscriberBlockEntity) (Object) this;
+            // Restart even if a fast preceding animation has not yet cleared itself client-side.
+            self.setSmash(false);
+            self.setSmash(true);
         }
     }
 
@@ -71,6 +106,8 @@ public abstract class MixinInscriberOverclock {
     private void ae2oc_load(CompoundTag tag, CallbackInfo ci) {
         moakiee.ae2oc.compat.ae2.ManagedItemStorages.load(ae2oc_items(), tag, "ae2ocLongSlots");
         if (ae2oc_adapter != null || tag.contains("ae2ocProcessing")) ae2oc_adapter().load(tag);
+        ae2oc_visualSmash = false;
+        ae2oc_visualResult = ItemStack.EMPTY;
     }
 
     @Inject(method = "addAdditionalDrops", at = @At("TAIL"))

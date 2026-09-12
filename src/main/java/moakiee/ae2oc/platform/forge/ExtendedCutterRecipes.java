@@ -42,6 +42,30 @@ final class ExtendedCutterRecipes {
                 TileCircuitCutter.MAX_PROGRESS, machine::isWorking, machine.getOutput(), 0);
     }
 
+    static void renderOutputSync(GameTestHelper helper) {
+        var block = ForgeRegistries.BLOCKS.getValue(
+                ResourceLocation.fromNamespaceAndPath("expatternprovider", "circuit_cutter"));
+        var sourcePos = new BlockPos(1, 1, 1);
+        var clientPos = new BlockPos(2, 1, 1);
+        helper.setBlock(sourcePos, block);
+        helper.setBlock(clientPos, block);
+        var source = (TileCircuitCutter) helper.getBlockEntity(sourcePos);
+        var clientCopy = (TileCircuitCutter) helper.getBlockEntity(clientPos);
+        var saved = source.saveWithFullMetadata();
+        saved.put("ae2ocProcessing", ProcessingCodec.write(new ProcessingState<AEKey>("test:render",
+                List.of(new ResourceAmount<>(AEItemKey.of(Items.IRON_INGOT), 1)),
+                List.of(new ResourceAmount<>(AEItemKey.of(Items.GOLD_INGOT), 1)), 100, 25, 3)));
+        source.load(saved);
+        source.tickingRequest(null, 1);
+
+        clientCopy.load(source.getUpdateTag());
+        helper.assertTrue(clientCopy.isWorking() && clientCopy.getProgress() == TileCircuitCutter.MAX_PROGRESS / 4,
+                "Client copy did not receive cutter working progress");
+        helper.assertTrue(clientCopy.getRenderOutput().is(Items.GOLD_INGOT),
+                "Client copy rendered the private upstream context instead of the owned batch output");
+        helper.succeed();
+    }
+
     private static final String RECIPE = "expatternprovider:cutter/logic";
     private static final long FLUID_PER_OPERATION = 100;
     private static final long OUTPUT_PER_OPERATION = 9;

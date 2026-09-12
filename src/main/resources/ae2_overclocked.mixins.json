@@ -18,7 +18,9 @@
     "MixinLogicalMenu",
     "MixinMachineFeatures"
   ],
-  "client": [],
+  "client": [
+    "MixinInscriberRenderer"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

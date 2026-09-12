@@ -39,6 +39,7 @@ public class MachineProcessorAdapter {
     private final int budgetShares;
     private final int outputSlot;
     private final BatchProcessor<AEKey> processor = new BatchProcessor<>();
+    private ResourceAmount<AEKey> completedPrimaryOutput;
     private RetryBackoff retryBackoff;
     private long retryConfigRevision = Long.MIN_VALUE;
 
@@ -69,6 +70,13 @@ public class MachineProcessorAdapter {
     /** Current immutable batch snapshot, or null while idle. Used for client-visible progress sync. */
     public ProcessingState<AEKey> processing() { return processor.snapshot(); }
 
+    /** One-shot visual event emitted when processing, rather than output draining, completes. */
+    public ResourceAmount<AEKey> pollCompletedPrimaryOutput() {
+        var result = completedPrimaryOutput;
+        completedPrimaryOutput = null;
+        return result;
+    }
+
     /** Null delegates a completely unmodified machine to upstream. */
     public TickRateModulation tick() {
         var profile = UpgradeProfileCache.of(host);
@@ -96,7 +104,14 @@ public class MachineProcessorAdapter {
         }
         var before = processor.snapshot();
         try {
+            var beforeAdvance = processor.snapshot();
             progressed |= processor.advance(this::extractEnergy);
+            var afterAdvance = processor.snapshot();
+            if (beforeAdvance != null && !beforeAdvance.finished()
+                    && afterAdvance != null && afterAdvance.finished()
+                    && !afterAdvance.outputs().isEmpty()) {
+                completedPrimaryOutput = afterAdvance.outputs().get(0);
+            }
             progressed |= processor.drain(MachineBudget.share(budget.transferAmount(), budgetShares),
                     MachineBudget.share(budget.transferKeys(), budgetShares), this::insertOutput);
         } finally {
@@ -199,6 +214,7 @@ public class MachineProcessorAdapter {
         // Decode fully before replacing live ownership. This method belongs to full host save loading.
         var saved = tag.contains("ae2ocProcessing") ? ProcessingCodec.read(tag.getCompound("ae2ocProcessing")) : null;
         processor.restore(saved);
+        completedPrimaryOutput = null;
         if (retryBackoff != null) retryBackoff.reset();
     }
 
