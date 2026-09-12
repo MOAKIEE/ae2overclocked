@@ -36,6 +36,14 @@ sourceSets {
     }
 }
 
+// Original optional jars are inspected as data only; never add them to the game runtime.
+configurations {
+    compatAuditOriginal {
+        canBeConsumed = false
+        transitive = false
+    }
+}
+
 println "Java: ${System.getProperty 'java.version'}, JVM: ${System.getProperty 'java.vm.version'} (${System.getProperty 'java.vendor'}), Arch: ${System.getProperty 'os.arch'}"
 minecraft {
     // The mappings can be changed at any time and must be in the following format.
@@ -158,6 +166,11 @@ repositories {
 }
 
 dependencies {
+    compatAuditOriginal "curse.maven:applied-energistics-2-223794:${ae2_file_id}"
+    compatAuditOriginal "curse.maven:ex-pattern-provider-892005:${extendedae_file_id}"
+    compatAuditOriginal "curse.maven:advancedae-1084104:${advancedae_file_id}"
+    compatAuditOriginal "curse.maven:ae2addonlib-1366135:${ae2addonlib_file_id}"
+    compatAuditOriginal "curse.maven:ae2-crystal-science-1435174:${ae2cs_file_id}"
     // Specify the version of Minecraft to use.
     // Any artifact can be supplied so long as it has a "userdev" classifier artifact and is a compatible patcher artifact.
     // The "userdev" classifier will be requested and setup by ForgeGradle.
@@ -202,6 +215,8 @@ tasks.named('processResources', ProcessResources).configure {
             loader_version_range: loader_version_range,
             mod_id: mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version,
             mod_authors: mod_authors, mod_description: mod_description,
+            ae2_version_range: ae2_version_range, extendedae_version_range: extendedae_version_range,
+            advancedae_version_range: advancedae_version_range, ae2cs_version_range: ae2cs_version_range,
     ]
     inputs.properties replaceProperties
 
@@ -308,6 +323,25 @@ tasks.register('verifyArchitecture') {
         }
     }
 }
+
+tasks.register('verifyMixinTargets', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'moakiee.ae2oc.audit.MixinTargetAudit'
+    inputs.files(sourceSets.main.output.classesDirs, sourceSets.main.compileClasspath, configurations.compatAuditOriginal)
+    doFirst {
+        def reportDir = layout.buildDirectory.dir('reports/mixin-targets').get().asFile
+        reportDir.mkdirs()
+        def mapped = new File(reportDir, 'mapped-jars.txt')
+        def production = new File(reportDir, 'production-jars.txt')
+        mapped.setText(sourceSets.main.compileClasspath.files.findAll { it.name.endsWith('.jar') }
+                .sort { it.name }.collect { it.absolutePath }.join('\n'), 'UTF-8')
+        production.setText(configurations.compatAuditOriginal.files.sort { it.name }
+                .collect { it.absolutePath }.join('\n'), 'UTF-8')
+        args = [layout.buildDirectory.dir('classes/java/main/moakiee/mixin').get().asFile.absolutePath,
+                mapped.absolutePath, production.absolutePath]
+    }
+}
 // Proves the published artifact carries no develop-time scaffolding. The other test source
 // sets (clientSmoke, test) are separate source sets and therefore already absent, but they
 // are asserted here too so the trimming policy stays explicit and regression-proof.
@@ -346,7 +380,7 @@ tasks.register('verifyReleaseContents') {
         }
     }
 }
-tasks.named('check') { dependsOn 'coreContractTest', 'verifyArchitecture', 'verifyReleaseContents', 'restartTestClasses' }
+tasks.named('check') { dependsOn 'coreContractTest', 'verifyArchitecture', 'verifyMixinTargets', 'verifyReleaseContents', 'restartTestClasses' }
 if (project.hasProperty('clientSmoke')) {
     tasks.matching { it.name == 'runClient' }.configureEach { dependsOn 'clientSmokeClasses' }
 }

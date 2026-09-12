@@ -72,7 +72,7 @@ configuredBackground="minecraft:textures/block/obsidian.png"
 [[dependencies.${mod_id}]]
     modId="ae2"
     mandatory=true
-    versionRange="[15.0,)"
+    versionRange="${ae2_version_range}"
     ordering="AFTER"
     side="BOTH"
 
@@ -80,7 +80,7 @@ configuredBackground="minecraft:textures/block/obsidian.png"
 [[dependencies.${mod_id}]]
     modId="expatternprovider"
     mandatory=false
-    versionRange="[0,)"
+    versionRange="${extendedae_version_range}"
     ordering="AFTER"
     side="BOTH"
 
@@ -88,6 +88,14 @@ configuredBackground="minecraft:textures/block/obsidian.png"
 [[dependencies.${mod_id}]]
     modId="advanced_ae"
     mandatory=false
-    versionRange="[0,)"
+    versionRange="${advancedae_version_range}"
+    ordering="AFTER"
+    side="BOTH"
+
+# AE2 Crystal Science - optional, verified RC version
+[[dependencies.${mod_id}]]
+    modId="ae2cs"
+    mandatory=false
+    versionRange="${ae2cs_version_range}"
     ordering="AFTER"
     side="BOTH"

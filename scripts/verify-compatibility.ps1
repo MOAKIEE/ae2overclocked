@@ -32,7 +32,10 @@ try {
     if ($output -notmatch $success) { throw "Runtime did not report test completion; see $report" }
     if (!$ClientSmoke) {
         $testCount = [regex]::Match($output, 'All ([0-9]+) required tests passed').Groups[1].Value
-        if ([int]$testCount -lt 21) { throw "Expected at least 21 GameTests, found $testCount; see $report" }
+        if ([int]$testCount -lt 82) { throw "Expected at least 82 GameTests, found $testCount; see $report" }
+        if ($output -notmatch 'Mixin target audit passed: [1-9][0-9]* checks; empty-production negative control caught [1-9][0-9]* failures') {
+            throw "Build did not report the static Mixin audit and its negative control; see $report"
+        }
     }
     if ($output -match 'Compatibility \S+ disabled: (?!mod absent)') {
         throw "A compatibility adapter failed its startup contract; see $report"
@@ -46,6 +49,11 @@ try {
     }
     foreach ($mod in $expected) {
         if ($output -notmatch "Compatibility $mod enabled;") { throw "Expected adapter $mod was not enabled; see $report" }
+    }
+    foreach ($mod in @('expatternprovider', 'advanced_ae', 'ae2cs')) {
+        if ($mod -notin $expected -and $output -notmatch "Compatibility $mod disabled: mod absent") {
+            throw "Expected optional mod $mod to be absent; see $report"
+        }
     }
     Write-Output "Verified $Runtime $modeName runtime; report: $report"
 } finally {
