@@ -90,6 +90,74 @@ final class ExtendedInscriberRecipes {
         root.put("ae2ocThread" + lane, child);
     }
 
+    /**
+     * An upgrade installed while a lane is already inside the upstream smash settlement must not cancel that
+     * lane's tick. The lane has to run out {@code finalStep}, emit its product, extract the consumed inputs,
+     * clear {@code smash} and reopen its automation filter before the shared processor owns the next batch.
+     * Installing the upgrade earlier or later is covered by the recipe matrix, which already drives both the
+     * upstream fallback and the shared path.
+     */
+    static void smashTakeoverSettlement(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, Blocks.AIR);
+        helper.setBlock(pos.west(), AEBlocks.CREATIVE_ENERGY_CELL.block());
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "ex_inscriber")));
+        var machine = (TileExInscriber) helper.getBlockEntity(pos);
+        helper.runAfterDelay(40, () -> {
+            helper.assertTrue(machine.getMainNode().isActive(), "Extended smash-handoff grid is inactive");
+            var node = machine.getMainNode().getNode();
+            var lane = ManagedItemStorages.slots(machine.getIndexInventory(0));
+            var print = AEItemKey.of(AEItems.LOGIC_PROCESSOR_PRINT.asItem());
+            lane.get(0).write(new ResourceAmount<AEKey>(AEItemKey.of(AEItems.LOGIC_PROCESSOR_PRESS.asItem()), 1));
+            lane.get(2).write(new ResourceAmount<AEKey>(AEItemKey.of(Items.GOLD_INGOT), 1));
+
+            int calls = 0;
+            while (!machine.isSmash() && calls++ < 500) machine.tickingRequest(node, 1);
+            helper.assertTrue(machine.isSmash(), "Fixture did not reach the upstream smash in lane 0");
+
+            machine.getUpgrades().setItemDirect(0, new ItemStack(ModItems.OVERCLOCK_CARD.get()));
+            int takeover = 0;
+            while (machine.isSmash() && takeover++ < 200) machine.tickingRequest(node, 1);
+
+            helper.assertTrue(!machine.isSmash(), "REVIEW upgrade takeover left the lane smash state stuck");
+            helper.assertTrue(amount(lane.get(0)) == 1 && amount(lane.get(2)) == 0 && amount(lane.get(3)) == 1
+                            && lane.get(3).read().key().equals(print),
+                    "Smash handoff lost or duplicated the lane resources");
+            helper.assertTrue(!machine.saveWithFullMetadata().getCompound("ae2ocThread0").contains("ae2ocProcessing"),
+                    "Smash handoff retained a completed batch");
+
+            // Draining keeps the assertion independent of the slot-size fixture. The lane must then accept a
+            // real automated feed again: the upstream filter rejects every insert while the lane is smashing.
+            var settled = machine.getIndexInventory(0).extractItem(3, 64, false);
+            helper.assertTrue(print.matches(settled) && settled.getCount() == 1,
+                    "Lane did not expose its settled product exactly once");
+            helper.assertTrue(feedAutomatedGold(machine), "Automation could not feed the lane after the handoff");
+            helper.assertTrue(amount(lane.get(2)) == 1, "Automated feed did not reach the lane input slot");
+            int next = 0;
+            while (amount(lane.get(3)) == 0 && next++ < 400) machine.tickingRequest(node, 1);
+            helper.assertTrue(amount(lane.get(2)) == 0 && amount(lane.get(3)) == 1,
+                    "The shared processor did not finish the next batch after the handoff");
+            helper.assertTrue(!machine.isSmash()
+                            && !machine.saveWithFullMetadata().getCompound("ae2ocThread0").contains("ae2ocProcessing"),
+                    "The next batch did not finish cleanly after the handoff");
+            helper.succeed();
+        });
+    }
+
+    /** Offers one item through the exposed side handler, the path upstream automation uses to feed a lane. */
+    private static boolean feedAutomatedGold(TileExInscriber machine) {
+        for (var direction : net.minecraft.core.Direction.values()) {
+            var handler = machine.getCapability(net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER,
+                    direction).resolve().orElse(null);
+            if (handler == null) continue;
+            for (int slot = 0; slot < handler.getSlots(); slot++) {
+                if (!handler.getStackInSlot(slot).isEmpty()) continue;
+                if (handler.insertItem(slot, new ItemStack(Items.GOLD_INGOT), false).isEmpty()) return true;
+            }
+        }
+        return false;
+    }
+
     static void run(GameTestHelper helper, int scenario) {
         if (scenario == 12) { helper.succeed(); return; }
         var pos = new BlockPos(1, 1, 1);

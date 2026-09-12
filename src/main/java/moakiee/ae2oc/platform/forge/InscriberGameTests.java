@@ -127,6 +127,12 @@ public final class InscriberGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 300)
+    public static void extendedInscriberUpgradeDuringSmashCompletesSettlement(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedInscriberRecipes.smashTakeoverSettlement(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 300)
     public static void inscriberNamePressRetainsTemplateAndCopiesName(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos.west(), AEBlocks.CREATIVE_ENERGY_CELL.block());

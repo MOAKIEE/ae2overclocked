@@ -22,6 +22,7 @@ public abstract class MixinExInscriberThreadOverclock implements InscriberThread
     @Shadow public abstract InternalInventory getInternalInventory();
     @Shadow public abstract InscriberRecipe getTask();
     @Shadow public abstract int getMaxProcessingTime();
+    @Shadow public abstract boolean isSmash();
     @Shadow private int processingTime;
     @Unique private InscriberAdapter ae2oc_adapter;
 
@@ -37,6 +38,10 @@ public abstract class MixinExInscriberThreadOverclock implements InscriberThread
 
     @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
     private void ae2oc_tick(CallbackInfoReturnable<TickRateModulation> cir) {
+        // A vanilla lane owns its slot contents from smash start through finalStep 16, when it emits the
+        // product and extracts the consumed inputs. Cancelling that tick for a freshly installed card would
+        // freeze finalStep, leave smash set and keep the lane's auto-feed rejected, so let the lane finish.
+        if (isSmash()) return;
         var result = ae2oc$getAdapter().tick();
         if (result != null) {
             // The custom path replaces the upstream body, so it must also run the lane's auto-export.
