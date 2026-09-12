@@ -187,19 +187,22 @@ final class AE2CSNaturalScheduling {
         for (int slot = 0; slot < fixture.keys().size(); slot++) {
             fixture.inputs().get(slot).write(new ResourceAmount<AEKey>(fixture.keys().get(slot), 3));
         }
-        InternalInventory output;
+        LocalResourceSlot output;
         AEItemKey outputKey;
         if (fixture.host() instanceof CrystalPulverizerBlockEntity machine) {
-            output = machine.getOutputInv();
+            output = ManagedItemStorages.slots(machine.getOutputInv()).get(0);
             outputKey = item("minecraft:gunpowder");
         } else if (fixture.host() instanceof CrystalAggregatorBlockEntity machine) {
-            output = machine.getOutputInv();
+            output = ManagedItemStorages.slots(machine.getOutputInv()).get(0);
+            outputKey = item("ae2:logic_processor");
+        } else if (fixture.host() instanceof CircuitEtcherBlockEntity machine) {
+            output = ManagedItemStorages.slots(machine.getOutputInv()).get(0);
             outputKey = item("ae2:logic_processor");
         } else {
-            output = ((CircuitEtcherBlockEntity) fixture.host()).getOutputInv();
-            outputKey = item("ae2:logic_processor");
+            output = LocalResourceSlot.generic(((EntropyVariationReactionChamberBlockEntity) fixture.host()).getOutputInv(), 0);
+            outputKey = item("minecraft:stone");
         }
-        ManagedItemStorages.slots(output).get(0).write(new ResourceAmount<AEKey>(outputKey, 130));
+        output.write(new ResourceAmount<AEKey>(outputKey, 130));
         var saved = fixture.host().saveWithFullMetadata();
         saved.put("ae2ocProcessing", ProcessingCodec.write(new moakiee.ae2oc.core.execution.ProcessingState<AEKey>(
                 fixture.recipe(), List.of(), List.of(new ResourceAmount<>(outputKey, 45)), 100, 100, 0)));
@@ -219,6 +222,26 @@ final class AE2CSNaturalScheduling {
                 var stack = entity.getItem();
                 helper.assertTrue(stack.getCount() <= stack.getMaxStackSize(), "Oversized item entity after destruction");
             }
+            helper.succeed();
+        });
+    }
+
+    static void entropyFluidDestruction(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        var fixture = fixture(helper, "entropy_variation_reaction_chamber", pos);
+        var machine = (EntropyVariationReactionChamberBlockEntity) fixture.host();
+        var water = appeng.api.stacks.AEFluidKey.of(net.minecraft.world.level.material.Fluids.WATER);
+        var lava = appeng.api.stacks.AEFluidKey.of(net.minecraft.world.level.material.Fluids.LAVA);
+        LocalResourceSlot.generic(machine.getInputInv(), 0).write(new ResourceAmount<AEKey>(water, 4000));
+        LocalResourceSlot.generic(machine.getOutputInv(), 0).write(new ResourceAmount<AEKey>(lava, 8000));
+        // Destroy immediately, before the first tick can create a processing adapter.
+        helper.assertTrue(helper.getLevel().destroyBlock(helper.absolutePos(pos), true, helper.makeMockPlayer()),
+                "Entropy fluid destruction failed");
+        helper.assertTrue(helper.getLevel().getBlockEntity(helper.absolutePos(pos)) == null, "Destroyed entropy remains");
+        helper.runAfterDelay(2, () -> {
+            var entities = helper.getEntities(net.minecraft.world.entity.EntityType.ITEM, pos, 3);
+            helper.assertTrue(entityAmount(entities, water) == 0, "Entropy destruction must discard input fluid");
+            helper.assertTrue(entityAmount(entities, lava) == 0, "Entropy destruction must discard output fluid");
             helper.succeed();
         });
     }

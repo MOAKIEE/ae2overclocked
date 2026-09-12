@@ -11,6 +11,16 @@ import net.minecraftforge.gametest.PrefixGameTestTemplate;
 @PrefixGameTestTemplate(false)
 public final class AE2CSGameTests {
     @GameTest(template = "empty")
+    public static void entropyRealBreakDiscardsFluidWithoutBatch(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.entropyFluidDestruction(helper);
+    }
+    @GameTest(template = "empty")
+    public static void entropyRealBreakPreservesVisibleAndCompletedResources(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.completedDestruction(helper, "entropy_variation_reaction_chamber");
+    }
+    @GameTest(template = "empty")
     public static void pulverizerRealBreakPreservesVisibleAndCompletedResources(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
         AE2CSNaturalScheduling.completedDestruction(helper, "crystal_pulverizer");

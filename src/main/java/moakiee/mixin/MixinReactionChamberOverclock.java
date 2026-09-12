@@ -74,13 +74,7 @@ public abstract class MixinReactionChamberOverclock {
     @Inject(method = "addAdditionalDrops", at = @At("TAIL"))
     private void ae2oc_drops(Level level, BlockPos pos, List<ItemStack> drops, CallbackInfo ci) {
         moakiee.ae2oc.compat.ae2.ManagedItemStorages.addHiddenDrops(ae2oc_items(), drops);
-        // Upstream calls AEKey#addDrops on both tank slots, which is a no-op for fluids and would destroy them.
-        var tank = ((ReactionChamberEntity) (Object) this).getTank();
-        for (int slot = 0; slot < tank.size(); slot++) {
-            var fluid = tank.getStack(slot);
-            if (fluid != null && fluid.amount() > 0)
-                drops.add(moakiee.item.StoredResourcesItem.pack(fluid.what(), fluid.amount()));
-        }
+        // Tank fluids are intentionally discarded on destruction.
         if (ae2oc_adapter != null) ae2oc_adapter.addDrops(drops);
     }
     @Unique private appeng.api.inventories.InternalInventory ae2oc_items() {

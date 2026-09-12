@@ -286,9 +286,9 @@ final class AdvancedReactionRecipes {
         machine.addAdditionalDrops(helper.getLevel(), helper.absolutePos(pos), drops);
         helper.assertTrue(packedAmount(drops, LOGIC_PROCESSOR) == 111,
                 "Reaction overflow or finished batch was not packaged exactly once: " + packedAmount(drops, LOGIC_PROCESSOR));
-        helper.assertTrue(packedAmount(drops, WATER) == 4000, "Reaction chamber water input was destroyed");
-        helper.assertTrue(packedAmount(drops, QUANTUM_INFUSION) == 1000, "Reaction chamber fluid output was destroyed");
-        helper.assertTrue(drops.stream().filter(stack -> stack.is(ModItems.STORED_RESOURCES.get())).count() == 4,
+        helper.assertTrue(packedAmount(drops, WATER) == 0, "Reaction destruction must discard input fluid");
+        helper.assertTrue(packedAmount(drops, QUANTUM_INFUSION) == 0, "Reaction destruction must discard output fluid");
+        helper.assertTrue(drops.stream().filter(stack -> stack.is(ModItems.STORED_RESOURCES.get())).count() == 2,
                 "Unexpected stored-resource drop count: " + drops.size());
 
         saved = machine.saveWithFullMetadata();
@@ -303,8 +303,8 @@ final class AdvancedReactionRecipes {
                 "Unfinished batch did not return its reserved inputs");
         helper.assertTrue(packedAmount(drops, LOGIC_PROCESSOR) == 66,
                 "Unfinished batch packaged products it never made: " + packedAmount(drops, LOGIC_PROCESSOR));
-        helper.assertTrue(packedAmount(drops, WATER) == 4000 && packedAmount(drops, QUANTUM_INFUSION) == 1000,
-                "Repeated destruction lost a tank slot");
+        helper.assertTrue(packedAmount(drops, WATER) == 0 && packedAmount(drops, QUANTUM_INFUSION) == 0,
+                "Reaction destruction must not package tank fluid");
         helper.succeed();
     }
 
@@ -337,8 +337,8 @@ final class AdvancedReactionRecipes {
                     "Real destruction lost or duplicated reaction output: " + entityAmount(entities, LOGIC_PROCESSOR));
             helper.assertTrue(entityAmount(entities, PRINT_LOGIC) == 3,
                     "Real destruction lost the visible reaction input: " + entityAmount(entities, PRINT_LOGIC));
-            helper.assertTrue(entityAmount(entities, WATER) == 4000, "Real destruction lost the water input");
-            helper.assertTrue(entityAmount(entities, QUANTUM_INFUSION) == 1000,
+            helper.assertTrue(entityAmount(entities, WATER) == 0, "Reaction destruction must discard water");
+            helper.assertTrue(entityAmount(entities, QUANTUM_INFUSION) == 0,
                     "Real destruction lost the fluid product");
             helper.succeed();
         });

@@ -199,9 +199,9 @@ final class ExtendedCutterRecipes {
         machine.addAdditionalDrops(helper.getLevel(), helper.absolutePos(pos), drops);
         helper.assertTrue(packedAmount(drops, PRINT) == 111,
                 "Finished batch or logical overflow was not packaged exactly once: " + packedAmount(drops, PRINT));
-        helper.assertTrue(packedAmount(drops, WATER) == 4000, "Circuit cutter tank fluid was destroyed on destruction");
+        helper.assertTrue(packedAmount(drops, WATER) == 0, "Cutter destruction must discard tank fluid");
         helper.assertTrue(packedAmount(drops, BLOCK) == 0, "Finished batch returned a consumed input");
-        helper.assertTrue(drops.stream().filter(stack -> stack.is(ModItems.STORED_RESOURCES.get())).count() == 3,
+        helper.assertTrue(drops.stream().filter(stack -> stack.is(ModItems.STORED_RESOURCES.get())).count() == 2,
                 "Unexpected stored-resource drop count: " + drops.size());
 
         saved = machine.saveWithFullMetadata();
@@ -213,8 +213,8 @@ final class ExtendedCutterRecipes {
         machine.addAdditionalDrops(helper.getLevel(), helper.absolutePos(pos), drops);
         helper.assertTrue(packedAmount(drops, BLOCK) == 12, "Unfinished batch did not return its reserved inputs");
         helper.assertTrue(packedAmount(drops, PRINT) == 66, "Unfinished batch packaged products it never made");
-        helper.assertTrue(packedAmount(drops, WATER) == 4000, "Repeated destruction lost the tank fluid");
-        helper.assertTrue(drops.stream().filter(stack -> stack.is(ModItems.STORED_RESOURCES.get())).count() == 3,
+        helper.assertTrue(packedAmount(drops, WATER) == 0, "Cutter destruction must not package fluid");
+        helper.assertTrue(drops.stream().filter(stack -> stack.is(ModItems.STORED_RESOURCES.get())).count() == 2,
                 "Unexpected stored-resource drop count: " + drops.size());
         helper.succeed();
     }
@@ -247,8 +247,8 @@ final class ExtendedCutterRecipes {
                     "Real destruction lost or duplicated cutter output: " + entityAmount(entities, PRINT));
             helper.assertTrue(entityAmount(entities, BLOCK) == 3,
                     "Real destruction lost the visible cutter input: " + entityAmount(entities, BLOCK));
-            helper.assertTrue(entityAmount(entities, WATER) == 4000,
-                    "Real destruction lost the cutter tank fluid: " + entityAmount(entities, WATER));
+            helper.assertTrue(entityAmount(entities, WATER) == 0,
+                    "Cutter destruction unexpectedly returned fluid: " + entityAmount(entities, WATER));
             helper.succeed();
         });
     }
