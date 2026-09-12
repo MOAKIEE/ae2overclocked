@@ -19,6 +19,9 @@ import net.minecraftforge.registries.ForgeRegistries;
 @GameTestHolder(Ae2Overclocked.MODID)
 @PrefixGameTestTemplate(false)
 public final class RefactorGameTests {
+    private static final int UNLOAD_CHUNK_X = 96;
+    private static final int UNLOAD_CHUNK_Z = 96;
+
     @GameTest(template = "empty")
     public static void parallelCardMutexRejectsSecondCardAndAllowsReplacement(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
@@ -192,6 +195,57 @@ public final class RefactorGameTests {
                 .mapToLong(ResourceAmount::amount).sum();
         helper.assertTrue(inserted == 130, "Recovered items did not re-enter the managed machine slot: " + inserted);
         helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 400)
+    public static void chunkUnloadReloadPreservesOwnedBatch(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var remote = new BlockPos((UNLOAD_CHUNK_X << 4) + 8, 64, (UNLOAD_CHUNK_Z << 4) + 8);
+        level.setChunkForced(UNLOAD_CHUNK_X, UNLOAD_CHUNK_Z, true);
+        level.getChunk(UNLOAD_CHUNK_X, UNLOAD_CHUNK_Z);
+        level.setBlock(remote, appeng.core.definitions.AEBlocks.INSCRIBER.block().defaultBlockState(), 3);
+        var original = (appeng.blockentity.misc.InscriberBlockEntity) level.getBlockEntity(remote);
+        helper.assertTrue(original != null, "Remote machine was not created in the forced chunk");
+
+        var expected = new ProcessingState<AEKey>("ae2oc:test/chunk_unload",
+                List.of(new ResourceAmount<>(AEItemKey.of(Items.GOLD_INGOT), 130)),
+                List.of(new ResourceAmount<>(AEItemKey.of(Items.IRON_INGOT), 260)), 1000, 125, 40);
+        var saved = original.saveWithFullMetadata();
+        saved.put("ae2ocProcessing", ProcessingCodec.write(expected));
+        original.load(saved);
+        original.setChanged();
+        level.getChunkSource().save(true);
+
+        helper.runAfterDelay(5, () -> {
+            level.setChunkForced(UNLOAD_CHUNK_X, UNLOAD_CHUNK_Z, false);
+            awaitChunkUnload(helper, remote, original, expected, 0);
+        });
+    }
+
+    private static void awaitChunkUnload(GameTestHelper helper, BlockPos remote,
+            appeng.blockentity.misc.InscriberBlockEntity original, ProcessingState<AEKey> expected, int elapsed) {
+        var level = helper.getLevel();
+        if (level.getChunkSource().getChunkNow(UNLOAD_CHUNK_X, UNLOAD_CHUNK_Z) == null && original.isRemoved()) {
+            level.setChunkForced(UNLOAD_CHUNK_X, UNLOAD_CHUNK_Z, true);
+            level.getChunk(UNLOAD_CHUNK_X, UNLOAD_CHUNK_Z);
+            helper.runAfterDelay(10, () -> {
+                var restored = (appeng.blockentity.misc.InscriberBlockEntity) level.getBlockEntity(remote);
+                helper.assertTrue(restored != null && restored != original,
+                        "Chunk reload reused the old block entity or lost the machine");
+                var restoredTag = restored.saveWithFullMetadata();
+                helper.assertTrue(restoredTag.contains("ae2ocProcessing"), "Chunk reload lost the owned batch");
+                helper.assertTrue(expected.equals(ProcessingCodec.read(restoredTag.getCompound("ae2ocProcessing"))),
+                        "Chunk reload changed reserved inputs, outputs, payment, or remaining ticks");
+                helper.assertTrue(moakiee.support.MachineBreakProtection.getInternalItemTotalCount(restored) == 130,
+                        "Reloaded machine no longer reports its reserved input ownership");
+                level.removeBlock(remote, false);
+                level.setChunkForced(UNLOAD_CHUNK_X, UNLOAD_CHUNK_Z, false);
+                helper.succeed();
+            });
+            return;
+        }
+        helper.assertTrue(elapsed < 240, "Forced-ticket removal never unloaded the remote chunk");
+        helper.runAfterDelay(1, () -> awaitChunkUnload(helper, remote, original, expected, elapsed + 1));
     }
 
     @GameTest(template = "empty")
