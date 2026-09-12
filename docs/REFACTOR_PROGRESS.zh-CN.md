@@ -4,7 +4,7 @@
 >
 > 分支：`refactor/machine-core`
 >
-> 当前实现基准：`3b0e645`
+> 当前实现基准：`8818bf7`
 >
 > 设计与后续验收：[REFACTOR_PLAN.zh-CN.md](REFACTOR_PLAN.zh-CN.md)
 
@@ -17,11 +17,11 @@
 | 门槛 | 当前状态 | 判定依据 |
 |---|---|---|
 | 核心结构迁移 | 完成 | 共享规划/执行、输入事务、持久化批次、long 库存、局部菜单、有界执行 |
-| G1 配方与 tick 行为 | 部分关闭 | 配方投影与代表自然调度已有证据；四类机器进度已同步；AE2/ExtendedAE 压印器动画和切片器渲染产物的包往返已修复。真实客户端可见效果仍待验收 |
+| G1 配方与 tick 行为 | 部分关闭 | 配方投影与代表自然调度已有证据；四类机器进度已同步；AE2/ExtendedAE 压印器动画和切片器渲染产物的包往返已修复。三机世界内 3D 渲染截屏已验收 |
 | G2 生命周期 | 代表路径关闭 | 真实破坏、封存包回收、AE2 实际区块卸载、AE2CS 正常跨 JVM 重启；不等于所有机器崩溃恢复 |
-| G3 菜单 | 代表联网客户端路径已通过，发布级完整项仍开放 | GenericStack 局部包装保留；真实客户端菜单首屏、PICKUP、外部更新、关闭重开、Shift 及 NBT 已通过；重连、超容/流体提示仍未覆盖 |
+| G3 菜单 | 代表联网客户端路径已通过，发布级完整项仍开放 | GenericStack 局部包装保留；真实客户端菜单首屏、PICKUP、外部更新、关闭重开、Shift 及 NBT 已通过；ExtendedAE 4 泳道大数同步与拾取通过；AdvancedAE 反应仓容量卡流体 Tooltip 已通过；远端重连仍未覆盖 |
 | G4 兼容与构建 | 固定基线关闭 | 五组合通过；依赖锁与校验；静态审计接入 build/check；不承诺未验证版本 |
-| 正式发布 | 尚未通过 | 真实客户端、旧世界迁移、多机性能及目标整合包验收待完成 |
+| 正式发布 | 尚未通过 | 独立远端客户端重连、旧世界迁移、多机性能及目标整合包验收待完成 |
 
 ## 2. 本轮分批修复
 
@@ -100,6 +100,16 @@
 
 **当批保留边界：** 这是集成客户端 loopback，不是独立远端服务器；尚未覆盖断线重连、超容/流体 tooltip、ExtendedAE 四泳道菜单，以及 AE2/ExtendedAE 压印器和切片器在世界中的动画肉眼验收。它关闭了 G3 的代表性菜单链路，不关闭发布级完整客户端门槛。
 
+### 第八批：客户端交互与界面提示闭环（`8818bf7`）
+
+将 `ClientInteractionSmokeTest` 扩展为多阶段、全机型交互与视觉闭环冒烟：
+
+- **前置空间与实体同步：** 在集成世界生成与服务端 setup 阶段，清空 7×4×4 演示场地并铺设平滑石地表，同时初始化 AE2 压印器、ExtendedAE 4 泳道扩展压印器（`TileExInscriber`）及 AdvancedAE 反应仓（`ReactionChamberEntity`），安装容量卡并预写入大数物品与流体。客户端明确等待所有方块实体在 `ClientLevel` 均已同步就绪后再触发菜单打开，从根本上解决网络打开菜单与方块实体同步的竞态。
+- **ExtendedAE 4 泳道菜单：** 深入适配 `GuiExInscriber` / `ContainerExInscriber` 分页与槽位启用机制。在真实客户端下验证默认第 0 泳道（1,000,000 钻石）与切换至第 3 泳道（2,000,000 铁锭）大数值同步与 `LogicalMenuSlot` 映射；在第 0 泳道执行真实 PICKUP 点击，槽位精准扣减为 999,936，光标携带 64 钻石，保存截图 `build/reports/client-extended-inscriber-menu.png`。
+- **AdvancedAE 反应仓流体 Tooltip：** 在真实 `ReactionChamberScreen` 下，验证安装容量卡后水流体槽显示 `32000 / 2147483647 mB`，流体条高度比例按 `Integer.MAX_VALUE` 正确渲染，保存截图 `build/reports/client-reaction-chamber-menu.png`。
+- **世界内 3D 实体渲染：** 菜单交互全部通过并关闭容器后，客户端视角自动校准对准中心机器（`lookAt`），等待 10 ticks 渲染稳定后拍摄三机同台 3D 渲染截图 `build/reports/client-machine-world-render.png`，直观记录世界内压印器金锭、扩展压印器及反应仓内部真实水流体。
+- 全套构建（204 项静态 Mixin 检查、verifyReleaseContents 零污染、coreContractTest）、85 项 GameTest 以及基准客户端冒烟均严格通过。
+
 ## 3. 已有证据与边界
 
 ### 3.1 跨机器能力
@@ -111,17 +121,17 @@
 | 生命周期 | AE2 远端区块真实卸载恢复部分付款批次；AE2CS 四机三个独立 JVM 正常重启 | 异常终止、其他机型跨进程、所有流体生命周期组合 |
 | 掉落 | 各代表机器真实破坏、可见/超容/批次物品账本；封存包拾取、分批解包、回插 | 直接回插 ME、全部资源组合 |
 | 调度 | 网格与世界 tick 区别；缺能恢复；批次防休眠；退避与预算 | 首批墙钟延迟、公平性、整网吞吐和多机 MSPT |
-| 菜单与显示 | 受管交互、包回调/编解码、关闭归还、客户端图标冒烟；AE2 Inscriber loopback 客户端真实首屏/PICKUP/外部更新/关闭重开/Shift/NBT；AE2/ExtendedAE 压印器与切片器显示更新流往返 | 独立远端/重连、世界内动画观察、超容提示、机器专属流体 GUI |
+| 菜单与显示 | 受管交互、包回调/编解码、关闭归还、客户端图标冒烟；AE2 Inscriber loopback 客户端真实首屏/PICKUP/外部更新/关闭重开/Shift/NBT；ExtendedAE 4 泳道菜单大数同步与拾取；AdvancedAE 反应仓容量卡流体 Tooltip；三机世界内 3D 渲染截屏 | 独立远端/重连、高延迟丢包容错 |
 | 构建 | 依赖锁、SHA-256、架构检查、静态 Mixin 审计、发布 Jar 裁剪 | 全新缓存下载、远端 CI 实跑、最终 Jar 的完整客户端验收 |
 
 ### 3.2 逐机器代表场景
 
 | 机器 | 已验证 | 优先补齐 |
 |---|---|---|
-| AE2 压印器 | 两类配方 ×12 升级组合、命名压板 NBT/模板保留、输出与恢复、自然调度、真实区块卸载、进度映射；完成脉冲/产物包往返与结算隔离；真实客户端 Inscriber 菜单 long/NBT/取放/外部更新/重开 | 真实客户端压合动画观察与中途接管显示 |
-| ExtendedAE 压印器 | 四泳道 ×12 组合、独立输出与共享预算、堵塞恢复/破坏、自然调度、泳道进度；多泳道/连续完成动画包往返与结算隔离 | 真实客户端压合观察、性能 |
+| AE2 压印器 | 两类配方 ×12 升级组合、命名压板 NBT/模板保留、输出与恢复、自然调度、真实区块卸载、进度映射；完成脉冲/产物包往返与结算隔离；真实客户端 Inscriber 菜单 long/NBT/取放/外部更新/重开；世界内 3D 渲染截屏 | 真实客户端压合连续动画录屏与中途接管显示 |
+| ExtendedAE 压印器 | 四泳道 ×12 组合、独立输出与共享预算、堵塞恢复/破坏、自然调度、泳道进度；多泳道/连续完成动画包往返与结算隔离；真实客户端 4 泳道菜单大数同步与拾取；世界内 3D 渲染截屏 | 压合连续动画录屏、性能 |
 | 切片器 | logic/calculation/engineering/silicon，物品/水守恒、输出/破坏、进度/working；共享批次产物包往返 | Mega Cells accumulation、自然调度、真实客户端三维观察 |
-| 反应仓 | logic_processor_chamber、quantum_infusion 流体产出、输出/破坏、进度/working | AppFlux 条件配方、自然调度、完整客户端 |
+| 反应仓 | logic_processor_chamber、quantum_infusion 流体产出、输出/破坏、进度/working；真实客户端 ReactionChamberScreen 容量卡流体 Tooltip（32000 / 2147483647 mB）；世界内 3D 渲染截屏 | AppFlux 条件配方、自然调度 |
 | AE2CS 粉碎机 | gunpowder 与 Tag 输入赛特斯石英粉、自然缺能/断网、重载/破坏、跨 JVM | 差异配方类型和性能 |
 | AE2CS 聚合器 | logic_processor、fluix_crystal 8:8:8→32、自然调度与生命周期 | 差异配方类型和性能 |
 | AE2CS 蚀刻器 | logic_processor、calculation_processor 9:4:4→36、自然调度与生命周期 | 差异配方类型和性能 |
@@ -146,6 +156,7 @@
 | 第五批显示同步 | 193 项静态检查、84 项 `all` GameTest、`none` 严格脚本、`all` 客户端冒烟通过；详细日志为 `compatibility/{all-server,none-server,all-client}.log` |
 | 第六批四泳道动画 | 204 项静态检查、85 项 `all` GameTest、严格离线 build、`all` 严格脚本及客户端冒烟通过；详细日志为 `compatibility/{all-server,all-client}.log` |
 | 第七批客户端菜单 | `3b0e645`；`all` 客户端交互脚本通过，真实 InscriberScreen 菜单完成 long/NBT、PICKUP、外部更新、关闭重开、QUICK_MOVE 守恒；日志 `compatibility/all-client-interaction.log`，截图 `client-menu-{initial,reopened}.png` |
+| 第八批多机交互闭环 | `8818bf7`；`all` 客户端交互脚本通过，ExtendedAE 4 泳道大数同步/拾取通过、反应仓 `32000 / 2147483647 mB` Tooltip 通过、三机世界内 3D 渲染通过；详细日志 `compatibility/all-client-interaction.log`，截图 `client-{extended-inscriber,reaction-chamber}-menu.png` 与 `client-machine-world-render.png` |
 
 历史生命周期证据：`0dcfc03`（真实区块卸载）、`d3e1162`（三个独立 JVM 重启）、`b88f14d`（封存包回收）、`afa4780`/`a1afdf0`/`2503591`（真实破坏）。本轮没有重跑这些历史独立重启脚本，GameTest 中的相关生命周期场景随矩阵回归。
 
