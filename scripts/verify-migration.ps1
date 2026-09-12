@@ -78,6 +78,8 @@ try {
     $migrateOutput = Get-Content -Raw $migrateReport
     if ($migrateOutput -notmatch "Machine A \(ListTag format\) successfully migrated with exact counts and custom NBT preserved!" -or
         $migrateOutput -notmatch "Machine B \(CompoundTag format\) successfully migrated with exact counts!" -or
+        ($Runtime -in @('ae2cs', 'all') -and
+            $migrateOutput -notmatch "AE2CS Pulverizer component inventory migrated with exact item identity and count!") -or
         $migrateOutput -notmatch "Migrated ledger fully verified: 0 loss, 0 duplicate!" -or
         $migrateOutput -notmatch "Live processing conservation verified on Machine A:") {
         throw "Migrate and process assertions failed: $migrateReport"
@@ -100,6 +102,8 @@ try {
     if ($exitCode -ne 0) { throw "Migration verify modern failed (exit $exitCode): $verifyReport" }
     $verifyOutput = Get-Content -Raw $verifyReport
     if ($verifyOutput -notmatch "Machine A clean modern schema confirmed: currentDataVersions=\d+ legacyCountFields=0" -or
+        ($Runtime -in @('ae2cs', 'all') -and
+            $verifyOutput -notmatch "Pulverizer clean component schema and second-load conservation confirmed") -or
         $verifyOutput -notmatch "Migration verification PASSED across all phases!") {
         throw "Modern schema verification failed: $verifyReport"
     }
@@ -118,9 +122,10 @@ Phase 2 (Inject Legacy): Success - injected 1.2.3-fix3 NBT into Anvil region (ch
 Phase 3 (Migrate & Process): Success -
   - Machine A (ListTag): 1,000,000 silicon, 500,000 silicon press (custom NBT preserved), 0 loss.
   - Machine B (CompoundTag): 888,888 certus, 333,333 calc press, 0 loss.
+  - AE2CS Pulverizer (component ports): 10,000 flint restored with exact identity and count.
   - Live processing: Mass conservation strictly verified (consumed inputs == produced outputs).
 Phase 4 (Modern Schema & Restart): Success -
-  - Raw Region MCA: Verified ae2ocLongSlots schema, ae2ocDataVersion=1, legacyCountFields=0.
+  - Raw Region MCA: Verified AE2 and AE2CS component schemas, ae2ocDataVersion=1, legacyCountFields=0.
   - Post-restart: Ledger perfectly conserved from Phase 3.
 ================================================================================
 "@

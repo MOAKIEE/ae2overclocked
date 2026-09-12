@@ -154,6 +154,12 @@ public final class AE2CSGameTests {
         AE2CSPulverizerRecipes.allOutputSlots(helper);
     }
 
+    @GameTest(template = "empty")
+    public static void pulverizerLoadsLegacyComponentInventoryFields(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSPulverizerRecipes.legacyComponentInventory(helper);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 2000)
     public static void aggregatorRealRecipeMatrix(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }

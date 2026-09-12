@@ -14,6 +14,7 @@ import appeng.api.stacks.AEKey;
 import appeng.api.upgrades.IUpgradeableObject;
 import appeng.blockentity.AEBaseBlockEntity;
 import appeng.blockentity.misc.InscriberBlockEntity;
+import io.github.lounode.ae2cs.common.block.entity.CrystalPulverizerBlockEntity;
 import moakiee.ModItems;
 import moakiee.ae2oc.api.ResourceAmount;
 import moakiee.ae2oc.compat.ae2.LocalResourceSlot;
@@ -190,10 +191,18 @@ public final class WorldMigrationVerification {
         // Pulverizer (if present)
         if (hasBlock("ae2cs:crystal_pulverizer")) {
             var bePulv = level.getBlockEntity(POS_PULVERIZER);
-            require(bePulv instanceof AEBaseBlockEntity, "Pulverizer missing");
+            require(bePulv instanceof CrystalPulverizerBlockEntity, "Pulverizer missing");
             var inspectPulv = MigrationInspection.inspect(bePulv.saveWithoutMetadata());
             require(inspectPulv.unknownDataVersions() == 0, "Pulverizer had unknown data versions");
-            LOG.info("AE2CS Pulverizer legacy inventory successfully migrated!");
+            var pulverizer = (CrystalPulverizerBlockEntity) bePulv;
+            var input = ManagedItemStorages.slots(pulverizer.getInputInv()).get(0).read();
+            require(input != null && input.key().equals(AEItemKey.of(Items.FLINT)) && input.amount() == 10_000,
+                    "Pulverizer input did not migrate exactly: " + input);
+            var fixture = expected.getCompound("pulverizer");
+            require(fixture.contains("inv_input", Tag.TAG_LIST) && fixture.contains("inv_work", Tag.TAG_LIST)
+                            && !fixture.contains("inv", Tag.TAG_LIST),
+                    "Pulverizer fixture does not use the upstream component inventory fields");
+            LOG.info("AE2CS Pulverizer component inventory migrated with exact item identity and count!");
         }
 
         LOG.info("Migrated ledger fully verified: 0 loss, 0 duplicate!");
@@ -235,6 +244,25 @@ public final class WorldMigrationVerification {
         var postProcessTag = new CompoundTag();
         postProcessTag.putLong("totalSiliconAccountedA", totalSiliconAccounted);
         postProcessTag.putLong("totalPrintedAccountedA", totalPrintedAccounted);
+        if (hasBlock("ae2cs:crystal_pulverizer")) {
+            var pulverizer = (CrystalPulverizerBlockEntity) level.getBlockEntity(POS_PULVERIZER);
+            var pulverizerBatchTag = pulverizer.saveWithFullMetadata().getCompound("ae2ocProcessing");
+            var pulverizerBatch = pulverizerBatchTag.isEmpty() ? null : ProcessingCodec.read(pulverizerBatchTag);
+            long flint = slotResourceAmount(ManagedItemStorages.slots(pulverizer.getInputInv()), AEItemKey.of(Items.FLINT));
+            long gunpowder = slotResourceAmount(ManagedItemStorages.slots(pulverizer.getOutputInv()), AEItemKey.of(Items.GUNPOWDER));
+            long reservedFlint = pulverizerBatch == null || pulverizerBatch.finished() ? 0
+                    : batchResourceAmount(pulverizerBatch.inputs(), AEItemKey.of(Items.FLINT));
+            long pendingGunpowder = pulverizerBatch == null || !pulverizerBatch.finished() ? 0
+                    : batchResourceAmount(pulverizerBatch.outputs(), AEItemKey.of(Items.GUNPOWDER));
+            long totalFlint = flint + reservedFlint;
+            long totalGunpowder = gunpowder + pendingGunpowder;
+            require(totalGunpowder > 0, "Pulverizer did not process its migrated input");
+            require(10_000 - totalFlint == totalGunpowder,
+                    "Pulverizer migration/process conservation failure: flint=" + totalFlint
+                            + " gunpowder=" + totalGunpowder);
+            postProcessTag.putLong("totalFlintPulverizer", totalFlint);
+            postProcessTag.putLong("totalGunpowderPulverizer", totalGunpowder);
+        }
         NbtIo.writeCompressed(postProcessTag, EXPECTED_POST_PROCESS);
     }
 
@@ -272,6 +300,29 @@ public final class WorldMigrationVerification {
 
         LOG.info("Machine A clean modern schema confirmed: currentDataVersions={} legacyCountFields={}",
                 inspect.currentDataVersions(), inspect.legacyCountFields());
+
+        if (hasBlock("ae2cs:crystal_pulverizer")) {
+            var pulverizer = (CrystalPulverizerBlockEntity) level.getBlockEntity(POS_PULVERIZER);
+            var pulverizerBatchTag = pulverizer.saveWithFullMetadata().getCompound("ae2ocProcessing");
+            var pulverizerBatch = pulverizerBatchTag.isEmpty() ? null : ProcessingCodec.read(pulverizerBatchTag);
+            long flint = slotResourceAmount(ManagedItemStorages.slots(pulverizer.getInputInv()), AEItemKey.of(Items.FLINT));
+            long gunpowder = slotResourceAmount(ManagedItemStorages.slots(pulverizer.getOutputInv()), AEItemKey.of(Items.GUNPOWDER));
+            flint += pulverizerBatch == null || pulverizerBatch.finished() ? 0
+                    : batchResourceAmount(pulverizerBatch.inputs(), AEItemKey.of(Items.FLINT));
+            gunpowder += pulverizerBatch == null || !pulverizerBatch.finished() ? 0
+                    : batchResourceAmount(pulverizerBatch.outputs(), AEItemKey.of(Items.GUNPOWDER));
+            require(flint == expected.getLong("totalFlintPulverizer"), "Pulverizer flint mismatch on restart");
+            require(gunpowder == expected.getLong("totalGunpowderPulverizer"), "Pulverizer gunpowder mismatch on restart");
+            var pulverizerTag = pulverizer.saveWithoutMetadata();
+            var pulverizerInspect = MigrationInspection.inspect(pulverizerTag);
+            require(pulverizerInspect.currentDataVersions() > 0, "Pulverizer missing modern dataVersion");
+            require(pulverizerInspect.legacyCountFields() == 0, "Pulverizer retained legacy count fields");
+            require(pulverizerTag.contains("inv_input", Tag.TAG_LIST)
+                            && pulverizerTag.contains("inv_work", Tag.TAG_LIST)
+                            && pulverizerTag.contains("inv_output", Tag.TAG_LIST),
+                    "Pulverizer missing modern component inventory fields");
+            LOG.info("Pulverizer clean component schema and second-load conservation confirmed");
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -428,6 +479,7 @@ public final class WorldMigrationVerification {
     private static void injectLegacyPulverizer(CompoundTag be) {
         be.remove("ae2ocLongSlots");
         be.remove("ae2ocProcessing");
+        be.remove("inv");
 
         var inv = new ListTag();
         var item = new CompoundTag();
@@ -436,7 +488,25 @@ public final class WorldMigrationVerification {
         item.putByte("Count", (byte) 64);
         item.putInt("ae2ocCount", 10_000);
         inv.add(item);
-        be.put("inv", inv);
+        // AppEngInvComponent serializes each named port independently. INPUT and WORK alias the
+        // same inventory in the pulverizer, so a valid legacy fixture must populate both fields.
+        be.put("inv_input", inv.copy());
+        be.put("inv_work", inv.copy());
+        be.put("inv_output", new ListTag());
+    }
+
+    private static long batchResourceAmount(List<? extends ResourceAmount<AEKey>> resources, AEKey key) {
+        return resources.stream().filter(resource -> resource.key().equals(key))
+                .mapToLong(ResourceAmount::amount).sum();
+    }
+
+    private static long slotResourceAmount(List<LocalResourceSlot> slots, AEKey key) {
+        long total = 0;
+        for (var slot : slots) {
+            var value = slot.read();
+            if (value != null && value.key().equals(key)) total += value.amount();
+        }
+        return total;
     }
 
     private static CompoundTag createCardStack(int slot, String itemId, int count) {

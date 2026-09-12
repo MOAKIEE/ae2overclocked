@@ -12,6 +12,8 @@ import moakiee.ae2oc.compat.ae2.ProcessingCodec;
 import moakiee.ae2oc.core.execution.ProcessingState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -211,6 +213,38 @@ final class AE2CSPulverizerRecipes {
         helper.assertTrue(pending != null && pending.finished() && amountOf(pending.outputs(), GUNPOWDER) == 5,
                 "Full pulverizer output discarded or altered pending results");
         helper.succeed();
+    }
+
+    static void legacyComponentInventory(GameTestHelper helper) {
+        var machine = placeWithLegacyInput(helper, new BlockPos(1, 1, 1), true);
+        var restored = inputSlot(machine).read();
+        helper.assertTrue(restored != null && restored.key().equals(FLINT) && restored.amount() == 10_000,
+                "Pulverizer did not load the legacy inv_input/inv_work component aliases exactly");
+
+        var wrongField = placeWithLegacyInput(helper, new BlockPos(4, 1, 1), false);
+        helper.assertTrue(inputSlot(wrongField).read() == null,
+                "Negative control unexpectedly accepted the obsolete root inv field");
+        helper.succeed();
+    }
+
+    private static CrystalPulverizerBlockEntity placeWithLegacyInput(GameTestHelper helper, BlockPos pos,
+            boolean componentFields) {
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.tryParse("ae2cs:crystal_pulverizer")));
+        var machine = (CrystalPulverizerBlockEntity) helper.getBlockEntity(pos);
+        var saved = machine.saveWithFullMetadata();
+        var inventory = new ListTag();
+        var item = new ItemStack(Items.FLINT, 64).save(new CompoundTag());
+        item.putInt("Slot", 0);
+        item.putInt("ae2ocCount", 10_000);
+        inventory.add(item);
+        if (componentFields) {
+            saved.put("inv_input", inventory.copy());
+            saved.put("inv_work", inventory.copy());
+        } else {
+            saved.put("inv", inventory);
+        }
+        machine.load(saved);
+        return machine;
     }
 
     private static CrystalPulverizerBlockEntity placeWithFinishedOutput(GameTestHelper helper, BlockPos pos, long amount) {
