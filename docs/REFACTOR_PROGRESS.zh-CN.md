@@ -4,13 +4,13 @@
 >
 > 分支：`refactor/machine-core`
 >
-> 当前实现基准：`8818bf7`
+> 当前实现基准：`7c1d505`
 >
 > 设计与后续验收：[REFACTOR_PLAN.zh-CN.md](REFACTOR_PLAN.zh-CN.md)
 
 ## 1. 当前结论
 
-核心结构迁移已经完成，可以停止扩张架构，转入针对性修复与发布候选验收。当前不能声称完整客户端、旧世界、性能和第三方共存已经通过认证。
+核心结构迁移已经完成，可以停止扩张架构，转入针对性修复与发布候选验收。当前不能声称完整客户端、性能和第三方共存已经通过认证。
 
 本次复核撤回旧文档“G1～G4 全部验证闭环、100% 完成”的总括结论，不再使用没有明确计算方法的可信度百分比。原来的 78 项 GameTest 是有效的场景证据，但不能证明未执行的客户端交互或性能指标。
 
@@ -18,10 +18,10 @@
 |---|---|---|
 | 核心结构迁移 | 完成 | 共享规划/执行、输入事务、持久化批次、long 库存、局部菜单、有界执行 |
 | G1 配方与 tick 行为 | 部分关闭 | 配方投影与代表自然调度已有证据；四类机器进度已同步；AE2/ExtendedAE 压印器动画和切片器渲染产物的包往返已修复。三机世界内 3D 渲染截屏已验收 |
-| G2 生命周期 | 代表路径关闭 | 真实破坏、封存包回收、AE2 实际区块卸载、AE2CS 正常跨 JVM 重启；不等于所有机器崩溃恢复 |
+| G2 生命周期 | 代表路径关闭 | 真实破坏、封存包回收、AE2 实际区块卸载、AE2CS 正常跨 JVM 重启；真实旧世界 Anvil 物理迁移、在线推进与升级存盘二次重启已闭环；不等于所有机器崩溃恢复 |
 | G3 菜单 | 代表联网客户端路径已通过，发布级完整项仍开放 | GenericStack 局部包装保留；真实客户端菜单首屏、PICKUP、外部更新、关闭重开、Shift 及 NBT 已通过；ExtendedAE 4 泳道大数同步与拾取通过；AdvancedAE 反应仓容量卡流体 Tooltip 已通过；远端重连仍未覆盖 |
 | G4 兼容与构建 | 固定基线关闭 | 五组合通过；依赖锁与校验；静态审计接入 build/check；不承诺未验证版本 |
-| 正式发布 | 尚未通过 | 独立远端客户端重连、旧世界迁移、多机性能及目标整合包验收待完成 |
+| 正式发布 | 尚未通过 | 独立远端客户端重连、多机性能及目标整合包验收待完成（旧世界迁移已闭环） |
 
 ## 2. 本轮分批修复
 
@@ -110,6 +110,18 @@
 - **世界内 3D 实体渲染：** 菜单交互全部通过并关闭容器后，客户端视角自动校准对准中心机器（`lookAt`），等待 10 ticks 渲染稳定后拍摄三机同台 3D 渲染截图 `build/reports/client-machine-world-render.png`，直观记录世界内压印器金锭、扩展压印器及反应仓内部真实水流体。
 - 全套构建（204 项静态 Mixin 检查、verifyReleaseContents 零污染、coreContractTest）、85 项 GameTest 以及基准客户端冒烟均严格通过。
 
+### 第九批：真实旧世界迁移验收（`7c1d505`）
+
+依据设计规范第 4 节“真实世界兼容性不能仅由解析函数单测推断”，建立基于物理 Anvil 世界的端到端迁移与加工推进验收体系：
+
+- **旧格式双兼容与自定义 NBT 保留：** 修复 `ManagedItemStorages`，除原版 `inv` CompoundTag 外，兼容旧版 1.2.3-fix3 将 `inv` 持久化为包含 `Slot` 的 ListTag 格式；完整支持 `ae2ocAmount`（长整型大数）、`Count: 1b` + `tag: { ae2ocNetCount }`（附带自定义 Display Name 如 `"Special Legacy Silicon Press"`）、`Count: 64b` + `ae2ocCount` 及 ExtendedAE 4 泳道大数注入与识别。
+- **四阶段端到端物理世界验收流程（`scripts/verify-migration.ps1`）：**
+  1. **阶段 1（`prepare`）**：在干净世界中生成代表机器（AE2 压印器 A/B、ExtendedAE 4 泳道扩展压印器、AE2CS 粉碎机）与创造能源单元。
+  2. **阶段 2（`injectLegacyRegion`）**：脱机使用 `RegionFile` 和 `NbtIo` 直接在底层 Anvil 文件 `r.3.3.mca`（区块 100,100）中注入真实旧版 1.2.3-fix3 方块实体 NBT，并导出物理基准期望账本。
+  3. **阶段 3（`migrate_and_process`）**：启动真实 Dedicated Server 触发反序列化，断言 0 个未知版本错误、0 件物料丢失/复制、自定义 Display Name 完整保留；在相邻创造能源单元供能下自然推进加工，利用 `ProcessingCodec` 严格核算在途处理批次（`reserved inputs + pending outputs`），物理质量 100% 守恒。
+  4. **阶段 4（`verify_modern`）**：保存世界后再次启动独立 Dedicated Server，检验底层 MCA 区块已全部升轨为标准 `ae2ocLongSlots`（`ae2ocDataVersion: 1`），所有旧版字段被完全清理，二次重启账本零误差。
+- 全套迁移脚本（`verify-migration.ps1 -Runtime all -Offline -AcceptMinecraftEula`）全绿通过，产出报告 `build/reports/migration-summary.log`；全套构建（10,000 组契约测试、204 项静态 Mixin 检查、verifyReleaseContents 零泄漏）通过。
+
 ## 3. 已有证据与边界
 
 ### 3.1 跨机器能力
@@ -117,8 +129,8 @@
 | 领域 | 已固定证据 | 尚未证明 |
 |---|---|---|
 | 内核 | 10,000 组确定性数量/规划用例、1,000 组故障恢复；输入逆序回滚、部分付款与排出 | 外部端口先产生不可逆副作用再抛异常的恢复 |
-| 库存 | AEKey + long；合法 ItemStack 投影；降容保留；旧格式解析与非法存档检查 | 所有真实旧世界格式及第三方原地修改栈路径 |
-| 生命周期 | AE2 远端区块真实卸载恢复部分付款批次；AE2CS 四机三个独立 JVM 正常重启 | 异常终止、其他机型跨进程、所有流体生命周期组合 |
+| 库存 | AEKey + long；合法 ItemStack 投影；降容保留；旧格式解析与非法存档检查；真实 Anvil 存档反序列化支持 ListTag 与 CompoundTag 旧 inv、ae2ocAmount、ae2ocNetCount 自定义 NBT、ae2ocCount 升轨 | 第三方原地修改栈路径的异常容错 |
+| 生命周期 | AE2 远端区块真实卸载恢复部分付款批次；AE2CS 四机三个独立 JVM 正常重启；真实物理 MCA 旧世界跨独立服务端反序列化、自然推进及存盘升级为标准 ae2ocLongSlots 二次重启 100% 守恒 | 异常终止、其他机型跨进程、所有流体生命周期组合 |
 | 掉落 | 各代表机器真实破坏、可见/超容/批次物品账本；封存包拾取、分批解包、回插 | 直接回插 ME、全部资源组合 |
 | 调度 | 网格与世界 tick 区别；缺能恢复；批次防休眠；退避与预算 | 首批墙钟延迟、公平性、整网吞吐和多机 MSPT |
 | 菜单与显示 | 受管交互、包回调/编解码、关闭归还、客户端图标冒烟；AE2 Inscriber loopback 客户端真实首屏/PICKUP/外部更新/关闭重开/Shift/NBT；ExtendedAE 4 泳道菜单大数同步与拾取；AdvancedAE 反应仓容量卡流体 Tooltip；三机世界内 3D 渲染截屏 | 独立远端/重连、高延迟丢包容错 |
@@ -128,11 +140,11 @@
 
 | 机器 | 已验证 | 优先补齐 |
 |---|---|---|
-| AE2 压印器 | 两类配方 ×12 升级组合、命名压板 NBT/模板保留、输出与恢复、自然调度、真实区块卸载、进度映射；完成脉冲/产物包往返与结算隔离；真实客户端 Inscriber 菜单 long/NBT/取放/外部更新/重开；世界内 3D 渲染截屏 | 真实客户端压合连续动画录屏与中途接管显示 |
-| ExtendedAE 压印器 | 四泳道 ×12 组合、独立输出与共享预算、堵塞恢复/破坏、自然调度、泳道进度；多泳道/连续完成动画包往返与结算隔离；真实客户端 4 泳道菜单大数同步与拾取；世界内 3D 渲染截屏 | 压合连续动画录屏、性能 |
+| AE2 压印器 | 两类配方 ×12 升级组合、命名压板 NBT/模板保留、输出与恢复、自然调度、真实区块卸载、进度映射；完成脉冲/产物包往返与结算隔离；真实客户端 Inscriber 菜单 long/NBT/取放/外部更新/重开；世界内 3D 渲染截屏；真实旧世界 Anvil 物理迁移、在线推进与升级存盘二次重启 | 真实客户端压合连续动画录屏与中途接管显示 |
+| ExtendedAE 压印器 | 四泳道 ×12 组合、独立输出与共享预算、堵塞恢复/破坏、自然调度、泳道进度；多泳道/连续完成动画包往返与结算隔离；真实客户端 4 泳道菜单大数同步与拾取；世界内 3D 渲染截屏；真实旧世界 4 泳道大数 Anvil 物理迁移、在线推进与升级存盘二次重启 | 压合连续动画录屏、性能 |
 | 切片器 | logic/calculation/engineering/silicon，物品/水守恒、输出/破坏、进度/working；共享批次产物包往返 | Mega Cells accumulation、自然调度、真实客户端三维观察 |
 | 反应仓 | logic_processor_chamber、quantum_infusion 流体产出、输出/破坏、进度/working；真实客户端 ReactionChamberScreen 容量卡流体 Tooltip（32000 / 2147483647 mB）；世界内 3D 渲染截屏 | AppFlux 条件配方、自然调度 |
-| AE2CS 粉碎机 | gunpowder 与 Tag 输入赛特斯石英粉、自然缺能/断网、重载/破坏、跨 JVM | 差异配方类型和性能 |
+| AE2CS 粉碎机 | gunpowder 与 Tag 输入赛特斯石英粉、自然缺能/断网、重载/破坏、跨 JVM；真实旧世界 Anvil 物理迁移与升级存盘二次重启 | 差异配方类型和性能 |
 | AE2CS 聚合器 | logic_processor、fluix_crystal 8:8:8→32、自然调度与生命周期 | 差异配方类型和性能 |
 | AE2CS 蚀刻器 | logic_processor、calculation_processor 9:4:4→36、自然调度与生命周期 | 差异配方类型和性能 |
 | AE2CS 熵变 | HEAT/COOL、石头/圆石、水/冰双向、模式切换与生命周期 | 完整客户端与更多流体恢复场景 |
@@ -157,6 +169,7 @@
 | 第六批四泳道动画 | 204 项静态检查、85 项 `all` GameTest、严格离线 build、`all` 严格脚本及客户端冒烟通过；详细日志为 `compatibility/{all-server,all-client}.log` |
 | 第七批客户端菜单 | `3b0e645`；`all` 客户端交互脚本通过，真实 InscriberScreen 菜单完成 long/NBT、PICKUP、外部更新、关闭重开、QUICK_MOVE 守恒；日志 `compatibility/all-client-interaction.log`，截图 `client-menu-{initial,reopened}.png` |
 | 第八批多机交互闭环 | `8818bf7`；`all` 客户端交互脚本通过，ExtendedAE 4 泳道大数同步/拾取通过、反应仓 `32000 / 2147483647 mB` Tooltip 通过、三机世界内 3D 渲染通过；详细日志 `compatibility/all-client-interaction.log`，截图 `client-{extended-inscriber,reaction-chamber}-menu.png` 与 `client-machine-world-render.png` |
+| 第九批旧世界迁移 | `7c1d505`；四阶段脚本通过（prepare -> injectLegacyRegion -> migrate_and_process -> verify_modern）；旧版 NBT 100% 守恒迁移、在线在途批次守恒、升级规范格式二次重启守恒；日志 `build/reports/migration-summary.log` |
 
 历史生命周期证据：`0dcfc03`（真实区块卸载）、`d3e1162`（三个独立 JVM 重启）、`b88f14d`（封存包回收）、`afa4780`/`a1afdf0`/`2503591`（真实破坏）。本轮没有重跑这些历史独立重启脚本，GameTest 中的相关生命周期场景随矩阵回归。
 
@@ -189,10 +202,10 @@
 
 | 优先级 | 工作 | 完成标准 |
 |---|---|---|
-| 发布前 | 联机客户端菜单与机器显示 | long/NBT、取放/Shift、外部更新、关闭重开/重连、超容/流体提示；肉眼确认 AE2/ExtendedAE 压印器和切片器显示 |
-| 发布前 | 真实旧世界迁移 | 旧格式、超容、处理中机器的迁移前后账本；只在副本验证 |
-| 发布前 | 可重复构建与发布包 | 全新缓存、远端 CI、最终 Jar 启动验证，精确版本矩阵与发布说明 |
+| 发布前 | 联机客户端菜单与机器显示 | long/NBT、取放/Shift、外部更新、关闭重开/重连、超容/流体提示；肉眼确认 AE2/ExtendedAE 压印器和切片器显示（代表链路已闭环，远端重连仍开放） |
+| 已完成 | 真实旧世界迁移 | 旧格式、超容、处理中机器的迁移前后账本；已在真实 Anvil 物理副本完成四阶段验证并升轨规范格式 |
 | 发布前 | 基础性能测量 | 相同环境下旧/新版首批延迟、吞吐、MSPT；至少空闲、持续加工、Max、满输出 |
+| 发布前 | 可重复构建与发布包 | 全新缓存、远端 CI、最终 Jar 启动验证，精确版本矩阵与发布说明 |
 | 按发布范围 | 目标整合包共存 | 声称支持 Mega Cells/AppFlux/BiggerStacks 等时执行其差异场景 |
 | 先测再改 | 唤醒、公平性、全局预算 | 由延迟/CPU/尖峰证据决定，避免无效新增钩子 |
 | 可延后 | 同类配方穷举、全部笛卡尔组合、100 次循环 | 优先资源所有权路径，不以测试数量代替覆盖质量 |
@@ -213,6 +226,9 @@ powershell.exe -NoProfile -File scripts/verify-compatibility.ps1 -Runtime all -O
 
 # 集成客户端菜单交互冒烟，自动创建/销毁一次性世界并退出
 powershell.exe -NoProfile -File scripts/verify-compatibility.ps1 -Runtime all -Offline -ClientInteractionSmoke
+
+# 真实 Anvil 旧世界物理迁移四阶段自动化验收，自动创建/销毁沙盒并校验账本与规范格式
+powershell.exe -NoProfile -File scripts/verify-migration.ps1 -Runtime all -Offline -AcceptMinecraftEula
 
 git log -4 --oneline
 git status --short
