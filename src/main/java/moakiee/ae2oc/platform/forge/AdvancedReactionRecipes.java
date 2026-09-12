@@ -1,5 +1,6 @@
 package moakiee.ae2oc.platform.forge;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import appeng.api.config.Actionable;
@@ -16,6 +17,7 @@ import moakiee.ae2oc.api.ResourceAmount;
 import moakiee.ae2oc.compat.ae2.LocalResourceSlot;
 import moakiee.ae2oc.compat.ae2.ManagedItemStorages;
 import moakiee.ae2oc.compat.ae2.ProcessingCodec;
+import moakiee.ae2oc.compat.advancedae.ReactionRecipes;
 import moakiee.ae2oc.core.execution.ProcessingState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -24,11 +26,13 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.pedroksl.advanced_ae.common.entities.ReactionChamberEntity;
+import net.pedroksl.advanced_ae.recipes.ReactionChamberRecipe;
 
 /**
  * Loaded only when AdvancedAE is present. Both scenarios drive real reaction chamber recipes:
@@ -218,6 +222,57 @@ final class AdvancedReactionRecipes {
                     "Fluid reaction retained a completed batch");
             helper.succeed();
         });
+    }
+
+    /**
+     * The recipe snapshot may only outlive a datapack reload while the cached object is still the one the
+     * current registry holds. Replacing the recipe under the same id must publish the new cost and output for
+     * new batches, and removing it must stop the chamber from starting another one at all. Batches that are
+     * already owned keep completing from their immutable snapshot, which the matrix tests cover separately.
+     */
+    static void removedRecipeCannotStartAnotherBatch(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        var machine = place(helper, pos);
+        inputSlot(machine, 0).write(new ResourceAmount<AEKey>(PRINT_LOGIC, ITEMS_PER_OPERATION));
+        inputSlot(machine, 1).write(new ResourceAmount<AEKey>(PRINT_SILICON, ITEMS_PER_OPERATION));
+        inputSlot(machine, 2).write(new ResourceAmount<AEKey>(REDSTONE, ITEMS_PER_OPERATION));
+        machine.getTank().setStack(1, new GenericStack(WATER, WATER_PER_ITEM_OPERATION));
+        var recipes = new ReactionRecipes(machine);
+        var first = recipes.get();
+        helper.assertTrue(first != null && first.id().equals(ITEM_RECIPE), "Fixture needs the baseline reaction recipe");
+
+        var manager = helper.getLevel().getRecipeManager();
+        var originals = new ArrayList<Recipe<?>>(manager.getRecipes());
+        var original = (ReactionChamberRecipe) manager.byKey(ResourceLocation.tryParse(ITEM_RECIPE)).orElse(null);
+        helper.assertTrue(original != null, "Baseline reaction recipe is absent from the registry");
+        try {
+            var replacement = new ReactionChamberRecipe(original.getId(),
+                    new GenericStack(AEItemKey.of(Items.DIAMOND), 2),
+                    original.getInputs(), original.getFluid(), original.getEnergy());
+            var swapped = new ArrayList<Recipe<?>>(originals);
+            swapped.set(swapped.indexOf(original), replacement);
+            manager.replaceRecipes(swapped);
+            var reloaded = recipes.get();
+            helper.assertTrue(reloaded != null && reloaded.id().equals(ITEM_RECIPE)
+                            && reloaded.outputs().size() == 1
+                            && reloaded.outputs().get(0).key().equals(AEItemKey.of(Items.DIAMOND))
+                            && reloaded.outputs().get(0).amount() == 2,
+                    "REVIEW same-id reaction replacement kept the stale snapshot: "
+                            + (reloaded == null ? "no recipe" : reloaded.outputs().get(0).key()));
+
+            manager.replaceRecipes(originals.stream().filter(recipe -> recipe != original).toList());
+            helper.assertTrue(manager.byKey(ResourceLocation.tryParse(ITEM_RECIPE)).isEmpty(),
+                    "Recipe must actually be removed from the manager");
+            helper.assertTrue(recipes.get() == null,
+                    "REVIEW removed reaction recipe remains available for new batches: " + ITEM_RECIPE);
+        } finally {
+            manager.replaceRecipes(originals);
+        }
+        var restored = recipes.get();
+        helper.assertTrue(restored != null && restored.id().equals(ITEM_RECIPE),
+                "Restoring the registry did not make the reaction recipe selectable again");
+        helper.assertTrue(inputAmount(machine, 0) == ITEMS_PER_OPERATION, "Recipe probing consumed the fixture inputs");
+        helper.succeed();
     }
 
     /**

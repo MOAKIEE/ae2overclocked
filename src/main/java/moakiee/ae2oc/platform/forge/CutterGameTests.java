@@ -22,6 +22,12 @@ public final class CutterGameTests {
         ExtendedCutterRecipes.renderOutputSync(helper);
     }
 
+    @GameTest(template = "empty")
+    public static void cutterRemovedRecipeCannotStartAnotherBatch(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedCutterRecipes.removedRecipeCannotStartAnotherBatch(helper);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 2000)
     public static void cutterRecipeMatrix(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }

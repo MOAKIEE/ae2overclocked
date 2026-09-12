@@ -22,11 +22,19 @@ public final class ReactionRecipes implements Supplier<RecipeBatch> {
 
     @Override public RecipeBatch get() {
         if (host.getLevel() == null) return null;
+        var manager = host.getLevel().getRecipeManager();
         if (cached != null) {
-            var batch = snapshot(cached);
-            if (batch != null) return batch;
+            // A datapack reload replaces the whole recipe registry. A snapshot may only be reused while the
+            // cached object is still the one the current manager holds; otherwise a removed recipe would keep
+            // starting batches, and a same-id replacement would keep its stale cost and outputs.
+            Object registered = manager.byKey(cached.getId()).orElse(null);
+            if (registered == cached) {
+                var batch = snapshot(cached);
+                if (batch != null) return batch;
+            }
+            cached = null;
         }
-        for (var recipe : host.getLevel().getRecipeManager().getAllRecipesFor(ReactionChamberRecipe.TYPE)) {
+        for (var recipe : manager.getAllRecipesFor(ReactionChamberRecipe.TYPE)) {
             var batch = snapshot(recipe);
             if (batch != null) { cached = recipe; return batch; }
         }

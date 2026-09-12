@@ -1,5 +1,6 @@
 package moakiee.ae2oc.platform.forge;
 
+import java.util.ArrayList;
 import java.util.List;
 import appeng.api.config.Settings;
 import appeng.api.config.YesNo;
@@ -10,11 +11,13 @@ import appeng.api.stacks.GenericStack;
 import appeng.core.definitions.AEBlocks;
 import appeng.core.definitions.AEItems;
 import com.glodblock.github.extendedae.common.tileentities.TileCircuitCutter;
+import com.glodblock.github.extendedae.recipe.CircuitCutterRecipe;
 import moakiee.ModItems;
 import moakiee.ae2oc.api.ResourceAmount;
 import moakiee.ae2oc.compat.ae2.LocalResourceSlot;
 import moakiee.ae2oc.compat.ae2.ManagedItemStorages;
 import moakiee.ae2oc.compat.ae2.ProcessingCodec;
+import moakiee.ae2oc.compat.extendedae.CutterRecipes;
 import moakiee.ae2oc.core.execution.ProcessingState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -22,6 +25,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.material.Fluids;
@@ -240,6 +244,55 @@ final class ExtendedCutterRecipes {
                     "Cutter retained a completed batch for " + recipe.id());
             additionalRecipeCoverage(helper, scenario + 1);
         });
+    }
+
+    /**
+     * The recipe snapshot may only outlive a datapack reload while the cached object is still the one the
+     * current registry holds. Replacing the recipe under the same id must publish the new cost and output for
+     * new batches, and removing it must stop the machine from starting another one at all. Batches that are
+     * already owned keep completing from their immutable snapshot, which the matrix tests cover separately.
+     */
+    static void removedRecipeCannotStartAnotherBatch(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        var machine = place(helper, pos);
+        final long operations = 8;
+        inputSlot(machine).write(new ResourceAmount<AEKey>(BLOCK, operations));
+        machine.getTank().setStack(0, new GenericStack(WATER, operations * FLUID_PER_OPERATION));
+        var recipes = new CutterRecipes(machine);
+        var first = recipes.get();
+        helper.assertTrue(first != null && first.id().equals(RECIPE), "Fixture needs the baseline cutter recipe");
+
+        var manager = helper.getLevel().getRecipeManager();
+        var originals = new ArrayList<Recipe<?>>(manager.getRecipes());
+        var original = (CircuitCutterRecipe) manager.byKey(ResourceLocation.tryParse(RECIPE)).orElse(null);
+        helper.assertTrue(original != null, "Baseline cutter recipe is absent from the registry");
+        try {
+            var replacement = new CircuitCutterRecipe(original.getId(),
+                    new ItemStack(Items.DIAMOND, 2), original.getInput(), original.getFluid());
+            var swapped = new ArrayList<Recipe<?>>(originals);
+            swapped.set(swapped.indexOf(original), replacement);
+            manager.replaceRecipes(swapped);
+            var reloaded = recipes.get();
+            helper.assertTrue(reloaded != null && reloaded.id().equals(RECIPE)
+                            && reloaded.outputs().size() == 1
+                            && reloaded.outputs().get(0).key().equals(AEItemKey.of(Items.DIAMOND))
+                            && reloaded.outputs().get(0).amount() == 2,
+                    "REVIEW same-id recipe replacement kept the stale snapshot: "
+                            + (reloaded == null ? "no recipe" : reloaded.outputs().get(0).key()));
+
+            manager.replaceRecipes(originals.stream().filter(recipe -> recipe != original).toList());
+            helper.assertTrue(manager.byKey(ResourceLocation.tryParse(RECIPE)).isEmpty(),
+                    "Recipe must actually be removed from the manager");
+            helper.assertTrue(recipes.get() == null,
+                    "REVIEW removed recipe remains available for new batches: " + RECIPE);
+        } finally {
+            manager.replaceRecipes(originals);
+        }
+        var restored = recipes.get();
+        helper.assertTrue(restored != null && restored.id().equals(RECIPE),
+                "Restoring the registry did not make the recipe selectable again");
+        helper.assertTrue(amount(inputSlot(machine)) == operations, "Recipe probing consumed the fixture inputs");
+        helper.succeed();
     }
 
     /**

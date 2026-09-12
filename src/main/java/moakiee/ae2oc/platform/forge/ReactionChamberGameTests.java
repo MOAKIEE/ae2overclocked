@@ -16,6 +16,12 @@ public final class ReactionChamberGameTests {
         AdvancedReactionRecipes.progressSync(helper);
     }
 
+    @GameTest(template = "empty")
+    public static void reactionChamberRemovedRecipeCannotStartAnotherBatch(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("advanced_ae")) { helper.succeed(); return; }
+        AdvancedReactionRecipes.removedRecipeCannotStartAnotherBatch(helper);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 3000)
     public static void reactionChamberItemRecipeMatrix(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("advanced_ae")) { helper.succeed(); return; }
