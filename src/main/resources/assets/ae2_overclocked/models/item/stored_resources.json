@@ -1,1 +1,1 @@
-{"parent":"minecraft:item/generated","textures":{"layer0":"ae2_overclocked:item/capacity_card"}}
+{"parent":"builtin/entity","gui_light":"front"}

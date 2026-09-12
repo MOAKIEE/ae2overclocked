@@ -221,7 +221,7 @@ final class ExtendedCutterRecipes {
 
     /**
      * Real destruction of a placed machine. The visible input, the logical output that overflows a legal
-     * stack, the products of a finished batch and the tank fluid must all reach the world exactly once when
+     * stack, the products of a finished batch must reach the world exactly once, while tank fluid is discarded when
      * the block is actually destroyed, not merely when the drop hook is invoked directly.
      */
     static void realDestructionDrops(GameTestHelper helper) {

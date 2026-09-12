@@ -25,8 +25,9 @@ public final class ManagedItemStorages {
         for (var port : slots(inventory)) {
             var value = port.read();
             if (value == null) continue;
-            long visible = Math.min(value.amount(), ((appeng.api.stacks.AEItemKey) value.key()).getMaxStackSize());
-            if (value.amount() > visible) drops.add(moakiee.item.StoredResourcesItem.pack(value.key(), value.amount() - visible));
+            var item = (appeng.api.stacks.AEItemKey) value.key();
+            long visible = Math.min(value.amount(), item.getMaxStackSize());
+            if (value.amount() > visible) drops.add(moakiee.item.StoredResourcesItem.pack(item, value.amount() - visible));
         }
     }
     public static net.minecraft.world.item.ItemStack recipeStack(InternalInventory inventory, int slot) {

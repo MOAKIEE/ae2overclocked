@@ -21,7 +21,7 @@ import net.minecraft.world.level.Level;
 /** A bounded, persistent drop for resources that cannot safely become ordinary item entities. */
 public final class StoredResourcesItem extends Item {
     public StoredResourcesItem() { super(new Item.Properties().stacksTo(1).fireResistant()); }
-    public static ItemStack pack(AEKey key, long amount) {
+    public static ItemStack pack(AEItemKey key, long amount) {
         var stack = new ItemStack(ModItems.STORED_RESOURCES.get());
         var tag = stack.getOrCreateTag();
         tag.putInt("dataVersion", 1);
@@ -29,8 +29,20 @@ public final class StoredResourcesItem extends Item {
         tag.putLong("amount", amount);
         return stack;
     }
-    private static AEKey key(ItemStack stack) {
-        return stack.hasTag() ? AEKey.fromTagGeneric(stack.getTag().getCompound("resource")) : null;
+    private static AEItemKey key(ItemStack stack) {
+        var resource = stack.hasTag() ? AEKey.fromTagGeneric(stack.getTag().getCompound("resource")) : null;
+        return resource instanceof AEItemKey item ? item : null;
+    }
+    /** A legal display stack; never expose the stored long amount as an ItemStack count. */
+    public static ItemStack displayStack(ItemStack stack) {
+        var item = key(stack);
+        if (item != null && item.getItem() != ModItems.STORED_RESOURCES.get()) {
+            return item.toStack(1);
+        }
+        return ItemStack.EMPTY;
+    }
+    @Override public void initializeClient(java.util.function.Consumer<net.minecraftforge.client.extensions.common.IClientItemExtensions> consumer) {
+        consumer.accept(new moakiee.ae2oc.client.StoredResourcesRenderer.Extension());
     }
     private static long amount(ItemStack stack) { return stack.hasTag() ? Math.max(0, stack.getTag().getLong("amount")) : 0; }
     private static void remove(ItemStack stack, long accepted) {
@@ -40,7 +52,8 @@ public final class StoredResourcesItem extends Item {
     }
     @Override public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         var stack = player.getItemInHand(hand);
-        if (!level.isClientSide && key(stack) instanceof AEItemKey item) {
+        var item = key(stack);
+        if (!level.isClientSide && item != null) {
             int offered = (int) Math.min(amount(stack), item.getMaxStackSize());
             if (offered > 0) {
                 var delivery = item.toStack(offered);

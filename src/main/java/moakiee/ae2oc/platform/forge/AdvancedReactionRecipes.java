@@ -339,7 +339,7 @@ final class AdvancedReactionRecipes {
                     "Real destruction lost the visible reaction input: " + entityAmount(entities, PRINT_LOGIC));
             helper.assertTrue(entityAmount(entities, WATER) == 0, "Reaction destruction must discard water");
             helper.assertTrue(entityAmount(entities, QUANTUM_INFUSION) == 0,
-                    "Real destruction lost the fluid product");
+                    "Reaction destruction must discard fluid output");
             helper.succeed();
         });
     }

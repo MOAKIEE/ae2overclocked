@@ -205,8 +205,7 @@ public class MachineProcessorAdapter {
     public void addDrops(List<ItemStack> drops) {
         for (var resource : processor.ownedResources()) {
             // Destruction returns items only; fluids are intentionally discarded.
-            if (resource.key() instanceof AEItemKey && resource.amount() > 0) drops.add(moakiee.item.StoredResourcesItem.pack(resource.key(), resource.amount()));
+            if (resource.key() instanceof AEItemKey item && resource.amount() > 0) drops.add(moakiee.item.StoredResourcesItem.pack(item, resource.amount()));
         }
     }
 }
-
