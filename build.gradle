@@ -141,6 +141,11 @@ minecraft {
                 workingDirectory project.file(providers.gradleProperty('migrationDirectory').get())
                 property 'ae2oc.migrationPhase', providers.gradleProperty('migrationPhase').get()
                 mods { "${mod_id}" { source sourceSets.restartTest } }
+            } else if (project.hasProperty('benchmark')) {
+                if (project.hasProperty('benchmarkDirectory')) {
+                    workingDirectory project.file(providers.gradleProperty('benchmarkDirectory').get())
+                }
+                property 'ae2oc.benchmark', 'true'
             }
         }
 
@@ -260,6 +265,7 @@ def devOnlyClasses = [
         'ReactionChamberGameTests',
         'AdvancedReactionRecipes',
         'RefactorGameTests',
+        'MachinePerformanceBenchmark',
 ]
 
 // Example for how to get properties into the manifest for reading at runtime.
@@ -368,7 +374,7 @@ tasks.register('verifyReleaseContents') {
                     throw new GradleException("Release jar ships develop-time scaffolding: ${shipped}")
                 }
             }
-            ['GameTests', 'GameTestServer', 'ClientSmoke', 'ContractTest', 'RestartVerification', 'MigrationVerification'].each { needle ->
+            ['GameTests', 'GameTestServer', 'ClientSmoke', 'ContractTest', 'RestartVerification', 'MigrationVerification', 'PerformanceBenchmark'].each { needle ->
                 def shipped = entries.findAll { it.contains(needle) }
                 if (shipped) {
                     throw new GradleException("Release jar ships test scaffolding: ${shipped}")
