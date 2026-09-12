@@ -12,9 +12,11 @@ import appeng.core.definitions.AEItems;
 import appeng.recipes.handlers.InscriberProcessType;
 import appeng.recipes.handlers.InscriberRecipe;
 import moakiee.ae2oc.api.ResourceAmount;
+import net.minecraft.nbt.CompoundTag;
 
 /** Recipe semantics are shared by the two upstream inscriber implementations. */
 public final class InscriberAdapter extends MachineProcessorAdapter {
+    private ResourceAmount<AEKey> completedPrimaryOutput;
     public InscriberAdapter(AENetworkPowerBlockEntity host, IUpgradeableObject upgrades,
                             InternalInventory inventory, Supplier<InscriberRecipe> recipes) {
         this(host, upgrades, inventory, recipes, 1);
@@ -23,6 +25,24 @@ public final class InscriberAdapter extends MachineProcessorAdapter {
     public InscriberAdapter(AENetworkPowerBlockEntity host, IUpgradeableObject upgrades,
                             InternalInventory inventory, Supplier<InscriberRecipe> recipes, int shares) {
         super(host, upgrades, inventory, () -> snapshot(upgrades, inventory, recipes.get()), shares, 3);
+    }
+
+    @Override
+    protected void onProcessingCompleted(List<ResourceAmount<AEKey>> outputs) {
+        completedPrimaryOutput = outputs.isEmpty() ? null : outputs.get(0);
+    }
+
+    /** One-shot visual event emitted when processing, rather than output draining, completes. */
+    public ResourceAmount<AEKey> pollCompletedPrimaryOutput() {
+        var result = completedPrimaryOutput;
+        completedPrimaryOutput = null;
+        return result;
+    }
+
+    @Override
+    public void load(CompoundTag tag) {
+        super.load(tag);
+        completedPrimaryOutput = null;
     }
 
     private static RecipeBatch snapshot(IUpgradeableObject upgrades, InternalInventory inventory, InscriberRecipe recipe) {

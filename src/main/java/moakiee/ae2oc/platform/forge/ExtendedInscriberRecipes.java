@@ -11,6 +11,8 @@ import moakiee.ModItems;
 import moakiee.ae2oc.api.ResourceAmount;
 import moakiee.ae2oc.compat.ae2.ManagedItemStorages;
 import moakiee.ae2oc.compat.ae2.ProcessingCodec;
+import moakiee.ae2oc.compat.extendedae.ExtendedInscriberVisualState;
+import moakiee.ae2oc.core.execution.ProcessingState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -29,6 +31,63 @@ final class ExtendedInscriberRecipes {
         var machine = (TileExInscriber) helper.getBlockEntity(pos);
         MachineProgressVerification.run(helper, machine, "ae2ocThread0", () -> machine.getProcessingTime(0),
                 machine.getMaxProcessingTime(), null, machine.getIndexInventory(0), 3);
+    }
+
+    static void visualSync(GameTestHelper helper) {
+        var block = ForgeRegistries.BLOCKS.getValue(
+                ResourceLocation.fromNamespaceAndPath("expatternprovider", "ex_inscriber"));
+        var sourcePos = new BlockPos(1, 1, 1);
+        var clientPos = new BlockPos(2, 1, 1);
+        helper.setBlock(sourcePos, block);
+        helper.setBlock(clientPos, block);
+        var source = (TileExInscriber) helper.getBlockEntity(sourcePos);
+        var clientCopy = (TileExInscriber) helper.getBlockEntity(clientPos);
+
+        var saved = source.saveWithFullMetadata();
+        putVisualBatch(saved, 0, Items.GOLD_INGOT);
+        putVisualBatch(saved, 3, Items.DIAMOND);
+        source.load(saved);
+        source.tickingRequest(null, 1);
+        helper.assertTrue(!source.isSmash(), "Four-lane visual completion changed server settlement state");
+
+        clientCopy.load(source.getUpdateTag());
+        var visuals = (ExtendedInscriberVisualState) clientCopy;
+        helper.assertTrue(clientCopy.isSmash() && visuals.ae2oc$isVisualSmash(),
+                "Client copy did not receive the ExtendedAE completion pulse");
+        helper.assertTrue(visuals.ae2oc$visualResult(clientCopy.getIndexInventory(0)).is(Items.GOLD_INGOT)
+                        && visuals.ae2oc$visualResult(clientCopy.getIndexInventory(1)).isEmpty()
+                        && visuals.ae2oc$visualResult(clientCopy.getIndexInventory(2)).isEmpty()
+                        && visuals.ae2oc$visualResult(clientCopy.getIndexInventory(3)).is(Items.DIAMOND),
+                "Four-lane visual results were merged into the wrong lanes");
+        helper.assertTrue(source.getIndexInventory(0).getStackInSlot(3).is(Items.GOLD_INGOT)
+                        && source.getIndexInventory(3).getStackInSlot(3).is(Items.DIAMOND),
+                "Visual packet changed completed lane ownership");
+
+        // A second lane can complete while the first global 800 ms animation is still active.
+        var lane1Output = ManagedItemStorages.slots(source.getIndexInventory(1)).get(3);
+        lane1Output.write(new ResourceAmount<AEKey>(AEItemKey.of(Items.COBBLESTONE), 64));
+        var second = source.saveWithFullMetadata();
+        putVisualBatch(second, 1, Items.EMERALD);
+        source.load(second);
+        source.tickingRequest(null, 1);
+        clientCopy.load(source.getUpdateTag());
+        helper.assertTrue(clientCopy.isSmash()
+                        && visuals.ae2oc$visualResult(clientCopy.getIndexInventory(1)).is(Items.EMERALD),
+                "Fast consecutive lane completion did not replace and restart the visual pulse");
+        var pending = ProcessingCodec.read(
+                source.saveWithFullMetadata().getCompound("ae2ocThread1").getCompound("ae2ocProcessing"));
+        helper.assertTrue(lane1Output.read().key().equals(AEItemKey.of(Items.COBBLESTONE))
+                        && pending.finished() && pending.outputs().get(0).key().equals(AEItemKey.of(Items.EMERALD)),
+                "Visual pulse settled or discarded a blocked lane output");
+        helper.succeed();
+    }
+
+    private static void putVisualBatch(CompoundTag root, int lane, net.minecraft.world.item.Item output) {
+        var child = root.getCompound("ae2ocThread" + lane);
+        child.put("ae2ocProcessing", ProcessingCodec.write(new ProcessingState<AEKey>("test:visual-" + lane,
+                java.util.List.of(new ResourceAmount<>(AEItemKey.of(Items.IRON_INGOT), 1)),
+                java.util.List.of(new ResourceAmount<>(AEItemKey.of(output), 1)), 0, 0, 1)));
+        root.put("ae2ocThread" + lane, child);
     }
 
     static void run(GameTestHelper helper, int scenario) {

@@ -14,7 +14,8 @@
     "MixinExInscriberPersistence"
   ],
   "client": [
-    "MixinGuiCircuitCutter"
+    "MixinGuiCircuitCutter",
+    "MixinExInscriberRenderer"
   ],
   "injectors": {
     "defaultRequire": 1

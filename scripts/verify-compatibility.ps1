@@ -32,7 +32,7 @@ try {
     if ($output -notmatch $success) { throw "Runtime did not report test completion; see $report" }
     if (!$ClientSmoke) {
         $testCount = [regex]::Match($output, 'All ([0-9]+) required tests passed').Groups[1].Value
-        if ([int]$testCount -lt 84) { throw "Expected at least 84 GameTests, found $testCount; see $report" }
+        if ([int]$testCount -lt 85) { throw "Expected at least 85 GameTests, found $testCount; see $report" }
         if ($output -notmatch 'Mixin target audit passed: [1-9][0-9]* checks; empty-production negative control caught [1-9][0-9]* failures') {
             throw "Build did not report the static Mixin audit and its negative control; see $report"
         }
