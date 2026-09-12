@@ -48,6 +48,21 @@ try {
     if ($branch) {
         $loose = Join-Path $root ".git/refs/heads/$branch"
         $tip = (& git rev-parse --verify "HEAD^{commit}" 2>$null)
+        # The newest commit record is the last reflog entry, not HEAD: a commit can succeed
+        # while its branch-pointer update is swallowed, which leaves HEAD one commit behind.
+        $logPath = Join-Path $root '.git/logs/HEAD'
+        $logTip = $null
+        if (Test-Path -LiteralPath $logPath) {
+            $lastLine = Get-Content -LiteralPath $logPath | Select-Object -Last 1
+            if ($lastLine) {
+                $parts = $lastLine -split '\s+'
+                if ($parts.Count -ge 2) { $logTip = $parts[1] }
+            }
+        }
+        if ($logTip -and $logTip -ne $tip) {
+            $problems.Add("branch tip $tip is behind the newest commit $logTip")
+            if ($Repair) { $tip = $logTip }
+        }
         $packedLine = Select-String -LiteralPath (Join-Path $root '.git/packed-refs') -Pattern ("refs/heads/" + [regex]::Escape($branch) + '$') -ErrorAction SilentlyContinue
         $packedSha = if ($packedLine) { ($packedLine.Line -split '\s+')[0] } else { $null }
         if (Test-Path -LiteralPath ($loose -replace '/', '\')) {
