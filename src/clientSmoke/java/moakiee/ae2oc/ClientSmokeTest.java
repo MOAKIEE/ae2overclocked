@@ -16,7 +16,7 @@ public final class ClientSmokeTest {
         event.enqueueWork(() -> {
             if (ModList.get().isLoaded("advanced_ae")) {
                 var widget = new FluidTankSlot(null, 0, 0, 0, 16, 58, 16);
-                widget.setFluidStack(net.minecraftforge.fluids.FluidStack.EMPTY);
+                widget.setFluidStack(new net.minecraftforge.fluids.FluidStack(net.minecraft.world.level.material.Fluids.WATER, 16000));
             }
             RenderCheck.ready = true;
         });
@@ -31,7 +31,7 @@ public final class ClientSmokeTest {
             if (!ready || minecraft.getOverlay() != null) return;
             ready = false;
             var gui = event.getGuiGraphics();
-            gui.fill(8, 8, 240, 96, 0xffdddddd);
+            gui.fill(8, 8, 240, 120, 0xffdddddd);
             var samples = java.util.List.of(
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND),
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.CHEST),
@@ -51,6 +51,16 @@ public final class ClientSmokeTest {
                 gui.renderItem(sample, 24 + i * 64, 24);
                 gui.renderItem(pack, 24 + i * 64, 56);
             }
+
+            // G3 Client verification: large stack presentation projection wraps and unwrap cleanly
+            var largeDiamond = appeng.api.stacks.AEItemKey.of(net.minecraft.world.item.Items.DIAMOND);
+            var wrappedLarge = appeng.api.stacks.GenericStack.wrapInItemStack(largeDiamond, 1000000);
+            var unwrapped = appeng.api.stacks.GenericStack.unwrapItemStack(wrappedLarge);
+            if (unwrapped == null || unwrapped.amount() != 1000000 || !unwrapped.what().equals(largeDiamond)) {
+                throw new IllegalStateException("GenericStack client projection corrupted large stack");
+            }
+            gui.renderItem(wrappedLarge, 24, 88);
+
             gui.flush();
             try (var screenshot = net.minecraft.client.Screenshot.takeScreenshot(minecraft.getMainRenderTarget())) {
                 var path = java.nio.file.Path.of("../build/reports/stored-resource-icons.png");

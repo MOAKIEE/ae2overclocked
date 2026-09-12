@@ -407,4 +407,56 @@ public final class RefactorGameTests {
         }
         helper.succeed();
     }
+
+    @GameTest(template = "empty")
+    public static void menuReopenAndBroadcastChangesSyncStateAccurately(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());
+        var machine = (appeng.blockentity.misc.InscriberBlockEntity) helper.getBlockEntity(pos);
+        var ports = moakiee.ae2oc.compat.ae2.ManagedItemStorages.slots(machine.getInternalInventory());
+        var player = helper.makeMockPlayer();
+
+        var menu1 = new appeng.menu.implementations.InscriberMenu(1, player.getInventory(), machine);
+        int outputIndex = -1;
+        for (var slot : menu1.slots) {
+            if (slot instanceof moakiee.ae2oc.client.LogicalMenuSlot logical && logical.getSlotIndex() == 3) {
+                outputIndex = slot.index;
+            }
+        }
+        helper.assertTrue(outputIndex >= 0, "Managed output slot not projected in menu1");
+        helper.assertTrue(menu1.getSlot(outputIndex).getItem().isEmpty(), "Initial menu slot should be empty");
+
+        ports.get(3).write(new ResourceAmount<>(AEItemKey.of(Items.GOLD_INGOT), 5_000_000));
+        menu1.broadcastChanges();
+        var slotItem = menu1.getSlot(outputIndex).getItem();
+        helper.assertTrue(appeng.api.stacks.GenericStack.isWrapped(slotItem), "Updated large slot was not wrapped");
+        var unwrapped = appeng.api.stacks.GenericStack.unwrapItemStack(slotItem);
+        helper.assertTrue(unwrapped != null && unwrapped.amount() == 5_000_000,
+                "broadcastChanges did not project accurate large amount: " + (unwrapped == null ? 0 : unwrapped.amount()));
+
+        menu1.clicked(outputIndex, 0, net.minecraft.world.inventory.ClickType.PICKUP, player);
+        helper.assertTrue(menu1.getCarried().getCount() == 64 && menu1.getCarried().is(Items.GOLD_INGOT),
+                "Pickup did not yield 64 gold ingots");
+        helper.assertTrue(ports.get(3).read().amount() == 5_000_000 - 64, "Server storage not updated after pickup");
+        menu1.setCarried(net.minecraft.world.item.ItemStack.EMPTY);
+
+        menu1.removed(player);
+        var menu2 = new appeng.menu.implementations.InscriberMenu(2, player.getInventory(), machine);
+        int outputIndex2 = -1;
+        for (var slot : menu2.slots) {
+            if (slot instanceof moakiee.ae2oc.client.LogicalMenuSlot logical && logical.getSlotIndex() == 3) {
+                outputIndex2 = slot.index;
+            }
+        }
+        helper.assertTrue(outputIndex2 >= 0, "Managed output slot not projected in menu2");
+        var slotItem2 = menu2.getSlot(outputIndex2).getItem();
+        var unwrapped2 = appeng.api.stacks.GenericStack.unwrapItemStack(slotItem2);
+        helper.assertTrue(unwrapped2 != null && unwrapped2.amount() == 5_000_000 - 64,
+                "Reopened menu did not retain accurate large amount");
+
+        menu2.clicked(outputIndex2, 0, net.minecraft.world.inventory.ClickType.PICKUP, player);
+        helper.assertTrue(menu2.getCarried().getCount() == 64, "Reopened menu pickup failed");
+        helper.assertTrue(ports.get(3).read().amount() == 5_000_000 - 128, "Reopened menu second pickup not conserved");
+        helper.succeed();
+    }
 }
