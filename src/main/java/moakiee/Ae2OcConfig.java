@@ -16,7 +16,7 @@ import moakiee.ae2oc.api.PerformanceBudget;
  *
  * Notes:
  * - Forge will automatically write the default values defined here if the config file does not exist.
- * - All defaults preserve the original mod behaviour.
+ * - Processing budgets and retry delays apply even with Max cards.
  */
 public final class Ae2OcConfig {
 
@@ -56,7 +56,7 @@ public final class Ae2OcConfig {
 
         SUPER_ENERGY_BUFFER_FE = builder
             .translation("config.ae2_overclocked.cards.superEnergyCardBufferFE")
-            .comment("Internal energy buffer limit (in FE) when a Super Energy Card is installed. Default: 2,000,000,000 FE.")
+            .comment("Internal energy buffer limit (in FE) when a Super Energy Card is installed. Removing the card discards energy above the base capacity. Default: 2,000,000,000 FE.")
             .defineInRange("superEnergyCardBufferFE", DEFAULT_SUPER_ENERGY_BUFFER_FE, 2.0, Double.MAX_VALUE);
 
         PARALLEL_MAX_MULTIPLIER = builder
@@ -71,7 +71,7 @@ public final class Ae2OcConfig {
 
         OVERCLOCK_CARD_PROCESS_TICKS = builder
             .translation("config.ae2_overclocked.cards.overclockCardProcessTicks")
-            .comment("Number of ticks to complete a recipe when Overclock Card is installed. Lower = faster. Default: 5.")
+            .comment("Processor advances required after batch energy is fully paid with an Overclock Card. Scheduling, blocked retries and output space can increase elapsed world ticks. Default: 5.")
             .defineInRange("overclockCardProcessTicks", DEFAULT_OVERCLOCK_CARD_PROCESS_TICKS, 1, 200);
 
         builder.pop();
