@@ -54,12 +54,16 @@ public abstract class MixinInscriberOverclock implements InscriberVisualState {
 
     @Inject(method = "tickingRequest", at = @At("HEAD"), cancellable = true)
     private void ae2oc_tick(IGridNode node, int elapsed, CallbackInfoReturnable<TickRateModulation> cir) {
+        var self = (InscriberBlockEntity) (Object) this;
+        // A vanilla batch owns its settlement from smash start through finalStep 16. Let upstream
+        // finish that transaction before an upgrade can hand subsequent work to the shared processor.
+        if (self.isSmash()) return;
         var result = ae2oc_adapter().tick();
         if (result != null) {
-            if (moakiee.ae2oc.compat.ae2.InscriberExport.push((InscriberBlockEntity) (Object) this))
+            if (moakiee.ae2oc.compat.ae2.InscriberExport.push(self))
                 result = TickRateModulation.URGENT;
             var state = ae2oc_adapter.processing();
-            processingTime = state == null ? 0 : state.paidProgress(((InscriberBlockEntity) (Object) this).getMaxProcessingTime());
+            processingTime = state == null ? 0 : state.paidProgress(self.getMaxProcessingTime());
             var completed = ae2oc_adapter.pollCompletedPrimaryOutput();
             if (completed != null && completed.key() instanceof appeng.api.stacks.AEItemKey item) {
                 ae2oc_visualResult = item.toStack(1);

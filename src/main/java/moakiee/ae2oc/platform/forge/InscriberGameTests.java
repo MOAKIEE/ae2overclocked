@@ -7,6 +7,7 @@ import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import appeng.blockentity.misc.InscriberBlockEntity;
 import appeng.core.definitions.AEBlocks;
+import appeng.core.definitions.AEItems;
 import moakiee.Ae2Overclocked;
 import moakiee.ModItems;
 import moakiee.ae2oc.api.ResourceAmount;
@@ -27,6 +28,43 @@ import net.minecraftforge.gametest.PrefixGameTestTemplate;
 @GameTestHolder(Ae2Overclocked.MODID)
 @PrefixGameTestTemplate(false)
 public final class InscriberGameTests {
+    @GameTest(template = "empty", timeoutTicks = 200)
+    public static void installingUpgradeDuringVanillaSmashCompletesSettlement(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos.west(), AEBlocks.CREATIVE_ENERGY_CELL.block());
+        helper.setBlock(pos, AEBlocks.INSCRIBER.block());
+        var machine = (InscriberBlockEntity) helper.getBlockEntity(pos);
+        helper.runAfterDelay(40, () -> {
+            var slots = ManagedItemStorages.slots(machine.getInternalInventory());
+            slots.get(0).write(new ResourceAmount<AEKey>(AEItemKey.of(AEItems.LOGIC_PROCESSOR_PRESS.asItem()), 1));
+            slots.get(2).write(new ResourceAmount<AEKey>(AEItemKey.of(Items.GOLD_INGOT), 4));
+            int ticks = 0;
+            while (!machine.isSmash() && ticks++ < 500) {
+                machine.tickingRequest(machine.getMainNode().getNode(), 1);
+            }
+            helper.assertTrue(machine.isSmash(), "Fixture did not enter vanilla settlement");
+
+            machine.getUpgrades().setItemDirect(0, new ItemStack(ModItems.OVERCLOCK_CARD.get()));
+            for (int i = 0; i < 40; i++) machine.tickingRequest(machine.getMainNode().getNode(), 1);
+
+            helper.assertTrue(!machine.isSmash(), "Upgrade takeover left vanilla settlement stuck");
+            helper.assertTrue(amount(slots.get(0)) == 1 && amount(slots.get(2)) == 0 && amount(slots.get(3)) == 4,
+                    "Vanilla/shared handoff lost or duplicated recipe resources");
+            helper.assertTrue(!machine.saveWithFullMetadata().contains("ae2ocProcessing"),
+                    "Vanilla/shared handoff retained a completed batch");
+            helper.assertTrue(acceptsAutomatedGold(machine), "Automation remained blocked after vanilla settlement");
+            slots.get(2).write(new ResourceAmount<AEKey>(AEItemKey.of(Items.GOLD_INGOT), 1));
+            helper.runAfterDelay(50, () -> {
+                for (int i = 0; i < 40; i++) machine.tickingRequest(machine.getMainNode().getNode(), 1);
+                helper.assertTrue(amount(slots.get(2)) == 0 && amount(slots.get(3)) == 5,
+                        "Machine did not process the next automated input after handoff");
+                helper.assertTrue(!machine.isSmash() && !machine.saveWithFullMetadata().contains("ae2ocProcessing"),
+                        "Second recipe did not finish cleanly after handoff");
+                helper.succeed();
+            });
+        });
+    }
+
     @GameTest(template = "empty")
     public static void inscriberCompletionSyncsVisualWithoutServerSettlement(GameTestHelper helper) {
         var sourcePos = new BlockPos(1, 1, 1);
@@ -301,6 +339,19 @@ public final class InscriberGameTests {
     private static long amount(moakiee.ae2oc.compat.ae2.LocalResourceSlot slot) {
         var resource = slot.read();
         return resource == null ? 0 : resource.amount();
+    }
+
+    private static boolean acceptsAutomatedGold(InscriberBlockEntity machine) {
+        for (var direction : net.minecraft.core.Direction.values()) {
+            var handler = machine.getCapability(net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER,
+                    direction).resolve().orElse(null);
+            if (handler == null) continue;
+            for (int slot = 0; slot < handler.getSlots(); slot++) {
+                var offered = new ItemStack(Items.GOLD_INGOT);
+                if (handler.insertItem(slot, offered, true).isEmpty()) return true;
+            }
+        }
+        return false;
     }
 
     @GameTest(template = "empty")
