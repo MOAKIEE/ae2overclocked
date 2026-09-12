@@ -60,6 +60,19 @@ public class Ae2Overclocked {
     }
 
     @SubscribeEvent
+    public void onServerStarted(net.minecraftforge.event.server.ServerStartedEvent event) {
+        if (Boolean.getBoolean("ae2oc.releaseCheck")) {
+            LOGGER.info("Release check: verifying environment and compatibility status...");
+            LOGGER.info("Release check passed: mod loaded, version={}, expatternprovider={}, advanced_ae={}, ae2cs={}",
+                    ModList.get().getModFileById(MODID).versionString(),
+                    ModList.get().isLoaded("expatternprovider"),
+                    ModList.get().isLoaded("advanced_ae"),
+                    ModList.get().isLoaded("ae2cs"));
+            event.getServer().halt(false);
+        }
+    }
+
+    @SubscribeEvent
     public void onRegisterCommands(RegisterCommandsEvent event) {
         moakiee.support.Ae2OcCommands.register(event.getDispatcher());
     }

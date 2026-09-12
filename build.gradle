@@ -146,6 +146,11 @@ minecraft {
                     workingDirectory project.file(providers.gradleProperty('benchmarkDirectory').get())
                 }
                 property 'ae2oc.benchmark', 'true'
+            } else if (project.hasProperty('releaseCheck')) {
+                if (project.hasProperty('releaseDirectory')) {
+                    workingDirectory project.file(providers.gradleProperty('releaseDirectory').get())
+                }
+                property 'ae2oc.releaseCheck', 'true'
             }
         }
 
