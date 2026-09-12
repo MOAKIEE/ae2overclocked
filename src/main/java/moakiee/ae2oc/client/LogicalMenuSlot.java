@@ -53,6 +53,25 @@ public final class LogicalMenuSlot extends AppEngSlot {
         stack.shrink(offered - remainder.getCount());
         return stack;
     }
+    /** Vanilla-style swap, but only when the complete backing amount fits in one legal cursor stack. */
+    public ItemStack exchange(ItemStack cursor, Player player) {
+        var current = backingItem();
+        long currentAmount = amount();
+        if (cursor.isEmpty() || current.isEmpty() || ItemStack.isSameItemSameTags(cursor, current)
+                || !mayPlace(cursor) || !mayPickup(player) || currentAmount > current.getMaxStackSize()) return null;
+        var extracted = remove((int) currentAmount);
+        if (extracted.getCount() != currentAmount) {
+            restoreExtracted(extracted);
+            return null;
+        }
+        var offered = cursor.copy();
+        safeInsert(offered, offered.getCount());
+        if (offered.isEmpty()) return extracted;
+        int inserted = cursor.getCount() - offered.getCount();
+        if (inserted > 0) remove(inserted);
+        restoreExtracted(extracted);
+        return null;
+    }
     public void restoreExtracted(ItemStack remainder) {
         if (remainder.isEmpty()) return;
         var before = logical.read();

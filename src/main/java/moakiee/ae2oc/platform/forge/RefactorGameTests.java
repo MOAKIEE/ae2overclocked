@@ -152,6 +152,58 @@ public final class RefactorGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void logicalMenuInteractionPolicyIsConservativeAndLossless(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());
+        var machine = (appeng.blockentity.misc.InscriberBlockEntity) helper.getBlockEntity(pos);
+        var ports = moakiee.ae2oc.compat.ae2.ManagedItemStorages.slots(machine.getInternalInventory());
+        ports.get(2).write(new ResourceAmount<>(AEItemKey.of(Items.GOLD_INGOT), 5));
+        ports.get(3).write(new ResourceAmount<>(AEItemKey.of(Items.IRON_INGOT), 10));
+        var player = helper.makeMockPlayer();
+        var menu = new appeng.menu.implementations.InscriberMenu(1, player.getInventory(), machine);
+        int input = -1;
+        int output = -1;
+        for (var slot : menu.slots) if (slot instanceof moakiee.ae2oc.client.LogicalMenuSlot logical) {
+            if (logical.backingItem().is(Items.GOLD_INGOT)) input = slot.index;
+            if (logical.backingItem().is(Items.IRON_INGOT)) output = slot.index;
+        }
+        helper.assertTrue(input >= 0 && output >= 0, "Managed input/output slots were not projected");
+        helper.assertTrue(menu.getSlot(input).mayPlace(new net.minecraft.world.item.ItemStack(Items.DIAMOND)),
+                "Test premise changed: inscriber middle slot no longer accepts diamonds");
+
+        menu.setCarried(new net.minecraft.world.item.ItemStack(Items.DIAMOND, 3));
+        menu.clicked(input, 0, net.minecraft.world.inventory.ClickType.PICKUP, player);
+        helper.assertTrue(menu.getCarried().is(Items.GOLD_INGOT) && menu.getCarried().getCount() == 5,
+                "Different-item pickup did not return the previous legal stack");
+        helper.assertTrue(ports.get(2).read().key().equals(AEItemKey.of(Items.DIAMOND))
+                && ports.get(2).read().amount() == 3, "Different-item pickup did not atomically replace the input");
+
+        ports.get(2).write(new ResourceAmount<>(AEItemKey.of(Items.DIAMOND), 1_000_000));
+        menu.setCarried(new net.minecraft.world.item.ItemStack(Items.GOLD_INGOT, 2));
+        menu.clicked(input, 0, net.minecraft.world.inventory.ClickType.PICKUP, player);
+        helper.assertTrue(menu.getCarried().is(Items.GOLD_INGOT) && menu.getCarried().getCount() == 2
+                && ports.get(2).read().amount() == 1_000_000,
+                "Different-item exchange leaked an oversized logical stack to the cursor");
+        ports.get(2).write(new ResourceAmount<>(AEItemKey.of(Items.DIAMOND), 3));
+
+        menu.setCarried(new net.minecraft.world.item.ItemStack(Items.REDSTONE));
+        menu.clicked(output, 0, net.minecraft.world.inventory.ClickType.PICKUP, player);
+        helper.assertTrue(menu.getCarried().is(Items.REDSTONE) && ports.get(3).read().amount() == 10,
+                "Output slot accepted a forbidden item or released data during a failed exchange");
+
+        menu.clicked(input, 0, net.minecraft.world.inventory.ClickType.SWAP, player);
+        menu.clicked(input, 0, net.minecraft.world.inventory.ClickType.QUICK_CRAFT, player);
+        helper.assertTrue(ports.get(2).read().amount() == 3 && ports.get(2).read().key().equals(AEItemKey.of(Items.DIAMOND)),
+                "Hotbar swap or drag changed a presentation slot despite the explicit deny policy");
+
+        menu.setCarried(new net.minecraft.world.item.ItemStack(Items.IRON_INGOT));
+        menu.clicked(output, 0, net.minecraft.world.inventory.ClickType.PICKUP_ALL, player);
+        helper.assertTrue(menu.getCarried().getCount() == 11 && ports.get(3).read() == null,
+                "Double-click collection did not conserve the bounded output stack");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void storedPackageCanBePickedUpAndReinserted(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());

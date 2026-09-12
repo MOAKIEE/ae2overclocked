@@ -19,6 +19,10 @@ public final class LogicalMenuInteraction {
                 if (cursor.isEmpty() && slot.mayPickup(player) && !current.isEmpty()) {
                     int count = button == 1 ? (int) Math.min(current.getMaxStackSize(), slot.amount() / 2 + slot.amount() % 2) : current.getMaxStackSize();
                     menu.setCarried(slot.remove(count));
+                } else if (!cursor.isEmpty() && !current.isEmpty()
+                        && !ItemStack.isSameItemSameTags(cursor, current)) {
+                    var exchanged = slot.exchange(cursor, player);
+                    if (exchanged != null) menu.setCarried(exchanged);
                 } else if (!cursor.isEmpty() && slot.mayPlace(cursor)) {
                     slot.safeInsert(cursor, button == 1 ? 1 : cursor.getCount());
                     menu.setCarried(cursor);
