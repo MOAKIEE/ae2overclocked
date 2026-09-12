@@ -149,6 +149,52 @@ public final class RefactorGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void storedPackageCanBePickedUpAndReinserted(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());
+        var machine = (appeng.blockentity.misc.InscriberBlockEntity) helper.getBlockEntity(pos);
+        machine.getUpgrades().setItemDirect(0, new net.minecraft.world.item.ItemStack(moakiee.ModItems.CAPACITY_CARD.get()));
+
+        var player = helper.makeMockPlayer();
+        var packed = moakiee.item.StoredResourcesItem.pack(AEItemKey.of(Items.GOLD_INGOT), 130);
+        var dropped = new net.minecraft.world.entity.item.ItemEntity(helper.getLevel(),
+                player.getX(), player.getY(), player.getZ(), packed);
+        dropped.setNoPickUpDelay();
+        helper.getLevel().addFreshEntity(dropped);
+        dropped.playerTouch(player);
+
+        int packageSlot = -1;
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            if (player.getInventory().getItem(i).is(moakiee.ModItems.STORED_RESOURCES.get())) packageSlot = i;
+        }
+        helper.assertTrue(packageSlot >= 0 && dropped.isRemoved(), "Player did not pick up the stored-resource package");
+        player.getInventory().selected = packageSlot;
+        for (int i = 0; i < 3; i++)
+            moakiee.ModItems.STORED_RESOURCES.get().use(helper.getLevel(), player, net.minecraft.world.InteractionHand.MAIN_HAND);
+
+        long unpacked = 0;
+        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+            var stack = player.getInventory().getItem(i);
+            if (stack.is(Items.GOLD_INGOT)) unpacked += stack.getCount();
+        }
+        helper.assertTrue(unpacked == 130, "Package unpacking did not conserve all 130 items: " + unpacked);
+        helper.assertTrue(player.getInventory().getItem(packageSlot).isEmpty(), "Empty package remained after full recovery");
+
+        var menu = new appeng.menu.implementations.InscriberMenu(1, player.getInventory(), machine);
+        for (var slot : menu.slots) {
+            if (slot.container == player.getInventory() && slot.getItem().is(Items.GOLD_INGOT))
+                menu.clicked(slot.index, 0, net.minecraft.world.inventory.ClickType.QUICK_MOVE, player);
+        }
+        long inserted = moakiee.ae2oc.compat.ae2.ManagedItemStorages.slots(machine.getInternalInventory()).stream()
+                .map(moakiee.ae2oc.compat.ae2.LocalResourceSlot::read)
+                .filter(java.util.Objects::nonNull)
+                .filter(value -> value.key().equals(AEItemKey.of(Items.GOLD_INGOT)))
+                .mapToLong(ResourceAmount::amount).sum();
+        helper.assertTrue(inserted == 130, "Recovered items did not re-enter the managed machine slot: " + inserted);
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
     public static void longItemProjectionAndSave(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());
