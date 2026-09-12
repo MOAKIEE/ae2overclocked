@@ -196,12 +196,13 @@
 
 | 检查 | 结果 | 证据 |
 |---|---|---|
-| 全附属严格离线 `build` | 通过 | 核心契约 10,000 组 + 1,000 组故障恢复；Mixin 静态审计 206 项（空生产索引负向对照仍捕获 12 条）；`verifyArchitecture`、`verifyReleaseContents`；`/tmp/build-all.log` |
-| 全附属 GameTest | 93 项通过 | `/tmp/gametest2.log`（89 项原有 + 4 项新增回归） |
-| 负向对照 | 恰有 4 项新增用例失败，其余 89 项通过 | `/tmp/negative.log`，失败行：`configuredextendedslotsizecontrolsinsertion`（`stored=1, rejected=63`）、`cutterremovedrecipecannotstartanotherbatch`、`reactionchamberremovedrecipecannotstartanotherbatch`、`extendedinscriberupgradeduringsmashcompletessettlement` |
+| 全附属严格离线 `build` | 通过 | 核心契约 10,000 组 + 1,000 组故障恢复；Mixin 静态审计 206 项（空生产索引负向对照仍捕获 12 条）；`verifyArchitecture`、`verifyReleaseContents`；`build/reports/review-fixes-build.log` |
+| 全附属 GameTest | 93 项通过 | `build/reports/review-fixes-gametest.log`（89 项原有 + 4 项新增回归） |
+| 负向对照 | 恰有 4 项新增用例失败，其余 89 项通过 | `build/reports/review-fixes-negative.log`，失败行：`configuredextendedslotsizecontrolsinsertion`（`stored=1, rejected=63`）、`cutterremovedrecipecannotstartanotherbatch`、`reactionchamberremovedrecipecannotstartanotherbatch`、`extendedinscriberupgradeduringsmashcompletessettlement` |
 | 基准重测 | 8 组场景通过，首批延迟修正为 5 ticks | `build/reports/benchmark-results.json`、`build/reports/benchmark/run-review/benchmark-run.log` |
 
-负向对照的做法是把四处源码修复临时还原为 `3907c43` 版本（测试保留），跑完后再恢复；未使用 `git stash`，避免改动工作区引用。
+负向对照的做法是把四处源码修复临时还原为 `3907c43` 版本（测试保留），跑完后再恢复；未使用 `git stash`，避免改动工作区引用。四份日志已固化到 `build/reports/review-fixes-*.log` 与基准目录，`build/` 不入 Git，需要时按第 7 节命令重跑。
+
 
 ## 3. 已有证据与边界
 
@@ -258,7 +259,7 @@
 | 第十四批 R1–R4 修复（正向） | `5e3246d`/`047d360`/`b815dda`/`95e10a4`；严格离线 `build`（10,000 组核心契约、206 项静态审计、发布包裁剪）通过；`all` 93 项 GameTest 全部通过；基准重测 8 组场景通过并修正首批延迟为 5 ticks |
 | 第十四批 R1–R4 修复（负向） | 临时还原四处源码修复后，93 项中恰有 4 项新增回归失败（槽位容量 `stored=1, rejected=63`；切片器/反应仓沿用旧快照；泳道压合状态卡住），其余 89 项仍通过 |
 
-说明：第十二批之前各批的日志仍为本地构建产物。本轮新增证据位于 `/tmp`（会话级临时目录）与 `build/reports/`，其中基准 JSON 已固化到 `build/reports/benchmark-results.json`；`/tmp` 下的日志在重启后不再可读，需要时按第 7 节命令重跑。
+说明：第十二批之前各批的日志仍为本地构建产物。本轮新增证据已固化到 `build/reports/`（见上表），其中基准 JSON 位于 `build/reports/benchmark-results.json`；`build/` 不入 Git，需要时按第 7 节命令重跑。
 
 历史生命周期证据：`0dcfc03`（真实区块卸载）、`d3e1162`（三个独立 JVM 重启）、`b88f14d`（封存包回收）、`afa4780`/`a1afdf0`/`2503591`（真实破坏）。本轮没有重跑这些历史独立重启脚本，GameTest 中的相关生命周期场景随矩阵回归。
 
