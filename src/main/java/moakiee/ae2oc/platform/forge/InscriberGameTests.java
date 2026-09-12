@@ -23,6 +23,21 @@ import net.minecraftforge.gametest.PrefixGameTestTemplate;
 @GameTestHolder(Ae2Overclocked.MODID)
 @PrefixGameTestTemplate(false)
 public final class InscriberGameTests {
+    @GameTest(template = "empty")
+    public static void inscriberRestoredBatchUpdatesProgress(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, AEBlocks.INSCRIBER.block());
+        var machine = (InscriberBlockEntity) helper.getBlockEntity(pos);
+        MachineProgressVerification.run(helper, machine, null, machine::getProcessingTime,
+                machine.getMaxProcessingTime(), null, machine.getInternalInventory(), 3);
+    }
+
+    @GameTest(template = "empty")
+    public static void extendedInscriberRestoredBatchUpdatesProgress(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedInscriberRecipes.progressSync(helper);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 300)
     public static void inscriberNamePressRetainsTemplateAndCopiesName(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);

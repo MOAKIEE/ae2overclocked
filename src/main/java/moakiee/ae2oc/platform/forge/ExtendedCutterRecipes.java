@@ -34,6 +34,14 @@ import net.minecraftforge.registries.ForgeRegistries;
  * tests assert the item count, the tank contents and the produced output at every tick.
  */
 final class ExtendedCutterRecipes {
+    static void progressSync(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "circuit_cutter")));
+        var machine = (TileCircuitCutter) helper.getBlockEntity(pos);
+        MachineProgressVerification.run(helper, machine, null, machine::getProgress,
+                TileCircuitCutter.MAX_PROGRESS, machine::isWorking, machine.getOutput(), 0);
+    }
+
     private static final String RECIPE = "expatternprovider:cutter/logic";
     private static final long FLUID_PER_OPERATION = 100;
     private static final long OUTPUT_PER_OPERATION = 9;

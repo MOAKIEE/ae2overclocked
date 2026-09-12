@@ -23,6 +23,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class MixinInscriberOverclock {
     @Shadow public abstract InternalInventory getInternalInventory();
     @Shadow public abstract InscriberRecipe getTask();
+    @Shadow private int processingTime;
     @Unique private InscriberAdapter ae2oc_adapter;
 
     @Unique private InscriberAdapter ae2oc_adapter() {
@@ -48,6 +49,8 @@ public abstract class MixinInscriberOverclock {
         if (result != null) {
             if (moakiee.ae2oc.compat.ae2.InscriberExport.push((InscriberBlockEntity) (Object) this))
                 result = TickRateModulation.URGENT;
+            var state = ae2oc_adapter.processing();
+            processingTime = state == null ? 0 : state.paidProgress(((InscriberBlockEntity) (Object) this).getMaxProcessingTime());
             cir.setReturnValue(result);
         }
     }

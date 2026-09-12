@@ -37,6 +37,14 @@ import net.pedroksl.advanced_ae.common.entities.ReactionChamberEntity;
  * they cover the mixed item/fluid ledger, the single-output item path and the tank-slot-0 fluid output.
  */
 final class AdvancedReactionRecipes {
+    static void progressSync(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("advanced_ae", "reaction_chamber")));
+        var machine = (ReactionChamberEntity) helper.getBlockEntity(pos);
+        MachineProgressVerification.run(helper, machine, null, machine::getProcessingTime,
+                machine.getMaxProcessingTime(), machine::isWorking, machine.getOutput(), 0);
+    }
+
     private static final String ITEM_RECIPE = "advanced_ae:logic_processor_chamber";
     private static final String FLUID_RECIPE = "advanced_ae:quantum_infusion";
     private static final AEItemKey PRINT_LOGIC = AEItemKey.of(AEItems.LOGIC_PROCESSOR_PRINT.asItem());

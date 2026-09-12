@@ -23,6 +23,14 @@ import net.minecraftforge.registries.ForgeRegistries;
 
 /** Loaded only when ExtendedAE is present. All four lanes run real upstream recipes. */
 final class ExtendedInscriberRecipes {
+    static void progressSync(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "ex_inscriber")));
+        var machine = (TileExInscriber) helper.getBlockEntity(pos);
+        MachineProgressVerification.run(helper, machine, "ae2ocThread0", () -> machine.getProcessingTime(0),
+                machine.getMaxProcessingTime(), null, machine.getIndexInventory(0), 3);
+    }
+
     static void run(GameTestHelper helper, int scenario) {
         if (scenario == 12) { helper.succeed(); return; }
         var pos = new BlockPos(1, 1, 1);

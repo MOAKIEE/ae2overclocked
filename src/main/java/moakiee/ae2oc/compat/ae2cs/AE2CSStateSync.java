@@ -26,8 +26,6 @@ public interface AE2CSStateSync {
             target.ae2oc$syncState(powered, 0, 0);
             return;
         }
-        int progress = state.energyRequired() <= 0 ? 1000
-                : (int) Math.round(1000.0 * state.energyPaid() / state.energyRequired());
-        target.ae2oc$syncState(powered, progress, 1000);
+        target.ae2oc$syncState(powered, state.paidProgress(1000), 1000);
     }
 }

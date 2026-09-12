@@ -15,6 +15,7 @@ import net.minecraft.world.item.ItemStack;
 import java.util.List;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.gen.Invoker;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -27,6 +28,7 @@ public abstract class MixinReactionChamberOverclock {
 
 
     @Unique private MachineProcessorAdapter ae2oc_adapter;
+    @Shadow private int processingTime;
 
     /** Upstream export target for one configured output side. */
     @Invoker("getTarget")
@@ -55,6 +57,10 @@ public abstract class MixinReactionChamberOverclock {
         if (result != null) {
             if (moakiee.ae2oc.compat.advancedae.ReactionExport.push((ReactionChamberEntity) (Object) this, this::ae2oc$target))
                 result = TickRateModulation.URGENT;
+            var self = (ReactionChamberEntity) (Object) this;
+            var state = ae2oc_adapter.processing();
+            processingTime = state == null ? 0 : state.paidProgress(self.getMaxProcessingTime());
+            self.setWorking(state != null && !state.finished());
             cir.setReturnValue(result);
         }
     }

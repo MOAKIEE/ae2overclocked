@@ -19,4 +19,10 @@ public record ProcessingState<K>(String recipe, List<ResourceAmount<K>> inputs,
     }
 
     public boolean finished() { return energyPaid == energyRequired && ticksRemaining == 0; }
+
+    /** Upstream bars measure paid energy. A paid batch stays full during its remaining delay. */
+    public int paidProgress(int maximum) {
+        if (maximum < 0) throw new IllegalArgumentException("Negative progress scale");
+        return energyRequired == 0 ? maximum : (int) Math.round((energyPaid / energyRequired) * maximum);
+    }
 }

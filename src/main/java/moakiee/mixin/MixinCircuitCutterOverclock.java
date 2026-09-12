@@ -49,6 +49,15 @@ public abstract class MixinCircuitCutterOverclock {
         if (result != null) {
             if (moakiee.ae2oc.compat.extendedae.CutterExport.push((TileCircuitCutter) (Object) this))
                 result = TickRateModulation.URGENT;
+            var self = (TileCircuitCutter) (Object) this;
+            var state = ae2oc_adapter.processing();
+            int progress = state == null ? 0 : state.paidProgress(TileCircuitCutter.MAX_PROGRESS);
+            boolean working = state != null && !state.finished();
+            if (self.getProgress() != progress || self.isWorking() != working) {
+                self.setProgress(progress);
+                self.setWorking(working);
+                self.markForUpdate();
+            }
             cir.setReturnValue(result);
         }
     }

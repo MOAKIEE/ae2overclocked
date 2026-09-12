@@ -231,6 +231,7 @@ def devOnlyClasses = [
         'InscriberGameTests',
         'ExtendedInscriberRecipes',
         'GridMachineScheduling',
+        'MachineProgressVerification',
         'CutterGameTests',
         'ExtendedCutterRecipes',
         'ReactionChamberGameTests',

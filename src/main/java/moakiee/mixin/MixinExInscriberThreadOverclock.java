@@ -21,6 +21,8 @@ public abstract class MixinExInscriberThreadOverclock implements InscriberThread
     @Shadow @Final private TileExInscriber host;
     @Shadow public abstract InternalInventory getInternalInventory();
     @Shadow public abstract InscriberRecipe getTask();
+    @Shadow public abstract int getMaxProcessingTime();
+    @Shadow private int processingTime;
     @Unique private InscriberAdapter ae2oc_adapter;
 
     @Inject(method = "<init>", at = @At("TAIL"))
@@ -40,6 +42,8 @@ public abstract class MixinExInscriberThreadOverclock implements InscriberThread
             // The custom path replaces the upstream body, so it must also run the lane's auto-export.
             if (moakiee.ae2oc.compat.extendedae.ExtendedInscriberExport.push(host, getInternalInventory()))
                 result = TickRateModulation.URGENT;
+            var state = ae2oc_adapter.processing();
+            processingTime = state == null ? 0 : state.paidProgress(getMaxProcessingTime());
             cir.setReturnValue(result);
         }
     }

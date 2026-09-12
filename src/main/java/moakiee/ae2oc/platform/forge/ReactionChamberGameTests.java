@@ -10,6 +10,12 @@ import net.minecraftforge.gametest.PrefixGameTestTemplate;
 @GameTestHolder(Ae2Overclocked.MODID)
 @PrefixGameTestTemplate(false)
 public final class ReactionChamberGameTests {
+    @GameTest(template = "empty")
+    public static void reactionChamberRestoredBatchUpdatesProgress(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("advanced_ae")) { helper.succeed(); return; }
+        AdvancedReactionRecipes.progressSync(helper);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 3000)
     public static void reactionChamberItemRecipeMatrix(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("advanced_ae")) { helper.succeed(); return; }

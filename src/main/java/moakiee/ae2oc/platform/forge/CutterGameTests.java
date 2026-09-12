@@ -10,6 +10,12 @@ import net.minecraftforge.gametest.PrefixGameTestTemplate;
 @GameTestHolder(Ae2Overclocked.MODID)
 @PrefixGameTestTemplate(false)
 public final class CutterGameTests {
+    @GameTest(template = "empty")
+    public static void cutterRestoredBatchUpdatesProgress(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedCutterRecipes.progressSync(helper);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 2000)
     public static void cutterRecipeMatrix(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }

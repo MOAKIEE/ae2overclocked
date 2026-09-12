@@ -24,6 +24,10 @@ public final class CoreContractTest {
         retryBackoffIsBoundedAndResettable();
         logicalSlots();
         processing();
+        var hugeEnergy = new ProcessingState<String>("progress", List.of(), List.of(), Double.MAX_VALUE, Double.MAX_VALUE / 2, 1);
+        check(hugeEnergy.paidProgress(1000) == 500);
+        check(new ProcessingState<String>("free", List.of(), List.of(), 0, 0, 1).paidProgress(200) == 200);
+        rejects(() -> hugeEnergy.paidProgress(-1));
         SlotTransactionTest.run();
         ProcessorFaultTest.run();
         long[] edges = {0, 1, 2, Integer.MAX_VALUE, Long.MAX_VALUE - 1, Long.MAX_VALUE};
