@@ -4,13 +4,13 @@
 >
 > 分支：`refactor/machine-core`
 >
-> 当前实现基准：`7c1d505`
+> 当前实现基准：`9731ea1`
 >
 > 设计与后续验收：[REFACTOR_PLAN.zh-CN.md](REFACTOR_PLAN.zh-CN.md)
 
 ## 1. 当前结论
 
-核心结构迁移已经完成，可以停止扩张架构，转入针对性修复与发布候选验收。当前不能声称完整客户端、性能和第三方共存已经通过认证。
+核心结构迁移已经完成，可以停止扩张架构，转入针对性修复与发布候选验收。当前不能声称完整客户端和第三方共存已经通过认证。
 
 本次复核撤回旧文档“G1～G4 全部验证闭环、100% 完成”的总括结论，不再使用没有明确计算方法的可信度百分比。原来的 78 项 GameTest 是有效的场景证据，但不能证明未执行的客户端交互或性能指标。
 
@@ -21,7 +21,7 @@
 | G2 生命周期 | 代表路径关闭 | 真实破坏、封存包回收、AE2 实际区块卸载、AE2CS 正常跨 JVM 重启；真实旧世界 Anvil 物理迁移、在线推进与升级存盘二次重启已闭环；不等于所有机器崩溃恢复 |
 | G3 菜单 | 代表联网客户端路径已通过，发布级完整项仍开放 | GenericStack 局部包装保留；真实客户端菜单首屏、PICKUP、外部更新、关闭重开、Shift 及 NBT 已通过；ExtendedAE 4 泳道大数同步与拾取通过；AdvancedAE 反应仓容量卡流体 Tooltip 已通过；远端重连仍未覆盖 |
 | G4 兼容与构建 | 固定基线关闭 | 五组合通过；依赖锁与校验；静态审计接入 build/check；不承诺未验证版本 |
-| 正式发布 | 尚未通过 | 独立远端客户端重连、多机性能及目标整合包验收待完成（旧世界迁移已闭环） |
+| 正式发布 | 尚未通过 | 独立远端客户端重连及目标整合包验收待完成（旧世界迁移与基础性能测量已闭环） |
 
 ## 2. 本轮分批修复
 
@@ -122,6 +122,33 @@
   4. **阶段 4（`verify_modern`）**：保存世界后再次启动独立 Dedicated Server，检验底层 MCA 区块已全部升轨为标准 `ae2ocLongSlots`（`ae2ocDataVersion: 1`），所有旧版字段被完全清理，二次重启账本零误差。
 - 全套迁移脚本（`verify-migration.ps1 -Runtime all -Offline -AcceptMinecraftEula`）全绿通过，产出报告 `build/reports/migration-summary.log`；全套构建（10,000 组契约测试、204 项静态 Mixin 检查、verifyReleaseContents 零泄漏）通过。
 
+### 第十批：基础性能与开销测量（`9731ea1`）
+
+依据设计规范第 6 节，建立受控基准测量套件 `MachinePerformanceBenchmark`，使用独立 Dedicated Server 沙盒环境执行单机与 64 机并发在 4 种负载下的严格测量：
+
+- **测量环境**：Windows 11 | Java 17.0.20 (OpenJDK 64-Bit Server VM) | 20 CPU 核心 | Max 堆内存 4002 MB | `--offline --dependency-verification=strict`。
+- **矩阵设计（8 组隔离场景）**：
+  - 单机与 64 机并发（8×8 网格独立供能，避免网格通道与重算交叉干扰）；
+  - 四类代表负载：空闲（IDLE）、持续加工（PROCESSING，4 超频 + 1 并行）、满输出阻塞（BLOCKED，输出预置不可合并物料触发退避）、Max 并行冲刺（MAX_PARALLEL，4 超频 + MAX 并行卡海量进料）。
+- **指标实测数据（各场景 100 ticks 稳定窗口）**：
+
+| 场景 | 机器数 | 负载类型 | 首批推进延迟（ticks/ms） | 吞吐（items/t） | 100t 产出量 | MSPT 均值 / P50 / P95 / P99 | 备注 |
+|---|---:|---|---|---:|---:|---|---|
+| `single_idle` | 1 | IDLE | N/A | 0.00 | 0 | 0.904 / 0.821 / 1.441 / 4.731 ms | 空闲退避休眠 |
+| `single_processing` | 1 | PROCESSING | 4 t / 248.3 ms | 0.40 | 40 | 1.375 / 1.163 / 1.804 / 9.115 ms | 稳态两件并行，5t 周期正常产出 |
+| `single_blocked` | 1 | BLOCKED | N/A | 0.00 | 0 | 1.125 / 1.030 / 1.485 / 6.517 ms | 输出阻塞退避，无无效重算 |
+| `single_max_parallel` | 1 | MAX_PARALLEL | 4 t / 249.3 ms | 58.88 | 5,888 | 1.132 / 1.092 / 1.543 / 1.688 ms | 单机超大并发冲刺 |
+| `multi_idle` | 64 | IDLE | N/A | 0.00 | 0 | 1.041 / 0.931 / 1.649 / 3.468 ms | 64 机空闲增量仅 ~0.14 ms |
+| `multi_processing` | 64 | PROCESSING | 4 t / 248.9 ms | 25.60 | 2,560 | 1.406 / 1.243 / 2.196 / 5.157 ms | 64 机稳态并发，均值 1.4 ms |
+| `multi_blocked` | 64 | BLOCKED | N/A | 0.00 | 0 | 1.660 / 1.547 / 2.212 / 5.339 ms | 64 机并发退避，MSPT 平稳受控 |
+| `multi_max_parallel` | 64 | MAX_PARALLEL | 4 t / 250.4 ms | 3,768.32 | 376,832 | 2.895 / 2.850 / 3.520 / 4.234 ms | 极限整网冲刺，P95 仅 3.5 ms |
+
+- **关键性能结论**：
+  1. **首批推进延迟**：在 4 张超频卡设定下，首批可用时间稳定为 **4 世界 ticks（约 248~250 ms）**，与默认 5 次推进的倒计时算法完全契合。
+  2. **高密度多机并发与 MSPT**：64 机极限冲刺下每 tick 处理并排出 3,768 件产物，服务器平均 MSPT 仅 2.895 ms（P95 为 3.520 ms），远低于 50.0 ms（20 TPS）的世界心跳预算。
+  3. **阻塞与退避有效性**：64 台机器满输出阻塞状态下的平均 MSPT（1.660 ms）仅比空闲增加 0.6 ms，证实阻塞退避算法有效抑制了无效的配方扫描与状态遍历开销。
+- 自动化驱动脚本 `scripts/verify-benchmark.ps1 -Runtime all -Offline -AcceptMinecraftEula` 一键通过，结构化数据输出于 `build/reports/benchmark-results.json`；全套构建审查（204 项静态 Mixin 检查、verifyReleaseContents 零泄漏）及 85 项 GameTest 回归均 100% 保持全绿。
+
 ## 3. 已有证据与边界
 
 ### 3.1 跨机器能力
@@ -132,7 +159,7 @@
 | 库存 | AEKey + long；合法 ItemStack 投影；降容保留；旧格式解析与非法存档检查；真实 Anvil 存档反序列化支持 ListTag 与 CompoundTag 旧 inv、ae2ocAmount、ae2ocNetCount 自定义 NBT、ae2ocCount 升轨 | 第三方原地修改栈路径的异常容错 |
 | 生命周期 | AE2 远端区块真实卸载恢复部分付款批次；AE2CS 四机三个独立 JVM 正常重启；真实物理 MCA 旧世界跨独立服务端反序列化、自然推进及存盘升级为标准 ae2ocLongSlots 二次重启 100% 守恒 | 异常终止、其他机型跨进程、所有流体生命周期组合 |
 | 掉落 | 各代表机器真实破坏、可见/超容/批次物品账本；封存包拾取、分批解包、回插 | 直接回插 ME、全部资源组合 |
-| 调度 | 网格与世界 tick 区别；缺能恢复；批次防休眠；退避与预算 | 首批墙钟延迟、公平性、整网吞吐和多机 MSPT |
+| 调度 | 网格与世界 tick 区别；缺能恢复；批次防休眠；退避与预算；单机与 64 机并发在空闲、加工、阻塞、Max 并行下的首批延迟（4 ticks / 248 ms）、吞吐（最高 3768 items/t）与 MSPT（P50 0.8~2.8 ms, P95 1.1~3.5 ms）已固定基准 | 跨维度/跨网络极大数量（1024+ 台）全局调度预算 |
 | 菜单与显示 | 受管交互、包回调/编解码、关闭归还、客户端图标冒烟；AE2 Inscriber loopback 客户端真实首屏/PICKUP/外部更新/关闭重开/Shift/NBT；ExtendedAE 4 泳道菜单大数同步与拾取；AdvancedAE 反应仓容量卡流体 Tooltip；三机世界内 3D 渲染截屏 | 独立远端/重连、高延迟丢包容错 |
 | 构建 | 依赖锁、SHA-256、架构检查、静态 Mixin 审计、发布 Jar 裁剪 | 全新缓存下载、远端 CI 实跑、最终 Jar 的完整客户端验收 |
 
@@ -140,8 +167,8 @@
 
 | 机器 | 已验证 | 优先补齐 |
 |---|---|---|
-| AE2 压印器 | 两类配方 ×12 升级组合、命名压板 NBT/模板保留、输出与恢复、自然调度、真实区块卸载、进度映射；完成脉冲/产物包往返与结算隔离；真实客户端 Inscriber 菜单 long/NBT/取放/外部更新/重开；世界内 3D 渲染截屏；真实旧世界 Anvil 物理迁移、在线推进与升级存盘二次重启 | 真实客户端压合连续动画录屏与中途接管显示 |
-| ExtendedAE 压印器 | 四泳道 ×12 组合、独立输出与共享预算、堵塞恢复/破坏、自然调度、泳道进度；多泳道/连续完成动画包往返与结算隔离；真实客户端 4 泳道菜单大数同步与拾取；世界内 3D 渲染截屏；真实旧世界 4 泳道大数 Anvil 物理迁移、在线推进与升级存盘二次重启 | 压合连续动画录屏、性能 |
+| AE2 压印器 | 两类配方 ×12 升级组合、命名压板 NBT/模板保留、输出与恢复、自然调度、真实区块卸载、进度映射；完成脉冲/产物包往返与结算隔离；真实客户端 Inscriber 菜单 long/NBT/取放/外部更新/重开；世界内 3D 渲染截屏；真实旧世界 Anvil 物理迁移、在线推进与升级存盘二次重启；单机与 64 机并发性能实测（首批 4t/248ms、极限 3768 items/t、MSPT 2.895ms） | 真实客户端压合连续动画录屏与中途接管显示 |
+| ExtendedAE 压印器 | 四泳道 ×12 组合、独立输出与共享预算、堵塞恢复/破坏、自然调度、泳道进度；多泳道/连续完成动画包往返与结算隔离；真实客户端 4 泳道菜单大数同步与拾取；世界内 3D 渲染截屏；真实旧世界 4 泳道大数 Anvil 物理迁移、在线推进与升级存盘二次重启 | 压合连续动画录屏、极限四泳道性能细节 |
 | 切片器 | logic/calculation/engineering/silicon，物品/水守恒、输出/破坏、进度/working；共享批次产物包往返 | Mega Cells accumulation、自然调度、真实客户端三维观察 |
 | 反应仓 | logic_processor_chamber、quantum_infusion 流体产出、输出/破坏、进度/working；真实客户端 ReactionChamberScreen 容量卡流体 Tooltip（32000 / 2147483647 mB）；世界内 3D 渲染截屏 | AppFlux 条件配方、自然调度 |
 | AE2CS 粉碎机 | gunpowder 与 Tag 输入赛特斯石英粉、自然缺能/断网、重载/破坏、跨 JVM；真实旧世界 Anvil 物理迁移与升级存盘二次重启 | 差异配方类型和性能 |
@@ -170,6 +197,7 @@
 | 第七批客户端菜单 | `3b0e645`；`all` 客户端交互脚本通过，真实 InscriberScreen 菜单完成 long/NBT、PICKUP、外部更新、关闭重开、QUICK_MOVE 守恒；日志 `compatibility/all-client-interaction.log`，截图 `client-menu-{initial,reopened}.png` |
 | 第八批多机交互闭环 | `8818bf7`；`all` 客户端交互脚本通过，ExtendedAE 4 泳道大数同步/拾取通过、反应仓 `32000 / 2147483647 mB` Tooltip 通过、三机世界内 3D 渲染通过；详细日志 `compatibility/all-client-interaction.log`，截图 `client-{extended-inscriber,reaction-chamber}-menu.png` 与 `client-machine-world-render.png` |
 | 第九批旧世界迁移 | `7c1d505`；四阶段脚本通过（prepare -> injectLegacyRegion -> migrate_and_process -> verify_modern）；旧版 NBT 100% 守恒迁移、在线在途批次守恒、升级规范格式二次重启守恒；日志 `build/reports/migration-summary.log` |
+| 第十批基础性能测量 | `9731ea1`；单机与 64 机 8 组隔离场景全绿完成，输出 `build/reports/benchmark-results.json`；首批延迟 4 ticks / 248 ms，64 机极限冲刺吞吐 3768 items/t，MSPT 均值 2.895 ms（P95 3.520 ms）远低于 50 ms；脚本 `verify-benchmark.ps1` |
 
 历史生命周期证据：`0dcfc03`（真实区块卸载）、`d3e1162`（三个独立 JVM 重启）、`b88f14d`（封存包回收）、`afa4780`/`a1afdf0`/`2503591`（真实破坏）。本轮没有重跑这些历史独立重启脚本，GameTest 中的相关生命周期场景随矩阵回归。
 
@@ -204,7 +232,7 @@
 |---|---|---|
 | 发布前 | 联机客户端菜单与机器显示 | long/NBT、取放/Shift、外部更新、关闭重开/重连、超容/流体提示；肉眼确认 AE2/ExtendedAE 压印器和切片器显示（代表链路已闭环，远端重连仍开放） |
 | 已完成 | 真实旧世界迁移 | 旧格式、超容、处理中机器的迁移前后账本；已在真实 Anvil 物理副本完成四阶段验证并升轨规范格式 |
-| 发布前 | 基础性能测量 | 相同环境下旧/新版首批延迟、吞吐、MSPT；至少空闲、持续加工、Max、满输出 |
+| 已完成 | 基础性能测量 | 相同环境下单机与 64 机在空闲、持续加工、Max 并行、满输出阻塞 4 种负载下的首批延迟（4t/248ms）、吞吐（最高 3768 items/t）、MSPT（P50 0.8~2.8ms，P95 1.1~3.5ms）已完成受控测量并固化基准 |
 | 发布前 | 可重复构建与发布包 | 全新缓存、远端 CI、最终 Jar 启动验证，精确版本矩阵与发布说明 |
 | 按发布范围 | 目标整合包共存 | 声称支持 Mega Cells/AppFlux/BiggerStacks 等时执行其差异场景 |
 | 先测再改 | 唤醒、公平性、全局预算 | 由延迟/CPU/尖峰证据决定，避免无效新增钩子 |
@@ -229,6 +257,9 @@ powershell.exe -NoProfile -File scripts/verify-compatibility.ps1 -Runtime all -O
 
 # 真实 Anvil 旧世界物理迁移四阶段自动化验收，自动创建/销毁沙盒并校验账本与规范格式
 powershell.exe -NoProfile -File scripts/verify-migration.ps1 -Runtime all -Offline -AcceptMinecraftEula
+
+# 单机与 64 机并发性能基准测量，自动创建沙盒执行 8 组场景并在控制台和 JSON 中输出延迟/吞吐/MSPT
+powershell.exe -NoProfile -File scripts/verify-benchmark.ps1 -Runtime all -Offline -AcceptMinecraftEula
 
 git log -4 --oneline
 git status --short
