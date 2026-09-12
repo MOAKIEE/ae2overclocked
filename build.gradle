@@ -232,6 +232,7 @@ def devOnlyClasses = [
         'ExtendedInscriberRecipes',
         'GridMachineScheduling',
         'MachineProgressVerification',
+        'MenuPacketProbe',
         'CutterGameTests',
         'ExtendedCutterRecipes',
         'ReactionChamberGameTests',

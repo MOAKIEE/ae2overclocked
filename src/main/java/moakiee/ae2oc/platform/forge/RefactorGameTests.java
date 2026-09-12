@@ -414,9 +414,17 @@ public final class RefactorGameTests {
         helper.setBlock(pos, appeng.core.definitions.AEBlocks.INSCRIBER.block());
         var machine = (appeng.blockentity.misc.InscriberBlockEntity) helper.getBlockEntity(pos);
         var ports = moakiee.ae2oc.compat.ae2.ManagedItemStorages.slots(machine.getInternalInventory());
-        var player = helper.makeMockPlayer();
+        // A server player exercises vanilla's return-cursor-on-close branch. No real connection or login.
+        var player = new net.minecraft.server.level.ServerPlayer(helper.getLevel().getServer(), helper.getLevel(),
+                new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "menu-probe")) {
+            @Override public boolean hasDisconnected() { return false; }
+        };
+        player.connection = new net.minecraft.server.network.ServerGamePacketListenerImpl(helper.getLevel().getServer(),
+                new net.minecraft.network.Connection(net.minecraft.network.protocol.PacketFlow.SERVERBOUND), player);
 
         var menu1 = new appeng.menu.implementations.InscriberMenu(1, player.getInventory(), machine);
+        var wire1 = new MenuPacketProbe();
+        menu1.setSynchronizer(wire1);
         int outputIndex = -1;
         for (var slot : menu1.slots) {
             if (slot instanceof moakiee.ae2oc.client.LogicalMenuSlot logical && logical.getSlotIndex() == 3) {
@@ -424,24 +432,39 @@ public final class RefactorGameTests {
             }
         }
         helper.assertTrue(outputIndex >= 0, "Managed output slot not projected in menu1");
-        helper.assertTrue(menu1.getSlot(outputIndex).getItem().isEmpty(), "Initial menu slot should be empty");
+        helper.assertTrue(wire1.initialPackets == 1 && wire1.slots.get(outputIndex).isEmpty(), "Initial packet should contain an empty slot");
 
-        ports.get(3).write(new ResourceAmount<>(AEItemKey.of(Items.GOLD_INGOT), 5_000_000));
+        var namedGold = new net.minecraft.world.item.ItemStack(Items.GOLD_INGOT);
+        namedGold.setHoverName(net.minecraft.network.chat.Component.literal("Packet identity"));
+        var goldKey = AEItemKey.of(namedGold);
+        ports.get(3).write(new ResourceAmount<>(goldKey, 5_000_000));
+        helper.assertTrue(wire1.slots.get(outputIndex).isEmpty(), "Packet probe read through to live storage");
+        int previousPackets = wire1.slotPackets;
         menu1.broadcastChanges();
-        var slotItem = menu1.getSlot(outputIndex).getItem();
+        helper.assertTrue(wire1.slotPackets > previousPackets, "broadcastChanges emitted no slot update");
+        var slotItem = wire1.slots.get(outputIndex);
         helper.assertTrue(appeng.api.stacks.GenericStack.isWrapped(slotItem), "Updated large slot was not wrapped");
         var unwrapped = appeng.api.stacks.GenericStack.unwrapItemStack(slotItem);
-        helper.assertTrue(unwrapped != null && unwrapped.amount() == 5_000_000,
+        helper.assertTrue(unwrapped != null && unwrapped.what().equals(goldKey) && unwrapped.amount() == 5_000_000,
                 "broadcastChanges did not project accurate large amount: " + (unwrapped == null ? 0 : unwrapped.amount()));
+        previousPackets = wire1.slotPackets;
+        menu1.broadcastChanges();
+        helper.assertTrue(wire1.slotPackets == previousPackets, "Unchanged slot generated redundant packets");
 
         menu1.clicked(outputIndex, 0, net.minecraft.world.inventory.ClickType.PICKUP, player);
         helper.assertTrue(menu1.getCarried().getCount() == 64 && menu1.getCarried().is(Items.GOLD_INGOT),
                 "Pickup did not yield 64 gold ingots");
         helper.assertTrue(ports.get(3).read().amount() == 5_000_000 - 64, "Server storage not updated after pickup");
-        menu1.setCarried(net.minecraft.world.item.ItemStack.EMPTY);
+        helper.assertTrue(wire1.carried.getCount() == 64 && goldKey.matches(wire1.carried), "Cursor packet lost quantity or NBT");
+        helper.assertTrue(appeng.api.stacks.GenericStack.unwrapItemStack(wire1.slots.get(outputIndex)).amount() == 5_000_000 - 64,
+                "Pickup did not send the remaining logical amount");
 
         menu1.removed(player);
+        helper.assertTrue(menu1.getCarried().isEmpty() && player.getInventory().countItem(Items.GOLD_INGOT) == 64,
+                "Closing the menu lost or retained the carried stack");
         var menu2 = new appeng.menu.implementations.InscriberMenu(2, player.getInventory(), machine);
+        var wire2 = new MenuPacketProbe();
+        menu2.setSynchronizer(wire2);
         int outputIndex2 = -1;
         for (var slot : menu2.slots) {
             if (slot instanceof moakiee.ae2oc.client.LogicalMenuSlot logical && logical.getSlotIndex() == 3) {
@@ -449,7 +472,8 @@ public final class RefactorGameTests {
             }
         }
         helper.assertTrue(outputIndex2 >= 0, "Managed output slot not projected in menu2");
-        var slotItem2 = menu2.getSlot(outputIndex2).getItem();
+        helper.assertTrue(wire2.initialPackets == 1, "Reopened menu sent no initial packet");
+        var slotItem2 = wire2.slots.get(outputIndex2);
         var unwrapped2 = appeng.api.stacks.GenericStack.unwrapItemStack(slotItem2);
         helper.assertTrue(unwrapped2 != null && unwrapped2.amount() == 5_000_000 - 64,
                 "Reopened menu did not retain accurate large amount");
@@ -457,6 +481,10 @@ public final class RefactorGameTests {
         menu2.clicked(outputIndex2, 0, net.minecraft.world.inventory.ClickType.PICKUP, player);
         helper.assertTrue(menu2.getCarried().getCount() == 64, "Reopened menu pickup failed");
         helper.assertTrue(ports.get(3).read().amount() == 5_000_000 - 128, "Reopened menu second pickup not conserved");
+        menu2.removed(player);
+        helper.assertTrue(menu2.getCarried().isEmpty()
+                && ports.get(3).read().amount() + player.getInventory().countItem(Items.GOLD_INGOT) == 5_000_000,
+                "Reopened menu lifecycle did not conserve machine plus player resources");
         helper.succeed();
     }
 }

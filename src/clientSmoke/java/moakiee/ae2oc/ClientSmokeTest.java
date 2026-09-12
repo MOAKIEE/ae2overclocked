@@ -14,10 +14,6 @@ public final class ClientSmokeTest {
     @SubscribeEvent
     public static void load(FMLLoadCompleteEvent event) {
         event.enqueueWork(() -> {
-            if (ModList.get().isLoaded("advanced_ae")) {
-                var widget = new FluidTankSlot(null, 0, 0, 0, 16, 58, 16);
-                widget.setFluidStack(new net.minecraftforge.fluids.FluidStack(net.minecraft.world.level.material.Fluids.WATER, 16000));
-            }
             RenderCheck.ready = true;
         });
     }
@@ -31,7 +27,25 @@ public final class ClientSmokeTest {
             if (!ready || minecraft.getOverlay() != null) return;
             ready = false;
             var gui = event.getGuiGraphics();
-            gui.fill(8, 8, 240, 120, 0xffdddddd);
+            gui.fill(8, 8, 264, 120, 0xffdddddd);
+            // Standalone widget smoke only: this does not exercise a reaction chamber screen or its capacity card.
+            if (ModList.get().isLoaded("advanced_ae")) {
+                // Upstream maxLevel and tooltip use buckets; FluidStack uses mB.
+                var widget = new FluidTankSlot(null, 0, 208, 24, 16, 58, 16);
+                for (int amount : new int[]{16000, 8000}) {
+                    widget.setFluidStack(new net.minecraftforge.fluids.FluidStack(net.minecraft.world.level.material.Fluids.WATER, amount));
+                    if (widget.getTooltip() == null) throw new IllegalStateException("Fluid widget has no tooltip");
+                    var text = new StringBuilder();
+                    for (var line : widget.getTooltip().toCharSequence(minecraft))
+                        line.accept((index, style, codePoint) -> { text.appendCodePoint(codePoint); return true; });
+                    var numbers = java.util.regex.Pattern.compile("\\d+").matcher(text).results()
+                            .map(java.util.regex.MatchResult::group).toList();
+                    if (!numbers.equals(java.util.List.of(Integer.toString(amount / 1000), "16")))
+                        throw new IllegalStateException("Fluid widget tooltip lost amount: " + text);
+                    widget.render(gui, 0, 0, 0);
+                    widget.setX(232);
+                }
+            }
             var samples = java.util.List.of(
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND),
                     new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.CHEST),
@@ -52,7 +66,7 @@ public final class ClientSmokeTest {
                 gui.renderItem(pack, 24 + i * 64, 56);
             }
 
-            // G3 Client verification: large stack presentation projection wraps and unwrap cleanly
+            // Local presentation smoke; real menu networking is covered separately and still needs a connected client.
             var largeDiamond = appeng.api.stacks.AEItemKey.of(net.minecraft.world.item.Items.DIAMOND);
             var wrappedLarge = appeng.api.stacks.GenericStack.wrapInItemStack(largeDiamond, 1000000);
             var unwrapped = appeng.api.stacks.GenericStack.unwrapItemStack(wrappedLarge);
