@@ -172,6 +172,24 @@ public final class AE2CSGameTests {
         AE2CSEntropyRecipes.recipeMatrix(helper, 0);
     }
 
+    @GameTest(template = "empty", timeoutTicks = 1000)
+    public static void entropyChamberCoolStoneRecipe(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSEntropyRecipes.coolStoneToCobblestone(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 1000)
+    public static void entropyChamberCoolWaterRecipe(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSEntropyRecipes.coolWaterToIce(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 1000)
+    public static void entropyChamberHeatIceRecipe(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSEntropyRecipes.heatIceToWater(helper);
+    }
+
     @GameTest(template = "empty")
     public static void entropyChamberDestructionReturnsOwnedResources(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }

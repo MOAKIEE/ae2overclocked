@@ -69,17 +69,89 @@ final class AE2CSEntropyRecipes {
 
     /** Empties every local output slot; only the recipe's product may ever appear there. */
     private static long drain(GameTestHelper helper, EntropyVariationReactionChamberBlockEntity machine, String label) {
+        return drain(helper, machine, STONE, label);
+    }
+
+    private static long drain(GameTestHelper helper, EntropyVariationReactionChamberBlockEntity machine, AEKey expectedKey, String label) {
         long total = 0;
         var inv = machine.getOutputInv();
         for (int slot = 0; slot < inv.size(); slot++) {
             var value = LocalResourceSlot.generic(inv, slot).read();
             if (value == null) continue;
-            helper.assertTrue(value.key().equals(STONE) && value.amount() > 0, "Wrong entropy output: " + label);
+            helper.assertTrue(value.key().equals(expectedKey) && value.amount() > 0, "Wrong entropy output: " + label);
             long extracted = inv.extract(slot, value.key(), value.amount(), Actionable.MODULATE);
             helper.assertTrue(extracted == value.amount(), "Partial entropy extraction: " + label);
             total += extracted;
         }
         return total;
+    }
+
+    static void coolStoneToCobblestone(GameTestHelper helper) {
+        testSingleRecipe(helper, "ae2:entropy/cool/stone_cobblestone",
+                appeng.recipes.entropy.EntropyMode.COOL,
+                STONE, 1, 32,
+                COBBLESTONE, 1);
+    }
+
+    static void coolWaterToIce(GameTestHelper helper) {
+        testSingleRecipe(helper, "ae2:entropy/cool/water_ice",
+                appeng.recipes.entropy.EntropyMode.COOL,
+                appeng.api.stacks.AEFluidKey.of(net.minecraft.world.level.material.Fluids.WATER), 1000, 8,
+                AEItemKey.of(Blocks.ICE), 1);
+    }
+
+    static void heatIceToWater(GameTestHelper helper) {
+        testSingleRecipe(helper, "ae2:entropy/heat/ice_water",
+                appeng.recipes.entropy.EntropyMode.HEAT,
+                AEItemKey.of(Blocks.ICE), 1, 8,
+                appeng.api.stacks.AEFluidKey.of(net.minecraft.world.level.material.Fluids.WATER), 1000);
+    }
+
+    private static void testSingleRecipe(GameTestHelper helper, String recipeId,
+                                         appeng.recipes.entropy.EntropyMode mode,
+                                         AEKey inputKey, long inputUnitsPerOp, long operations,
+                                         AEKey outputKey, long outputUnitsPerOp) {
+        var pos = new BlockPos(1, 1, 1);
+        var machine = place(helper, pos);
+        helper.runAfterDelay(40, () -> {
+            helper.assertTrue(machine.getMainNode().isActive(), "Entropy chamber grid is inactive");
+            machine.getConfigManager().putSetting(
+                    io.github.lounode.ae2cs.api.settings.AECSSettings.ENTROPY_CHANGE_MODE, mode);
+            machine.getUpgrades().setItemDirect(0, new ItemStack(ModItems.PARALLEL_CARD_64X.get()));
+            machine.getUpgrades().setItemDirect(1, new ItemStack(ModItems.OVERCLOCK_CARD.get()));
+            machine.getUpgrades().setItemDirect(2, new ItemStack(ModItems.CAPACITY_CARD.get()));
+
+            long totalInputUnits = operations * inputUnitsPerOp;
+            long totalOutputUnits = operations * outputUnitsPerOp;
+            LocalResourceSlot.generic(machine.getInputInv(), 0).write(new ResourceAmount<>(inputKey, totalInputUnits));
+            String label = recipeId + " (" + mode + ")";
+
+            long collected = 0;
+            int ticks = 0;
+            while (collected < totalOutputUnits && ticks++ < 60000) {
+                machine.serverTick();
+                collected += drain(helper, machine, outputKey, label);
+                var batch = batch(machine);
+                if (ticks == 1) {
+                    helper.assertTrue(batch != null && batch.recipe().equals(recipeId),
+                            "Custom path did not select recipe: " + label);
+                }
+                long inFlightOps = batch == null || batch.finished() ? 0 : amountOf(batch.inputs(), inputKey) / inputUnitsPerOp;
+                long pendingOps = batch == null || !batch.finished() ? 0 : amountOf(batch.outputs(), outputKey) / outputUnitsPerOp;
+                long inputOpsLeft = inputAmount(machine) / inputUnitsPerOp;
+                long outputOpsCollected = collected / outputUnitsPerOp;
+                long outputOpsInSlots = outputAmount(machine) / outputUnitsPerOp;
+                long accounted = inputOpsLeft + inFlightOps + pendingOps + outputOpsCollected + outputOpsInSlots;
+                helper.assertTrue(accounted == operations,
+                        "Entropy conservation failed: " + label + ", tick=" + ticks + ", accounted=" + accounted);
+            }
+            helper.assertTrue(collected == totalOutputUnits, "Entropy recipe did not complete: " + label);
+            helper.assertTrue(inputAmount(machine) == 0, "Entropy chamber retained input: " + label);
+            helper.assertTrue(outputAmount(machine) == 0, "Entropy chamber retained output: " + label);
+            helper.assertTrue(!machine.saveWithFullMetadata().contains("ae2ocProcessing"),
+                    "Entropy chamber retained a completed batch: " + label);
+            helper.succeed();
+        });
     }
 
     /**
