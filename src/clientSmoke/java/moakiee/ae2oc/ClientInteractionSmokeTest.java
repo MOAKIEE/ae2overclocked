@@ -77,7 +77,14 @@ public final class ClientInteractionSmokeTest {
         WAIT_EXT_INSCRIBER_CLICK,
         WAIT_CLOSE_FOR_REACTION_CHAMBER,
         WAIT_REACTION_CHAMBER_MENU,
+        WAIT_CLOSE_FOR_CUTTER,
+        WAIT_CUTTER_MENU,
         WAIT_WORLD_RENDER,
+        DISCONNECT_WORLD,
+        WAIT_TITLE_SCREEN,
+        RECONNECT_WORLD,
+        WAIT_RECONNECTED_PLAYER,
+        WAIT_RECONNECTED_MENU,
         DONE
     }
 
@@ -101,7 +108,13 @@ public final class ClientInteractionSmokeTest {
     private static boolean extInscriberClickSent;
     private static boolean reactionChamberSetupScheduled;
     private static boolean reactionChamberScreenshotArmed;
+    private static boolean cutterSetupScheduled;
+    private static boolean cutterScreenshotArmed;
     private static int worldRenderTicks;
+    private static int disconnectTicks;
+    private static int reconnectedWarmupTicks;
+    private static boolean reconnectedOpenScheduled;
+    private static boolean reconnectedScreenshotArmed;
     private static String lastScreenClass;
     private static int lastClientMenuId = Integer.MIN_VALUE;
     private static volatile Throwable failure;
@@ -144,7 +157,14 @@ public final class ClientInteractionSmokeTest {
                 case WAIT_EXT_INSCRIBER_CLICK -> awaitExtInscriberClick(minecraft);
                 case WAIT_CLOSE_FOR_REACTION_CHAMBER -> awaitCloseForReactionChamber(minecraft);
                 case WAIT_REACTION_CHAMBER_MENU -> awaitReactionChamberMenu(minecraft);
+                case WAIT_CLOSE_FOR_CUTTER -> awaitCloseForCutter(minecraft);
+                case WAIT_CUTTER_MENU -> awaitCutterMenu(minecraft);
                 case WAIT_WORLD_RENDER -> awaitWorldRender(minecraft);
+                case DISCONNECT_WORLD -> disconnectWorld(minecraft);
+                case WAIT_TITLE_SCREEN -> awaitTitleScreen(minecraft);
+                case RECONNECT_WORLD -> reconnectWorld(minecraft);
+                case WAIT_RECONNECTED_PLAYER -> awaitReconnectedPlayer(minecraft);
+                case WAIT_RECONNECTED_MENU -> awaitReconnectedMenu(minecraft);
                 case DONE -> { return; }
             }
             if (phase != Phase.LOAD_WORLD && phase != Phase.DONE) {
@@ -195,9 +215,9 @@ public final class ClientInteractionSmokeTest {
                 if (player == null) throw new IllegalStateException("Integrated server did not create the test player");
                 var level = player.serverLevel();
                 machinePos = player.blockPosition().offset(MACHINE_OFFSET.getX(), MACHINE_OFFSET.getY(), MACHINE_OFFSET.getZ());
-                for (int dx = -3; dx <= 3; dx++) {
+                for (int dx = -4; dx <= 4; dx++) {
                     for (int dy = -1; dy <= 2; dy++) {
-                        for (int dz = 0; dz <= 3; dz++) {
+                        for (int dz = -1; dz <= 4; dz++) {
                             var p = player.blockPosition().offset(dx, dy, dz);
                             if (dy == -1) {
                                 level.setBlock(p, net.minecraft.world.level.block.Blocks.SMOOTH_STONE.defaultBlockState(), 3);
@@ -222,6 +242,8 @@ public final class ClientInteractionSmokeTest {
                 if (ModList.get().isLoaded("expatternprovider")) {
                     ExtendedInscriberHelper.setup(level, machinePos.offset(2, 0, 0));
                     LOGGER.info("Client interaction smoke: server prepared ExtendedInscriber host at {}", machinePos.offset(2, 0, 0));
+                    CutterHelper.setup(level, machinePos.offset(0, 0, 2));
+                    LOGGER.info("Client interaction smoke: server prepared CircuitCutter host at {}", machinePos.offset(0, 0, 2));
                 }
                 if (ModList.get().isLoaded("advanced_ae")) {
                     ReactionChamberHelper.setup(level, machinePos.offset(-2, 0, 0));
@@ -245,7 +267,8 @@ public final class ClientInteractionSmokeTest {
             return;
         }
         if (ModList.get().isLoaded("expatternprovider")
-                && minecraft.level.getBlockEntity(machinePos.offset(2, 0, 0)) == null) {
+                && (minecraft.level.getBlockEntity(machinePos.offset(2, 0, 0)) == null
+                || minecraft.level.getBlockEntity(machinePos.offset(0, 0, 2)) == null)) {
             return;
         }
         if (ModList.get().isLoaded("advanced_ae")
@@ -557,6 +580,52 @@ public final class ClientInteractionSmokeTest {
         takeScreenshot("client-reaction-chamber-menu.png", minecraft);
         LOGGER.info("Client interaction smoke: ReactionChamber fluid capacity card tooltip passed, closing container");
         minecraft.player.closeContainer();
+        phase = Phase.WAIT_CLOSE_FOR_CUTTER;
+        waited = 0;
+    }
+
+    private static void awaitCloseForCutter(Minecraft minecraft) {
+        if (minecraft.screen instanceof AbstractContainerScreen<?>) return;
+        if (!ModList.get().isLoaded("expatternprovider")) {
+            LOGGER.info("Client interaction smoke: skipping Cutter (mod absent)");
+            phase = Phase.WAIT_WORLD_RENDER;
+            waited = 0;
+            return;
+        }
+        if (cutterSetupScheduled) return;
+        cutterSetupScheduled = true;
+        var server = minecraft.getSingleplayerServer();
+        if (server == null || machinePos == null) fail("Integrated server disappeared before Cutter setup");
+        server.execute(() -> {
+            try {
+                var player = server.getPlayerList().getPlayer(minecraft.player.getUUID());
+                var cutterPos = machinePos.offset(0, 0, 2);
+                CutterHelper.open(player, cutterPos);
+                LOGGER.info("Client interaction smoke: server opened ContainerCircuitCutter at {}", cutterPos);
+            } catch (Throwable throwable) {
+                LOGGER.error("Client interaction smoke: Cutter open failed", throwable);
+                failure = throwable;
+            }
+        });
+        phase = Phase.WAIT_CUTTER_MENU;
+        waited = 0;
+    }
+
+    private static void awaitCutterMenu(Minecraft minecraft) {
+        if (!CutterHelper.isCutterScreen(minecraft.screen)) {
+            if (waited % 20 == 0) {
+                LOGGER.info("Client interaction smoke: waiting for GuiCircuitCutter, current screen={}",
+                        minecraft.screen == null ? "<none>" : minecraft.screen.getClass().getName());
+            }
+            return;
+        }
+        if (!cutterScreenshotArmed) {
+            cutterScreenshotArmed = true;
+            return;
+        }
+        takeScreenshot("client-cutter-menu.png", minecraft);
+        LOGGER.info("Client interaction smoke: Circuit Cutter menu passed, closing container");
+        minecraft.player.closeContainer();
         phase = Phase.WAIT_WORLD_RENDER;
         waited = 0;
     }
@@ -565,11 +634,94 @@ public final class ClientInteractionSmokeTest {
         if (minecraft.screen != null) return;
         if (machinePos != null && minecraft.player != null) {
             minecraft.player.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,
-                    net.minecraft.world.phys.Vec3.atCenterOf(machinePos));
+                    net.minecraft.world.phys.Vec3.atCenterOf(machinePos.offset(0, 0, 1)));
         }
-        if (worldRenderTicks++ < 10) return;
+        if (worldRenderTicks++ < 15) return;
         takeScreenshot("client-machine-world-render.png", minecraft);
-        LOGGER.info("Client interaction smoke passed: inscriber loopback, extended inscriber 4-lane menu, reaction chamber fluid tooltip and in-world render");
+        LOGGER.info("Client interaction smoke: world 3D render screenshot captured, proceeding to disconnect phase");
+        phase = Phase.DISCONNECT_WORLD;
+        waited = 0;
+    }
+
+    private static void disconnectWorld(Minecraft minecraft) {
+        if (disconnectTicks++ < 10) return;
+        LOGGER.info("Client interaction smoke: disconnecting client from world...");
+        if (minecraft.level != null) {
+            minecraft.level.disconnect();
+        }
+        minecraft.clearLevel(new net.minecraft.client.gui.screens.GenericDirtMessageScreen(
+                net.minecraft.network.chat.Component.translatable("menu.savingLevel")));
+        minecraft.setScreen(new TitleScreen());
+        LOGGER.info("Client interaction smoke: client disconnected, at TitleScreen; reconnecting to {}", WORLD_NAME);
+        phase = Phase.RECONNECT_WORLD;
+        waited = 0;
+    }
+
+    private static void awaitTitleScreen(Minecraft minecraft) {
+        phase = Phase.RECONNECT_WORLD;
+        waited = 0;
+    }
+
+    private static void reconnectWorld(Minecraft minecraft) {
+        minecraft.createWorldOpenFlows().loadLevel(new TitleScreen(), WORLD_NAME);
+        phase = Phase.WAIT_RECONNECTED_PLAYER;
+        waited = 0;
+    }
+
+    private static void awaitReconnectedPlayer(Minecraft minecraft) {
+        if (minecraft.level == null || minecraft.player == null || minecraft.getSingleplayerServer() == null) return;
+        if (minecraft.screen != null) {
+            reconnectedWarmupTicks = 0;
+            return;
+        }
+        if (reconnectedWarmupTicks++ < 20) return;
+        if (reconnectedOpenScheduled) return;
+        reconnectedOpenScheduled = true;
+        var server = minecraft.getSingleplayerServer();
+        server.execute(() -> {
+            try {
+                var player = server.getPlayerList().getPlayer(minecraft.player.getUUID());
+                if (player == null) throw new IllegalStateException("Reconnected player disappeared");
+                var machine = (appeng.blockentity.misc.InscriberBlockEntity) server.overworld().getBlockEntity(machinePos);
+                if (machine == null) throw new IllegalStateException("Inscriber disappeared after reconnect");
+                openMenu(player, machine);
+                LOGGER.info("Client interaction smoke: server reopened InscriberMenu after reconnect");
+            } catch (Throwable throwable) {
+                LOGGER.error("Client interaction smoke: reopen after reconnect failed", throwable);
+                failure = throwable;
+            }
+        });
+        phase = Phase.WAIT_RECONNECTED_MENU;
+        waited = 0;
+    }
+
+    private static void awaitReconnectedMenu(Minecraft minecraft) {
+        var menu = clientMenu(minecraft);
+        if (menu == null || identity == null) return;
+        var output = logicalOutput(menu);
+        var item = output.getItem();
+        if (!matchesIdentity(item, identity)) return;
+        long amount = getAmount(item);
+        if (amount != 1) {
+            if (waited % 20 == 0) {
+                LOGGER.info("Client interaction smoke: waiting for reconnected inscriber slot=1, got={}", amount);
+            }
+            return;
+        }
+        int inventoryCount = countMatching(minecraft.player.getInventory(), identity);
+        if (inventoryCount != 64) {
+            if (waited % 20 == 0) {
+                LOGGER.info("Client interaction smoke: waiting for reconnected player inventory=64, got={}", inventoryCount);
+            }
+            return;
+        }
+        if (!(minecraft.screen instanceof AbstractContainerScreen<?>)) return;
+        if (!reconnectedScreenshotArmed) {
+            reconnectedScreenshotArmed = true;
+            return;
+        }
+        takeScreenshot("client-menu-reconnected.png", minecraft);
+        LOGGER.info("Client interaction smoke passed: inscriber loopback, extended inscriber 4-lane menu, reaction chamber fluid tooltip, circuit cutter menu and 3D floating render, and disconnect/reconnect ledger conservation (slot=1, inv=64)");
         phase = Phase.DONE;
         minecraft.stop();
     }
@@ -611,6 +763,11 @@ public final class ClientInteractionSmokeTest {
 
     private static GenericStack unwrap(ItemStack stack) {
         return GenericStack.isWrapped(stack) ? GenericStack.unwrapItemStack(stack) : null;
+    }
+
+    private static long getAmount(ItemStack stack) {
+        var value = unwrap(stack);
+        return value == null ? (stack.isEmpty() ? 0 : stack.getCount()) : value.amount();
     }
 
     private static boolean matchesIdentity(ItemStack stack, AEItemKey key) {
@@ -752,6 +909,45 @@ public final class ClientInteractionSmokeTest {
             }
             String str = text.toString();
             return str.contains("32000") && str.contains(String.valueOf(Integer.MAX_VALUE));
+        }
+    }
+
+    private static final class CutterHelper {
+        private CutterHelper() {}
+
+        static void setup(ServerLevel level, BlockPos pos) {
+            var block = ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "circuit_cutter"));
+            if (block == null) throw new IllegalStateException("Missing circuit_cutter block");
+            level.setBlock(pos, block.defaultBlockState(), 3);
+            var machine = (com.glodblock.github.extendedae.common.tileentities.TileCircuitCutter) level.getBlockEntity(pos);
+            if (machine == null) throw new IllegalStateException("Missing TileCircuitCutter entity");
+            machine.getUpgrades().setItemDirect(0, new ItemStack(moakiee.ModItems.CAPACITY_CARD.get()));
+            machine.getTank().setStack(0, new GenericStack(appeng.api.stacks.AEFluidKey.of(net.minecraft.world.level.material.Fluids.WATER), 32000L));
+            var state = new moakiee.ae2oc.core.execution.ProcessingState<appeng.api.stacks.AEKey>(
+                    "expatternprovider:cutter/logic",
+                    List.of(new ResourceAmount<>(AEItemKey.of(net.minecraft.world.item.Items.GOLD_BLOCK), 1)),
+                    List.of(new ResourceAmount<>(AEItemKey.of(appeng.core.definitions.AEItems.LOGIC_PROCESSOR_PRINT.asItem()), 9)),
+                    100, 25, 3);
+            var tag = machine.saveWithFullMetadata();
+            tag.put("ae2ocProcessing", moakiee.ae2oc.compat.ae2.ProcessingCodec.write(state));
+            machine.load(tag);
+            machine.setProgress(com.glodblock.github.extendedae.common.tileentities.TileCircuitCutter.MAX_PROGRESS / 2);
+            machine.setWorking(true);
+            machine.markForUpdate();
+        }
+
+        static void open(ServerPlayer player, BlockPos pos) {
+            var machine = (com.glodblock.github.extendedae.common.tileentities.TileCircuitCutter) player.serverLevel().getBlockEntity(pos);
+            if (machine == null) throw new IllegalStateException("Missing TileCircuitCutter entity at " + pos);
+            var block = (com.glodblock.github.extendedae.common.blocks.BlockCircuitCutter) machine.getBlockState().getBlock();
+            block.openGui(machine, player);
+            if (player.containerMenu == player.inventoryMenu) {
+                throw new IllegalStateException("MenuOpener rejected ContainerCircuitCutter");
+            }
+        }
+
+        static boolean isCutterScreen(Object screen) {
+            return screen != null && screen.getClass().getName().equals("com.glodblock.github.extendedae.client.gui.GuiCircuitCutter");
         }
     }
 }
