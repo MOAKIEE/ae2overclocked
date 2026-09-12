@@ -86,6 +86,18 @@ public final class ManagedItemStorages {
                     if (!item.isEmpty()) restored.put(i, readLegacyItem(item));
                 }
                 restored.forEach((slot, value) -> ports.get(slot).write(value));
+            } else if (tag.contains("inv", Tag.TAG_LIST)) {
+                var list = tag.getList("inv", Tag.TAG_COMPOUND);
+                var ports = slots(inventory);
+                var restored = new java.util.HashMap<Integer, moakiee.ae2oc.api.ResourceAmount<appeng.api.stacks.AEKey>>();
+                for (int i = 0; i < list.size(); i++) {
+                    var entry = list.getCompound(i);
+                    int slot = entry.contains("Slot") ? entry.getInt("Slot") : i;
+                    if (slot >= 0 && slot < ports.size()) {
+                        restored.put(slot, readLegacyItem(entry));
+                    }
+                }
+                restored.forEach((slot, value) -> ports.get(slot).write(value));
             }
             return;
         }
