@@ -56,6 +56,17 @@ public final class InscriberGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 1200)
+    public static void inscriberStallsWithoutGridThenResumesNaturally(GameTestHelper helper) {
+        GridMachineScheduling.ae2Inscriber(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 1200)
+    public static void extendedInscriberStallsWithoutGridThenResumesNaturally(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        GridMachineScheduling.extendedInscriber(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 1200)
     public static void extendedInscriberRecipeMatrix(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
         ExtendedInscriberRecipes.run(helper, 0);

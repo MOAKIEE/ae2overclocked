@@ -230,6 +230,7 @@ def devOnlyClasses = [
         'AE2CSEntropyRecipes',
         'InscriberGameTests',
         'ExtendedInscriberRecipes',
+        'GridMachineScheduling',
         'CutterGameTests',
         'ExtendedCutterRecipes',
         'ReactionChamberGameTests',
