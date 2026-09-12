@@ -114,6 +114,49 @@ final class AE2CSPulverizerRecipes {
         });
     }
 
+    static void certusQuartzRecipe(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        var machine = place(helper, pos);
+        helper.runAfterDelay(40, () -> {
+            helper.assertTrue(machine.getMainNode().isActive(), "Pulverizer grid is inactive");
+            machine.getUpgrades().setItemDirect(0, new ItemStack(ModItems.PARALLEL_CARD_64X.get()));
+            machine.getUpgrades().setItemDirect(1, new ItemStack(ModItems.OVERCLOCK_CARD.get()));
+            machine.getUpgrades().setItemDirect(2, new ItemStack(ModItems.CAPACITY_CARD.get()));
+
+            var certusCrystal = AEItemKey.of(appeng.core.definitions.AEItems.CERTUS_QUARTZ_CRYSTAL);
+            var certusDust = AEItemKey.of(appeng.core.definitions.AEItems.CERTUS_QUARTZ_DUST);
+            long operations = 32;
+            inputSlot(machine).write(new ResourceAmount<>(certusCrystal, operations));
+            String label = "ae2cs:pulverizer/certus_quartz_dust";
+
+            long collected = 0;
+            int ticks = 0;
+            while (collected < operations && ticks++ < 40000) {
+                machine.serverTick();
+                var output = machine.getOutputInv().extractItem(0, 64, false);
+                helper.assertTrue(output.isEmpty() || certusDust.matches(output) && output.getCount() <= output.getMaxStackSize(),
+                        "Wrong or oversized pulverizer output: " + label);
+                collected += output.getCount();
+                var batch = batch(machine);
+                if (ticks == 1) {
+                    helper.assertTrue(batch != null && batch.recipe().equals(label),
+                            "Custom path did not select recipe: " + label);
+                }
+                long inFlight = batch == null || batch.finished() ? 0 : amountOf(batch.inputs(), certusCrystal);
+                long pending = batch == null || !batch.finished() ? 0 : amountOf(batch.outputs(), certusDust);
+                long consumed = collected + amount(outputSlot(machine)) + pending + inFlight;
+                helper.assertTrue(amount(inputSlot(machine)) + consumed == operations,
+                        "Pulverizer conservation failed: " + label + ", tick=" + ticks);
+            }
+            helper.assertTrue(collected == operations, "Pulverizer recipe did not complete: " + label);
+            helper.assertTrue(amount(inputSlot(machine)) == 0 && amount(outputSlot(machine)) == 0,
+                    "Pulverizer retained inputs or output: " + label);
+            helper.assertTrue(!machine.saveWithFullMetadata().contains("ae2ocProcessing"),
+                    "Pulverizer retained a completed batch: " + label);
+            helper.succeed();
+        });
+    }
+
     /**
      * Destruction packaging: the visible projection, the logical overflow, the reserved inputs of an
      * unfinished batch and the products of a finished one must leave the machine as bounded containers

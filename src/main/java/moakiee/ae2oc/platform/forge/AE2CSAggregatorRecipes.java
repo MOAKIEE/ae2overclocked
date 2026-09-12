@@ -134,6 +134,63 @@ final class AE2CSAggregatorRecipes {
         });
     }
 
+    static void fluixCrystalRecipe(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        var machine = place(helper, pos);
+        helper.runAfterDelay(40, () -> {
+            helper.assertTrue(machine.getMainNode().isActive(), "Aggregator grid is inactive");
+            machine.getUpgrades().setItemDirect(0, new ItemStack(ModItems.PARALLEL_CARD_64X.get()));
+            machine.getUpgrades().setItemDirect(1, new ItemStack(ModItems.OVERCLOCK_CARD.get()));
+            machine.getUpgrades().setItemDirect(2, new ItemStack(ModItems.CAPACITY_CARD.get()));
+
+            var certusCrystal = item("ae2:certus_quartz_crystal");
+            var redstone = AEItemKey.of(Items.REDSTONE);
+            var netherQuartz = AEItemKey.of(Items.QUARTZ);
+            var fluixCrystal = item("ae2:fluix_crystal");
+            AEItemKey[] inputs = {certusCrystal, redstone, netherQuartz};
+
+            long operations = 2; // 2 cycles of 8:8:8 -> 32 = 16:16:16 -> 64
+            long inPerOp = 8;
+            long outPerOp = 32;
+            for (int slot = 0; slot < inputs.length; slot++) {
+                inputSlot(machine, slot).write(new ResourceAmount<>(inputs[slot], operations * inPerOp));
+            }
+            long totalExpected = operations * outPerOp;
+            String label = "ae2cs:aggregator/fluix_crystal";
+
+            long collected = 0;
+            int ticks = 0;
+            while (collected < totalExpected && ticks++ < 60000) {
+                machine.serverTick();
+                var output = machine.getOutputInv().extractItem(0, 64, false);
+                helper.assertTrue(output.isEmpty() || fluixCrystal.matches(output) && output.getCount() <= output.getMaxStackSize(),
+                        "Wrong or oversized aggregator output: " + label);
+                collected += output.getCount();
+                var batch = batch(machine);
+                if (ticks == 1) {
+                    helper.assertTrue(batch != null && batch.recipe().equals(label),
+                            "Custom path did not select recipe: " + label);
+                }
+                long pending = batch == null || !batch.finished() ? 0 : amountOf(batch.outputs(), fluixCrystal);
+                long producedUnits = collected + amount(outputSlot(machine)) + pending;
+                for (int slot = 0; slot < inputs.length; slot++) {
+                    long reserved = batch == null || batch.finished() ? 0 : amountOf(batch.inputs(), inputs[slot]);
+                    long consumed = operations * inPerOp - amount(inputSlot(machine, slot)) - reserved;
+                    helper.assertTrue(consumed * outPerOp == producedUnits * inPerOp,
+                            "Aggregator conservation failed for slot " + slot + ": " + label);
+                }
+            }
+            helper.assertTrue(collected == totalExpected, "Aggregator recipe did not complete: " + label);
+            for (int slot = 0; slot < inputs.length; slot++) {
+                helper.assertTrue(amount(inputSlot(machine, slot)) == 0, "Aggregator retained input in slot " + slot);
+            }
+            helper.assertTrue(amount(outputSlot(machine)) == 0, "Aggregator retained output: " + label);
+            helper.assertTrue(!machine.saveWithFullMetadata().contains("ae2ocProcessing"),
+                    "Aggregator retained a completed batch: " + label);
+            helper.succeed();
+        });
+    }
+
     /**
      * Destruction packaging: the visible projection, the logical overflow, the reserved inputs of an
      * unfinished batch and the products of a finished one must leave the machine as bounded containers

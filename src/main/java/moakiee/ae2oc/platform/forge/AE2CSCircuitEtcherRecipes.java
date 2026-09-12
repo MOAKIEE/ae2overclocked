@@ -138,6 +138,63 @@ final class AE2CSCircuitEtcherRecipes {
         });
     }
 
+    static void calculationProcessorRecipe(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        var machine = place(helper, pos);
+        helper.runAfterDelay(40, () -> {
+            helper.assertTrue(machine.getMainNode().isActive(), "Circuit etcher grid is inactive");
+            machine.getUpgrades().setItemDirect(0, new ItemStack(ModItems.PARALLEL_CARD_64X.get()));
+            machine.getUpgrades().setItemDirect(1, new ItemStack(ModItems.OVERCLOCK_CARD.get()));
+            machine.getUpgrades().setItemDirect(2, new ItemStack(ModItems.CAPACITY_CARD.get()));
+
+            var quartzBlock = AEItemKey.of(appeng.core.definitions.AEBlocks.QUARTZ_BLOCK);
+            var redstoneBlock = AEItemKey.of(Blocks.REDSTONE_BLOCK);
+            var siliconBlock = item("ae2cs:silicon_block");
+            var calcProcessor = item("ae2:calculation_processor");
+            AEItemKey[] inputs = {quartzBlock, redstoneBlock, siliconBlock};
+            long[] inPerOp = {9, 4, 4};
+            long outPerOp = 36;
+            long operations = 2; // 2 cycles
+
+            for (int slot = 0; slot < inputs.length; slot++) {
+                inputSlot(machine, slot).write(new ResourceAmount<>(inputs[slot], operations * inPerOp[slot]));
+            }
+            long totalExpected = operations * outPerOp;
+            String label = "ae2cs:circuit_etcher/calculation_processor";
+
+            long collected = 0;
+            int ticks = 0;
+            while (collected < totalExpected && ticks++ < 60000) {
+                machine.serverTick();
+                var output = machine.getOutputInv().extractItem(0, 64, false);
+                helper.assertTrue(output.isEmpty() || calcProcessor.matches(output) && output.getCount() <= output.getMaxStackSize(),
+                        "Wrong or oversized etcher output: " + label);
+                collected += output.getCount();
+                var batch = batch(machine);
+                if (ticks == 1) {
+                    helper.assertTrue(batch != null && batch.recipe().equals(label),
+                            "Custom path did not select recipe: " + label);
+                }
+                long pending = batch == null || !batch.finished() ? 0 : amountOf(batch.outputs(), calcProcessor);
+                long producedUnits = collected + amount(outputSlot(machine)) + pending;
+                for (int slot = 0; slot < inputs.length; slot++) {
+                    long reserved = batch == null || batch.finished() ? 0 : amountOf(batch.inputs(), inputs[slot]);
+                    long consumed = operations * inPerOp[slot] - amount(inputSlot(machine, slot)) - reserved;
+                    helper.assertTrue(consumed * outPerOp == producedUnits * inPerOp[slot],
+                            "Circuit etcher conservation failed for slot " + slot + ": " + label);
+                }
+            }
+            helper.assertTrue(collected == totalExpected, "Circuit etcher recipe did not complete: " + label);
+            for (int slot = 0; slot < inputs.length; slot++) {
+                helper.assertTrue(amount(inputSlot(machine, slot)) == 0, "Etcher retained input in slot " + slot);
+            }
+            helper.assertTrue(amount(outputSlot(machine)) == 0, "Etcher retained output: " + label);
+            helper.assertTrue(!machine.saveWithFullMetadata().contains("ae2ocProcessing"),
+                    "Etcher retained a completed batch: " + label);
+            helper.succeed();
+        });
+    }
+
     /**
      * Destruction packaging: the visible projection, the logical overflow, the reserved inputs of an
      * unfinished batch and the products of a finished one must leave the machine as bounded containers
