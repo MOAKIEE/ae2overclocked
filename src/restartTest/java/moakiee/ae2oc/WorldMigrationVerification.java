@@ -117,7 +117,11 @@ public final class WorldMigrationVerification {
                     var beA = (InscriberBlockEntity) event.getServer().overworld().getBlockEntity(POS_INSCRIBER_A);
                     var slotsA = ManagedItemStorages.slots(beA.getInternalInventory());
                     long printedSiliconProduced = slotsA.get(3).read() == null ? 0 : slotsA.get(3).read().amount();
-                    if (printedSiliconProduced > 0 || ticks >= 100) {
+                    boolean pulverizerProduced = !hasBlock("ae2cs:crystal_pulverizer")
+                            || slotResourceAmount(ManagedItemStorages.slots(((CrystalPulverizerBlockEntity) event
+                                    .getServer().overworld().getBlockEntity(POS_PULVERIZER)).getOutputInv()),
+                                    AEItemKey.of(Items.GUNPOWDER)) > 0;
+                    if (printedSiliconProduced > 0 && pulverizerProduced || ticks >= 100) {
                         assertProcessingSuccess(event.getServer().overworld());
                         finish(event.getServer());
                     }

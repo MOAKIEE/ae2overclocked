@@ -24,7 +24,8 @@ public record MigrationInspection(int logicalInventories, int processingBatches,
             Tag value = tag.get(key);
             if (key.equals("ae2ocLongSlots") && value instanceof ListTag) counts[0]++;
             if (key.equals("ae2ocProcessing") && value instanceof CompoundTag) counts[1]++;
-            if (key.equals("ae2ocCount") || key.equals("ae2ocNetCount") || key.equals("ae2ocAmount")) counts[2]++;
+            if (key.equals("ae2ocCount") || key.equals("ae2ocNetCount")
+                    || key.equals("ae2ocAmount") && !tag.contains("ae2ocDataVersion")) counts[2]++;
             if (key.equals("dataVersion") || key.equals("ae2ocDataVersion")) {
                 int version = tag.getInt(key);
                 if (version == 1) counts[3]++;
