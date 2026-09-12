@@ -24,6 +24,7 @@ public final class ClientSmokeTest {
         @SubscribeEvent
         public static void render(net.minecraftforge.client.event.ScreenEvent.Render.Post event) {
             var minecraft = Minecraft.getInstance();
+            if (Boolean.getBoolean("ae2oc.clientInteractionSmoke")) return;
             if (!ready || minecraft.getOverlay() != null) return;
             ready = false;
             var gui = event.getGuiGraphics();

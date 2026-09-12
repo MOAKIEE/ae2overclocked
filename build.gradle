@@ -119,7 +119,10 @@ minecraft {
         client {
             // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
             property 'forge.enabledGameTestNamespaces', mod_id
-            if (project.hasProperty('clientSmoke')) {
+            if (project.hasProperty('clientInteractionSmoke')) {
+                property 'ae2oc.clientInteractionSmoke', 'true'
+            }
+            if (project.hasProperty('clientSmoke') || project.hasProperty('clientInteractionSmoke')) {
                 mods { "${mod_id}" { source sourceSets.clientSmoke } }
             }
         }
@@ -381,7 +384,7 @@ tasks.register('verifyReleaseContents') {
     }
 }
 tasks.named('check') { dependsOn 'coreContractTest', 'verifyArchitecture', 'verifyMixinTargets', 'verifyReleaseContents', 'restartTestClasses' }
-if (project.hasProperty('clientSmoke')) {
+if (project.hasProperty('clientSmoke') || project.hasProperty('clientInteractionSmoke')) {
     tasks.matching { it.name == 'runClient' }.configureEach { dependsOn 'clientSmokeClasses' }
 }
 if (project.hasProperty('restartPhase')) {
