@@ -180,6 +180,49 @@ final class AE2CSNaturalScheduling {
         observe(helper, fixture, initialEnergy, 0, 0, true);
     }
 
+    /** Mixed ownership at the real block removal boundary, including a persisted finished batch. */
+    static void completedDestruction(GameTestHelper helper, String machineId) {
+        var pos = new BlockPos(1, 1, 1);
+        var fixture = fixture(helper, machineId, pos);
+        for (int slot = 0; slot < fixture.keys().size(); slot++) {
+            fixture.inputs().get(slot).write(new ResourceAmount<AEKey>(fixture.keys().get(slot), 3));
+        }
+        InternalInventory output;
+        AEItemKey outputKey;
+        if (fixture.host() instanceof CrystalPulverizerBlockEntity machine) {
+            output = machine.getOutputInv();
+            outputKey = item("minecraft:gunpowder");
+        } else if (fixture.host() instanceof CrystalAggregatorBlockEntity machine) {
+            output = machine.getOutputInv();
+            outputKey = item("ae2:logic_processor");
+        } else {
+            output = ((CircuitEtcherBlockEntity) fixture.host()).getOutputInv();
+            outputKey = item("ae2:logic_processor");
+        }
+        ManagedItemStorages.slots(output).get(0).write(new ResourceAmount<AEKey>(outputKey, 130));
+        var saved = fixture.host().saveWithFullMetadata();
+        saved.put("ae2ocProcessing", ProcessingCodec.write(new moakiee.ae2oc.core.execution.ProcessingState<AEKey>(
+                fixture.recipe(), List.of(), List.of(new ResourceAmount<>(outputKey, 45)), 100, 100, 0)));
+        fixture.host().load(saved);
+        helper.assertTrue(helper.getLevel().destroyBlock(helper.absolutePos(pos), true, helper.makeMockPlayer()),
+                "Completed machine destruction failed");
+        helper.assertTrue(helper.getLevel().getBlockEntity(helper.absolutePos(pos)) == null, "Destroyed machine remains");
+        helper.runAfterDelay(2, () -> {
+            var entities = helper.getEntities(net.minecraft.world.entity.EntityType.ITEM, pos, 3);
+            for (var key : fixture.keys()) {
+                helper.assertTrue(entityAmount(entities, key) == 3,
+                        "Real destruction lost or duplicated visible input: " + key);
+            }
+            helper.assertTrue(entityAmount(entities, outputKey) == 175,
+                    "Real destruction lost or duplicated overflow/finished output: " + entityAmount(entities, outputKey));
+            for (var entity : entities) {
+                var stack = entity.getItem();
+                helper.assertTrue(stack.getCount() <= stack.getMaxStackSize(), "Oversized item entity after destruction");
+            }
+            helper.succeed();
+        });
+    }
+
     private static long entityAmount(List<net.minecraft.world.entity.item.ItemEntity> entities, AEKey key) {
         long total = 0;
         for (var entity : entities) {

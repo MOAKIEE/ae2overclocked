@@ -10,6 +10,22 @@ import net.minecraftforge.gametest.PrefixGameTestTemplate;
 @GameTestHolder(Ae2Overclocked.MODID)
 @PrefixGameTestTemplate(false)
 public final class AE2CSGameTests {
+    @GameTest(template = "empty")
+    public static void pulverizerRealBreakPreservesVisibleAndCompletedResources(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.completedDestruction(helper, "crystal_pulverizer");
+    }
+    @GameTest(template = "empty")
+    public static void aggregatorRealBreakPreservesVisibleAndCompletedResources(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.completedDestruction(helper, "crystal_aggregator");
+    }
+    @GameTest(template = "empty")
+    public static void circuitEtcherRealBreakPreservesVisibleAndCompletedResources(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.completedDestruction(helper, "circuit_etcher");
+    }
+
     @GameTest(template = "empty", timeoutTicks = 600)
     public static void pulverizerReloadAndCardRemovalPreserveBatch(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
