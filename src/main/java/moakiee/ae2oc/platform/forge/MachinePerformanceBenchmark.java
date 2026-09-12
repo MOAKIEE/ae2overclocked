@@ -103,6 +103,9 @@ public final class MachinePerformanceBenchmark {
 
     private static long scenarioStartNano = 0;
     private static long currentTickStartNano = 0;
+    /** World time captured at priming. The END phase that primes a scenario runs after that tick's machines,
+     *  so the first observation is already one world tick later; a zero-based tick index would under-count. */
+    private static long primeGameTime = 0;
     private static int firstBatchLatencyTicks = -1;
     private static double firstBatchLatencyMs = -1.0;
     private static long totalProducedItems = 0;
@@ -214,6 +217,7 @@ public final class MachinePerformanceBenchmark {
                     state = State.MEASURE;
                     measureTickIndex = 0;
                     scenarioStartNano = System.nanoTime();
+                    primeGameTime = level.getGameTime();
                     firstBatchLatencyTicks = -1;
                     firstBatchLatencyMs = -1.0;
                     totalProducedItems = 0;
@@ -239,7 +243,9 @@ public final class MachinePerformanceBenchmark {
                             ResourceAmount<AEKey> out = outSlot.read();
                             if (out != null && out.amount() > 0 && out.key().equals(AEItemKey.of(AEItems.LOGIC_PROCESSOR_PRINT.asItem()))) {
                                 if (firstBatchLatencyTicks < 0) {
-                                    firstBatchLatencyTicks = measureTickIndex;
+                                    // Report elapsed world ticks from priming, not the sampling index: the index
+                                    // is still zero on the first END phase after the machines already ran once.
+                                    firstBatchLatencyTicks = (int) Math.max(0, level.getGameTime() - primeGameTime);
                                     firstBatchLatencyMs = (System.nanoTime() - scenarioStartNano) / 1_000_000.0;
                                 }
                                 totalProducedItems += out.amount();
