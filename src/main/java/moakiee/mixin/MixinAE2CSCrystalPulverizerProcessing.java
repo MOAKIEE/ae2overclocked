@@ -5,6 +5,7 @@ import io.github.lounode.ae2cs.common.init.AECSRecipeTypes;
 import io.github.lounode.ae2cs.common.recipe.input.SingleItemStackRecipeInput;
 import moakiee.ae2oc.compat.ae2.MachineProcessorAdapter;
 import moakiee.ae2oc.compat.ae2cs.ItemRecipes;
+import moakiee.ae2oc.compat.ae2cs.PulverizerAdapter;
 import net.minecraft.nbt.CompoundTag;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
@@ -20,7 +21,7 @@ public abstract class MixinAE2CSCrystalPulverizerProcessing {
     @Unique private MachineProcessorAdapter ae2oc_adapter() {
         if (ae2oc_adapter == null) {
             var self = (CrystalPulverizerBlockEntity) (Object) this;
-            ae2oc_adapter = new MachineProcessorAdapter(self, self, self.getOutputInv(), () -> {
+            ae2oc_adapter = new PulverizerAdapter(self, () -> {
                 if (self.getLevel() == null) return null;
                 var inv = self.getInputInv();
                 var input = SingleItemStackRecipeInput.of(moakiee.ae2oc.compat.ae2.ManagedItemStorages.recipeStack(inv, 0));
@@ -29,7 +30,7 @@ public abstract class MixinAE2CSCrystalPulverizerProcessing {
                 var recipe = found.get();
                 return ItemRecipes.snapshot(recipe.getId().toString(), inv, self, new int[]{0}, java.util.List.of(recipe.input()),
                         recipe.assemble(input, self.getLevel().registryAccess()), recipe.energyCost());
-            }, 1, 0);
+            });
         }
         return ae2oc_adapter;
     }

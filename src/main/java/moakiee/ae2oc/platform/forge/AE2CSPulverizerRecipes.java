@@ -192,6 +192,46 @@ final class AE2CSPulverizerRecipes {
         helper.succeed();
     }
 
+    static void allOutputSlots(GameTestHelper helper) {
+        var partial = placeWithFinishedOutput(helper, new BlockPos(1, 1, 1), 5);
+        partial.getOutputInv().setItemDirect(0, new ItemStack(Items.DIRT, 64));
+        partial.getOutputInv().setItemDirect(1, new ItemStack(Items.GUNPOWDER, 60));
+        partial.getOutputInv().setItemDirect(3, new ItemStack(Items.DIRT, 64));
+        partial.serverTick();
+        helper.assertTrue(outputAmount(partial, GUNPOWDER) == 65,
+                "Pulverizer did not spread output across its remaining legal slots");
+        helper.assertTrue(batch(partial) == null, "Pulverizer retained output accepted across multiple slots");
+
+        var blocked = placeWithFinishedOutput(helper, new BlockPos(4, 1, 1), 5);
+        for (int slot = 0; slot < blocked.getOutputInv().size(); slot++) {
+            blocked.getOutputInv().setItemDirect(slot, new ItemStack(Items.DIRT, 64));
+        }
+        blocked.serverTick();
+        var pending = batch(blocked);
+        helper.assertTrue(pending != null && pending.finished() && amountOf(pending.outputs(), GUNPOWDER) == 5,
+                "Full pulverizer output discarded or altered pending results");
+        helper.succeed();
+    }
+
+    private static CrystalPulverizerBlockEntity placeWithFinishedOutput(GameTestHelper helper, BlockPos pos, long amount) {
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.tryParse("ae2cs:crystal_pulverizer")));
+        var machine = (CrystalPulverizerBlockEntity) helper.getBlockEntity(pos);
+        var saved = machine.saveWithFullMetadata();
+        saved.put("ae2ocProcessing", ProcessingCodec.write(new ProcessingState<AEKey>(RECIPE,
+                List.of(), List.of(new ResourceAmount<>(GUNPOWDER, amount)), 0, 0, 0)));
+        machine.load(saved);
+        return machine;
+    }
+
+    private static long outputAmount(CrystalPulverizerBlockEntity machine, AEKey key) {
+        long total = 0;
+        for (var slot : ManagedItemStorages.slots(machine.getOutputInv())) {
+            var value = slot.read();
+            if (value != null && value.key().equals(key)) total += value.amount();
+        }
+        return total;
+    }
+
     /** Amount carried by the mod's bounded stored-resource containers, never plain item stacks. */
     private static long packedAmount(List<ItemStack> drops, AEKey key) {
         long total = 0;
