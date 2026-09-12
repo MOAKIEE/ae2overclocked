@@ -4,7 +4,7 @@
 >
 > 分支：`refactor/machine-core`
 >
-> 当前实现基准：`6599f78`
+> 当前实现基准：`3b0e645`
 >
 > 设计与后续验收：[REFACTOR_PLAN.zh-CN.md](REFACTOR_PLAN.zh-CN.md)
 
@@ -19,7 +19,7 @@
 | 核心结构迁移 | 完成 | 共享规划/执行、输入事务、持久化批次、long 库存、局部菜单、有界执行 |
 | G1 配方与 tick 行为 | 部分关闭 | 配方投影与代表自然调度已有证据；四类机器进度已同步；AE2/ExtendedAE 压印器动画和切片器渲染产物的包往返已修复。真实客户端可见效果仍待验收 |
 | G2 生命周期 | 代表路径关闭 | 真实破坏、封存包回收、AE2 实际区块卸载、AE2CS 正常跨 JVM 重启；不等于所有机器崩溃恢复 |
-| G3 菜单 | 方案定案，联网客户端待验收 | GenericStack 局部包装保留；服务端交互、实际同步回调及原版包编解码已测试 |
+| G3 菜单 | 代表联网客户端路径已通过，发布级完整项仍开放 | GenericStack 局部包装保留；真实客户端菜单首屏、PICKUP、外部更新、关闭重开、Shift 及 NBT 已通过；重连、超容/流体提示仍未覆盖 |
 | G4 兼容与构建 | 固定基线关闭 | 五组合通过；依赖锁与校验；静态审计接入 build/check；不承诺未验证版本 |
 | 正式发布 | 尚未通过 | 真实客户端、旧世界迁移、多机性能及目标整合包验收待完成 |
 
@@ -91,6 +91,15 @@
 
 **保留边界：** 客户端确认 ExtendedAE 渲染 Mixin 实际应用，GameTest 验证完整更新流，但仍未在联网世界内肉眼观察动画。因此机器显示的实现缺口已补，发布级真实客户端验收仍开放。
 
+### 第七批：联网客户端菜单交互回归（`3b0e645`）
+
+- 新增仅在 `clientSmoke` 源集加载的 loopback 客户端夹具；创建一次性集成世界，等待 FML 完成、玩家连接、区块方块实体同步后，使用 AE2 正式 `MenuOpener`/`MenuLocators` 打开真实 `InscriberScreen`。
+- 通过实际客户端菜单包与点击路径验证命名金锭 NBT 和 `5,000,000` long 数量首屏到达；PICKUP 取出 64 后槽位变为 `4,999,936`，光标保留正确身份。
+- 服务端外部写入 `4,242` 并广播，客户端收到更新后关闭并重开菜单；再写入 `65`，以真实 QUICK_MOVE 取出 64，客户端显示普通 1-stack，玩家背包收到 64 件，账本守恒。
+- 夹具通过 `-PclientInteractionSmoke` 与 `verify-compatibility.ps1 -ClientInteractionSmoke` 运行，不进入正式 Jar；截图 `build/reports/client-menu-initial.png`、`client-menu-reopened.png` 已检查，分别可见 `5M` 和 `4242`。
+
+**当批保留边界：** 这是集成客户端 loopback，不是独立远端服务器；尚未覆盖断线重连、超容/流体 tooltip、ExtendedAE 四泳道菜单，以及 AE2/ExtendedAE 压印器和切片器在世界中的动画肉眼验收。它关闭了 G3 的代表性菜单链路，不关闭发布级完整客户端门槛。
+
 ## 3. 已有证据与边界
 
 ### 3.1 跨机器能力
@@ -102,14 +111,14 @@
 | 生命周期 | AE2 远端区块真实卸载恢复部分付款批次；AE2CS 四机三个独立 JVM 正常重启 | 异常终止、其他机型跨进程、所有流体生命周期组合 |
 | 掉落 | 各代表机器真实破坏、可见/超容/批次物品账本；封存包拾取、分批解包、回插 | 直接回插 ME、全部资源组合 |
 | 调度 | 网格与世界 tick 区别；缺能恢复；批次防休眠；退避与预算 | 首批墙钟延迟、公平性、整网吞吐和多机 MSPT |
-| 菜单与显示 | 受管交互、包回调/编解码、关闭归还、客户端图标冒烟；AE2/ExtendedAE 压印器与切片器显示更新流往返 | 真实联机预测、世界内动画观察、超容提示、机器专属流体 GUI |
+| 菜单与显示 | 受管交互、包回调/编解码、关闭归还、客户端图标冒烟；AE2 Inscriber loopback 客户端真实首屏/PICKUP/外部更新/关闭重开/Shift/NBT；AE2/ExtendedAE 压印器与切片器显示更新流往返 | 独立远端/重连、世界内动画观察、超容提示、机器专属流体 GUI |
 | 构建 | 依赖锁、SHA-256、架构检查、静态 Mixin 审计、发布 Jar 裁剪 | 全新缓存下载、远端 CI 实跑、最终 Jar 的完整客户端验收 |
 
 ### 3.2 逐机器代表场景
 
 | 机器 | 已验证 | 优先补齐 |
 |---|---|---|
-| AE2 压印器 | 两类配方 ×12 升级组合、命名压板 NBT/模板保留、输出与恢复、自然调度、真实区块卸载、进度映射；完成脉冲/产物包往返与结算隔离 | 真实客户端压合观察与中途接管显示 |
+| AE2 压印器 | 两类配方 ×12 升级组合、命名压板 NBT/模板保留、输出与恢复、自然调度、真实区块卸载、进度映射；完成脉冲/产物包往返与结算隔离；真实客户端 Inscriber 菜单 long/NBT/取放/外部更新/重开 | 真实客户端压合动画观察与中途接管显示 |
 | ExtendedAE 压印器 | 四泳道 ×12 组合、独立输出与共享预算、堵塞恢复/破坏、自然调度、泳道进度；多泳道/连续完成动画包往返与结算隔离 | 真实客户端压合观察、性能 |
 | 切片器 | logic/calculation/engineering/silicon，物品/水守恒、输出/破坏、进度/working；共享批次产物包往返 | Mega Cells accumulation、自然调度、真实客户端三维观察 |
 | 反应仓 | logic_processor_chamber、quantum_infusion 流体产出、输出/破坏、进度/working | AppFlux 条件配方、自然调度、完整客户端 |
@@ -136,6 +145,7 @@
 | 版本负向 | 明确拒绝 AE2CS 范围外版本；`batch3-version-negative.log` |
 | 第五批显示同步 | 193 项静态检查、84 项 `all` GameTest、`none` 严格脚本、`all` 客户端冒烟通过；详细日志为 `compatibility/{all-server,none-server,all-client}.log` |
 | 第六批四泳道动画 | 204 项静态检查、85 项 `all` GameTest、严格离线 build、`all` 严格脚本及客户端冒烟通过；详细日志为 `compatibility/{all-server,all-client}.log` |
+| 第七批客户端菜单 | `3b0e645`；`all` 客户端交互脚本通过，真实 InscriberScreen 菜单完成 long/NBT、PICKUP、外部更新、关闭重开、QUICK_MOVE 守恒；日志 `compatibility/all-client-interaction.log`，截图 `client-menu-{initial,reopened}.png` |
 
 历史生命周期证据：`0dcfc03`（真实区块卸载）、`d3e1162`（三个独立 JVM 重启）、`b88f14d`（封存包回收）、`afa4780`/`a1afdf0`/`2503591`（真实破坏）。本轮没有重跑这些历史独立重启脚本，GameTest 中的相关生命周期场景随矩阵回归。
 
@@ -189,6 +199,9 @@ powershell.exe -NoProfile -File scripts/verify-compatibility.ps1 -Runtime all -O
 
 # 图形环境下客户端冒烟，自动退出
 powershell.exe -NoProfile -File scripts/verify-compatibility.ps1 -Runtime all -Offline -ClientSmoke
+
+# 集成客户端菜单交互冒烟，自动创建/销毁一次性世界并退出
+powershell.exe -NoProfile -File scripts/verify-compatibility.ps1 -Runtime all -Offline -ClientInteractionSmoke
 
 git log -4 --oneline
 git status --short
