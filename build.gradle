@@ -146,11 +146,6 @@ minecraft {
                     workingDirectory project.file(providers.gradleProperty('benchmarkDirectory').get())
                 }
                 property 'ae2oc.benchmark', 'true'
-            } else if (project.hasProperty('releaseCheck')) {
-                if (project.hasProperty('releaseDirectory')) {
-                    workingDirectory project.file(providers.gradleProperty('releaseDirectory').get())
-                }
-                property 'ae2oc.releaseCheck', 'true'
             }
         }
 
@@ -395,6 +390,32 @@ tasks.register('verifyReleaseContents') {
             }
         } finally {
             zip.close()
+        }
+    }
+}
+
+tasks.register('stageReleaseRuntimeMods') {
+    def destination = providers.gradleProperty('releaseDirectory').map { file(it).toPath().resolve('mods').toFile() }
+    inputs.files(configurations.named('__obfuscated'))
+    outputs.dir(destination)
+    doLast {
+        if (!providers.gradleProperty('releaseDirectory').isPresent()) {
+            throw new GradleException('stageReleaseRuntimeMods requires -PreleaseDirectory')
+        }
+        def selected = ['applied-energistics-2-223794', 'guideme-1173950'] as Set
+        if (compatibilityRuntime in ['extendedae', 'all']) selected.addAll(['ex-pattern-provider-892005', 'glodium-957920'])
+        if (compatibilityRuntime in ['advancedae', 'all']) selected.addAll(['advancedae-1084104', 'geckolib-388172'])
+        if (compatibilityRuntime in ['ae2cs', 'all']) selected.add('ae2-crystal-science-1435174')
+        def artifacts = configurations.__obfuscated.resolvedConfiguration.resolvedArtifacts
+                .findAll { selected.contains(it.moduleVersion.id.name) }
+        def missing = selected - artifacts.collect { it.moduleVersion.id.name }
+        if (missing) throw new GradleException("Missing production runtime artifacts: ${missing}")
+        copy {
+            from artifacts.collect { it.file }
+            into destination.get()
+        }
+        artifacts.sort { it.moduleVersion.id.name }.each {
+            println "Staged production mod ${it.moduleVersion.id.group}:${it.moduleVersion.id.name}:${it.moduleVersion.id.version} -> ${it.file.name}"
         }
     }
 }
