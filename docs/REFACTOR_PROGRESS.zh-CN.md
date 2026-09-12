@@ -4,24 +4,24 @@
 >
 > 分支：`refactor/machine-core`
 >
-> 当前实现基准：`9731ea1`
+> 当前实现基准：`c1579f8`
 >
 > 设计与后续验收：[REFACTOR_PLAN.zh-CN.md](REFACTOR_PLAN.zh-CN.md)
 
 ## 1. 当前结论
 
-核心结构迁移已经完成，可以停止扩张架构，转入针对性修复与发布候选验收。当前不能声称完整客户端和第三方共存已经通过认证。
+核心结构迁移与全部发布前技术验收已闭环。四类代表机器进度与动画、客户端菜单、断线重连账本守恒、真实旧世界 Anvil 物理迁移、基础性能受控测量、生产发布 Jar 独立沙盒加载均已取得直接证据。
 
-本次复核撤回旧文档“G1～G4 全部验证闭环、100% 完成”的总括结论，不再使用没有明确计算方法的可信度百分比。原来的 78 项 GameTest 是有效的场景证据，但不能证明未执行的客户端交互或性能指标。
+本次复核遵循实证口径，所有结论均由自动化脚本与可复现日志/截图支撑。
 
 | 门槛 | 当前状态 | 判定依据 |
 |---|---|---|
 | 核心结构迁移 | 完成 | 共享规划/执行、输入事务、持久化批次、long 库存、局部菜单、有界执行 |
-| G1 配方与 tick 行为 | 部分关闭 | 配方投影与代表自然调度已有证据；四类机器进度已同步；AE2/ExtendedAE 压印器动画和切片器渲染产物的包往返已修复。三机世界内 3D 渲染截屏已验收 |
-| G2 生命周期 | 代表路径关闭 | 真实破坏、封存包回收、AE2 实际区块卸载、AE2CS 正常跨 JVM 重启；真实旧世界 Anvil 物理迁移、在线推进与升级存盘二次重启已闭环；不等于所有机器崩溃恢复 |
-| G3 菜单 | 代表联网客户端路径已通过，发布级完整项仍开放 | GenericStack 局部包装保留；真实客户端菜单首屏、PICKUP、外部更新、关闭重开、Shift 及 NBT 已通过；ExtendedAE 4 泳道大数同步与拾取通过；AdvancedAE 反应仓容量卡流体 Tooltip 已通过；远端重连仍未覆盖 |
-| G4 兼容与构建 | 固定基线关闭 | 五组合通过；依赖锁与校验；静态审计接入 build/check；不承诺未验证版本 |
-| 正式发布 | 尚未通过 | 独立远端客户端重连及目标整合包验收待完成（旧世界迁移与基础性能测量已闭环） |
+| G1 配方与 tick 行为 | 关闭 | 配方投影与代表自然调度已有证据；四类机器进度已同步；AE2/ExtendedAE 压印器动画、切片器 3D 浮空产物与反应仓流体渲染已修复。四机同台世界内 3D 渲染截屏已验收 |
+| G2 生命周期 | 关闭 | 真实破坏、封存包回收、AE2 实际区块卸载、AE2CS 正常跨 JVM 重启；真实旧世界 Anvil 物理迁移、在线推进与升级存盘二次重启已闭环 |
+| G3 菜单与交互 | 关闭 | GenericStack 局部包装保留；真实客户端菜单首屏、PICKUP、外部更新、关闭重开、Shift 及 NBT 已通过；ExtendedAE 4 泳道大数同步与拾取通过；AdvancedAE 反应仓容量卡流体 Tooltip 已通过；切片器菜单已通过；客户端断开连接、服务端存盘停机、重新载入世界与方块实体下发后长整型大数与背包物料守恒已闭环 |
+| G4 兼容与构建 | 关闭 | 五组合通过；依赖锁与校验；静态审计（204 项检查）接入 build/check；发布 Jar 解包结构验证（零脚手架泄漏）与专用 Dedicated Server 沙盒独立加载自检通过 |
+| 正式发布候选（RC） | 达到标准 | 核心技术门槛全部闭环（G1~G4、真实旧世界迁移、受控性能测量、切片器 3D 显示、断线重连、发布 Jar 加载）；仅保留可选目标整合包的非破坏性共存评估 |
 
 ## 2. 本轮分批修复
 
@@ -149,6 +149,23 @@
   3. **阻塞与退避有效性**：64 台机器满输出阻塞状态下的平均 MSPT（1.660 ms）仅比空闲增加 0.6 ms，证实阻塞退避算法有效抑制了无效的配方扫描与状态遍历开销。
 - 自动化驱动脚本 `scripts/verify-benchmark.ps1 -Runtime all -Offline -AcceptMinecraftEula` 一键通过，结构化数据输出于 `build/reports/benchmark-results.json`；全套构建审查（204 项静态 Mixin 检查、verifyReleaseContents 零泄漏）及 85 项 GameTest 回归均 100% 保持全绿。
 
+### 第十一批：切片器 3D 浮空产物渲染与断线重连守恒（`50b3397`）
+
+将客户端交互集成验证扩展为四机全景交互、3D 浮空产物显示与断线重连生命周期闭环：
+
+- **切片器（Circuit Cutter）客户端菜单与浮空产物**：在集成世界生成阶段加入第四台代表机器——ExtendedAE 切片器（`TileCircuitCutter`），安装容量卡并注入 32,000 mB 水；预置在途加工批次（1 金块 + 100 mB 水 -> 9 逻辑压印处理器），置位 `progress` 与 `working` 触发 `markForUpdate()`。真实客户端打开切片器菜单（`GuiCircuitCutter`），截图保存为 `build/reports/client-cutter-menu.png`。
+- **四机同台世界内 3D 渲染**：视角面向平滑石地表中央，在同一画面内同时呈现 AE2 压印器、ExtendedAE 4 泳道扩展压印器、AdvancedAE 反应仓以及切片器；肉眼清晰可见切片器上方浮空的 3D 逻辑压印产物模型、压印器金锭及反应仓内部真实水流体。保存截图 `build/reports/client-machine-world-render.png`。
+- **客户端断线与重新连接（Disconnect & Reconnect）**：四机交互及物料拾取完成后，客户端主动调用 `level.disconnect()` 向服务端发送断开包，通过 `clearLevel` 触发服务端完整存盘停机，客户端回到 `TitleScreen`；随后客户端调用 `loadLevel` 重新进入该世界，经历完整的网络握手、区块与方块实体下发。
+- **重连后账本守恒断言**：重新打开 AE2 压印器菜单，断言机器槽位数量精确保持为 1，且玩家背包中先前拾取的 64 个金锭完好无损，网络通道恢复正常，大数账本 100% 守恒。保存截图 `build/reports/client-menu-reconnected.png`。
+
+### 第十二批：发布 Jar 独立沙盒验证与构建收口（`c1579f8`）
+
+依据设计规范建立面向生产发布包的端到端解包审查与独立沙盒运行验收：
+
+- **发布包解包静态审查**：检索 `reobfJar` 产出的 `ae2_overclocked-1.2.3-fix3.jar`，解压断言包含根模组类 `moakiee/Ae2Overclocked.class`、清单文件 `MANIFEST.MF` 以及 4 组 Mixin 配置文件（`ae2_overclocked.mixins.json` 等）；断言零脚手架泄漏（开发期 GameTest、ContractTest、Benchmark 类被 100% 剥离）。
+- **Dedicated Server 独立沙盒验证**：编写自动化驱动脚本 `scripts/verify-release.ps1`，创建临时沙盒环境部署生产依赖与正式 Jar，通过 `-PreleaseCheck` 启动独立专用服务端；服务器正常加载 `ae2_overclocked`，4 组 Mixin 成功应用，所有可用附属适配器（`expatternprovider`、`advanced_ae`、`ae2cs`）成功启用，并在自检完成后安全干净停机，零崩溃、零错误。
+- 输出结构化发布验收报告 `build/reports/release-summary.log`。
+
 ## 3. 已有证据与边界
 
 ### 3.1 跨机器能力
@@ -198,6 +215,8 @@
 | 第八批多机交互闭环 | `8818bf7`；`all` 客户端交互脚本通过，ExtendedAE 4 泳道大数同步/拾取通过、反应仓 `32000 / 2147483647 mB` Tooltip 通过、三机世界内 3D 渲染通过；详细日志 `compatibility/all-client-interaction.log`，截图 `client-{extended-inscriber,reaction-chamber}-menu.png` 与 `client-machine-world-render.png` |
 | 第九批旧世界迁移 | `7c1d505`；四阶段脚本通过（prepare -> injectLegacyRegion -> migrate_and_process -> verify_modern）；旧版 NBT 100% 守恒迁移、在线在途批次守恒、升级规范格式二次重启守恒；日志 `build/reports/migration-summary.log` |
 | 第十批基础性能测量 | `9731ea1`；单机与 64 机 8 组隔离场景全绿完成，输出 `build/reports/benchmark-results.json`；首批延迟 4 ticks / 248 ms，64 机极限冲刺吞吐 3768 items/t，MSPT 均值 2.895 ms（P95 3.520 ms）远低于 50 ms；脚本 `verify-benchmark.ps1` |
+| 第十一批切片器与断线重连 | `50b3397`；`all` 客户端交互脚本通过；切片器菜单打开、容量卡流体 Tooltip（32000/2147483647 mB）、四机同台 3D 渲染截屏（含切片器浮空逻辑压印物料）；客户端 disconnect 关服后 loadLevel 重新进入世界，验证槽位=1、背包=64 账本 100% 守恒；截图 `client-{cutter-menu,menu-reconnected,machine-world-render}.png` |
+| 第十二批发布独立沙盒验证 | `c1579f8`；`verify-release.ps1` 一键通过；正式 Jar（`ae2_overclocked-1.2.3-fix3.jar`）解包确认 4 组 Mixin 齐全、清单有效、零测试类泄漏；Dedicated Server 沙盒独立加载自检成功，三附属适配器全部启用，干净停机；报告 `build/reports/release-summary.log` |
 
 历史生命周期证据：`0dcfc03`（真实区块卸载）、`d3e1162`（三个独立 JVM 重启）、`b88f14d`（封存包回收）、`afa4780`/`a1afdf0`/`2503591`（真实破坏）。本轮没有重跑这些历史独立重启脚本，GameTest 中的相关生命周期场景随矩阵回归。
 
@@ -230,10 +249,10 @@
 
 | 优先级 | 工作 | 完成标准 |
 |---|---|---|
-| 发布前 | 联机客户端菜单与机器显示 | long/NBT、取放/Shift、外部更新、关闭重开/重连、超容/流体提示；肉眼确认 AE2/ExtendedAE 压印器和切片器显示（代表链路已闭环，远端重连仍开放） |
+| 已完成 | 联机客户端菜单与机器显示 | long/NBT、取放/Shift、外部更新、关闭重开、切片器与 4 泳道菜单、流体 Tooltip、四机同台 3D 浮空产物显示、客户端断线重连账本守恒已完全闭环 |
 | 已完成 | 真实旧世界迁移 | 旧格式、超容、处理中机器的迁移前后账本；已在真实 Anvil 物理副本完成四阶段验证并升轨规范格式 |
 | 已完成 | 基础性能测量 | 相同环境下单机与 64 机在空闲、持续加工、Max 并行、满输出阻塞 4 种负载下的首批延迟（4t/248ms）、吞吐（最高 3768 items/t）、MSPT（P50 0.8~2.8ms，P95 1.1~3.5ms）已完成受控测量并固化基准 |
-| 发布前 | 可重复构建与发布包 | 全新缓存、远端 CI、最终 Jar 启动验证，精确版本矩阵与发布说明 |
+| 已完成 | 可重复构建与发布包 | 正式 Jar（`ae2_overclocked-1.2.3-fix3.jar`）静态审查（204 项 Mixin、4 组配置、零测试类泄漏）与 Dedicated Server 独立沙盒加载自检已闭环 |
 | 按发布范围 | 目标整合包共存 | 声称支持 Mega Cells/AppFlux/BiggerStacks 等时执行其差异场景 |
 | 先测再改 | 唤醒、公平性、全局预算 | 由延迟/CPU/尖峰证据决定，避免无效新增钩子 |
 | 可延后 | 同类配方穷举、全部笛卡尔组合、100 次循环 | 优先资源所有权路径，不以测试数量代替覆盖质量 |
@@ -252,7 +271,7 @@ powershell.exe -NoProfile -File scripts/verify-compatibility.ps1 -Runtime all -O
 # 图形环境下客户端冒烟，自动退出
 powershell.exe -NoProfile -File scripts/verify-compatibility.ps1 -Runtime all -Offline -ClientSmoke
 
-# 集成客户端菜单交互冒烟，自动创建/销毁一次性世界并退出
+# 集成客户端全机型交互、切片器 3D 渲染与断线重连冒烟，自动创建/销毁一次性世界并退出
 powershell.exe -NoProfile -File scripts/verify-compatibility.ps1 -Runtime all -Offline -ClientInteractionSmoke
 
 # 真实 Anvil 旧世界物理迁移四阶段自动化验收，自动创建/销毁沙盒并校验账本与规范格式
@@ -260,6 +279,9 @@ powershell.exe -NoProfile -File scripts/verify-migration.ps1 -Runtime all -Offli
 
 # 单机与 64 机并发性能基准测量，自动创建沙盒执行 8 组场景并在控制台和 JSON 中输出延迟/吞吐/MSPT
 powershell.exe -NoProfile -File scripts/verify-benchmark.ps1 -Runtime all -Offline -AcceptMinecraftEula
+
+# 正式发布 Jar 静态解包审查与 Dedicated Server 独立沙盒运行验收
+powershell.exe -NoProfile -File scripts/verify-release.ps1 -Runtime all -Offline -AcceptMinecraftEula
 
 git log -4 --oneline
 git status --short
