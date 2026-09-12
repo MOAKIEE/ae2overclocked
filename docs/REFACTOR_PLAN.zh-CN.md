@@ -7,7 +7,7 @@
 
 ## 实施跟进（2026-09-12）
 
-**发布候选配方扩展已开始**：ExtendedAE 切片器的 `calculation`、`engineering`、`silicon` 已补真实共享批处理守恒覆盖；条件配方 `accumulation` 在当前无 Mega Cells 运行矩阵中明确验证为不加载。`extendedae` 与 `all` 严格离线 build、71 项 GameTest 通过（`9b3e4a8`）。完整进度与剩余边界继续以进度文档为准。
+**发布候选配方扩展推进中**：ExtendedAE 切片器的 `calculation`、`engineering`、`silicon` 已补真实共享批处理守恒覆盖；AE2CS 熵变反应器的 COOL 模式石头转圆石（`stone_cobblestone`）以及水/冰双向流体配方（`water_ice` 流体入、`ice_water` 流体出）已补真实守恒与状态机覆盖（`396955d`）。`ae2cs` 与 `all` 严格离线 build、74 项 GameTest 全部通过。完整进度与剩余边界继续以进度文档为准。
 
 **资源封存包 UI 定案**：仅支持物品，使用内部物品自身图标（保留 NBT 模型和颜色），不兼容旧流体包，不提供流体兜底图标。数量继续以 long 保存，渲染只使用数量为 1 的合法 ItemStack；服务端取出与回插仍为权威路径。
 
