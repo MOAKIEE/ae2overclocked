@@ -132,6 +132,12 @@ public final class InscriberGameTests {
         ExtendedInscriberRecipes.smashTakeoverSettlement(helper);
     }
 
+    @GameTest(template = "empty")
+    public static void configuredExtendedSlotSizeControlsInsertion(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedInscriberRecipes.configuredSlotSizeControlsInsertion(helper);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 300)
     public static void inscriberNamePressRetainsTemplateAndCopiesName(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);

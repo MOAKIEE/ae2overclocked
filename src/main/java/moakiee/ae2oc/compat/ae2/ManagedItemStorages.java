@@ -54,12 +54,14 @@ public final class ManagedItemStorages {
             for (var child : combined.ae2oc$children()) attach(child, host);
         } else if (inventory instanceof AppEngInternalInventory app && inventory instanceof ManagedItemInventory managed
                 && managed.ae2oc$storage() == null) {
-            int[] base = new int[app.size()];
             var initial = new net.minecraft.world.item.ItemStack[app.size()];
-            for (int i = 0; i < base.length; i++) { base[i] = app.getSlotLimit(i); initial[i] = app.getStackInSlot(i).copy(); }
+            for (int i = 0; i < initial.length; i++) initial[i] = app.getStackInSlot(i).copy();
+            // Without a capacity card the logical limit must follow the upstream slot limit as it is set now,
+            // not as it was when this inventory was attached: ExtendedAE publishes its per-slot size through
+            // setInvStackSize() after construction, and AE2 rebinds the inscriber buffer size from its config.
             var storage = new LongItemStorage(app.size(), slot -> UpgradeProfileCache.of(host).capacity()
-                    ? UpgradeProfileCache.of(host).capacityLimit() : base[slot]);
-            for (int i = 0; i < base.length; i++) if (!initial[i].isEmpty())
+                    ? UpgradeProfileCache.of(host).capacityLimit() : app.getSlotLimit(slot));
+            for (int i = 0; i < initial.length; i++) if (!initial[i].isEmpty())
                 storage.slot(i).restore(appeng.api.stacks.AEItemKey.of(initial[i]), initial[i].getCount());
             managed.ae2oc$attach(storage);
             MachineItemContents.register(host, storage);

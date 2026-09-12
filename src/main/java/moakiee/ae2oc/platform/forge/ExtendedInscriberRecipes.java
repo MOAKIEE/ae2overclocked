@@ -144,6 +144,50 @@ final class ExtendedInscriberRecipes {
         });
     }
 
+    /**
+     * ExtendedAE publishes its per-slot size through {@code setInvStackSize()} after the lane inventories are
+     * attached, so a logical slot without a capacity card must read the upstream limit as it stands now. The
+     * configured size must survive a save/load, limit new insertions when it shrinks, and a removed capacity
+     * card must only stop growth while keeping the over-capacity contents.
+     */
+    static void configuredSlotSizeControlsInsertion(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, Blocks.AIR);
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "ex_inscriber")));
+        var machine = (TileExInscriber) helper.getBlockEntity(pos);
+        var inventory = machine.getIndexInventory(0);
+        var slots = ManagedItemStorages.slots(inventory);
+        slots.get(0).write(new ResourceAmount<AEKey>(AEItemKey.of(AEItems.LOGIC_PROCESSOR_PRESS.asItem()), 1));
+
+        machine.setInvStackSize(64);
+        var accepted = inventory.insertItem(2, new ItemStack(Items.GOLD_INGOT, 64), false);
+        helper.assertTrue(accepted.isEmpty() && amount(slots.get(2)) == 64,
+                "REVIEW slot size is " + machine.getInvStackSize() + ", API limit=" + inventory.getSlotLimit(2)
+                        + ", stored=" + amount(slots.get(2)) + ", rejected=" + accepted.getCount());
+
+        var saved = machine.saveWithFullMetadata();
+        machine.load(saved);
+        helper.assertTrue(machine.getInvStackSize() == 64, "Save/load lost the configured slot size");
+        helper.assertTrue(amount(slots.get(2)) == 64, "Save/load lost the stored contents");
+        helper.assertTrue(inventory.insertItem(2, new ItemStack(Items.GOLD_INGOT, 1), false).getCount() == 1,
+                "Reloaded machine accepted more than the configured slot size");
+
+        machine.setInvStackSize(1);
+        helper.assertTrue(inventory.insertItem(2, new ItemStack(Items.GOLD_INGOT, 8), false).getCount() == 8,
+                "Reduced upstream slot size still accepted new items");
+        helper.assertTrue(amount(slots.get(2)) == 64, "Reduced upstream slot size discarded over-capacity contents");
+
+        machine.getUpgrades().setItemDirect(0, new ItemStack(ModItems.CAPACITY_CARD.get()));
+        inventory.insertItem(2, new ItemStack(Items.GOLD_INGOT, 100), false);
+        helper.assertTrue(amount(slots.get(2)) == 164, "Capacity card did not lift the logical slot limit");
+
+        machine.getUpgrades().setItemDirect(0, ItemStack.EMPTY);
+        helper.assertTrue(inventory.insertItem(2, new ItemStack(Items.GOLD_INGOT, 8), false).getCount() == 8,
+                "Removed capacity card still accepted new items beyond the base size");
+        helper.assertTrue(amount(slots.get(2)) == 164, "Removed capacity card discarded over-capacity contents");
+        helper.succeed();
+    }
+
     /** Offers one item through the exposed side handler, the path upstream automation uses to feed a lane. */
     private static boolean feedAutomatedGold(TileExInscriber machine) {
         for (var direction : net.minecraft.core.Direction.values()) {
