@@ -11,7 +11,11 @@
     "MixinAE2CSCircuitEtcherProcessing",
     "MixinAE2CSCrystalAggregatorProcessing",
     "MixinAE2CSCrystalPulverizerProcessing",
-    "MixinAE2CSEntropyProcessing"
+    "MixinAE2CSEntropyProcessing",
+    "MixinAE2CSCircuitEtcherStateSync",
+    "MixinAE2CSCrystalAggregatorStateSync",
+    "MixinAE2CSCrystalPulverizerStateSync",
+    "MixinAE2CSEntropyStateSync"
   ],
   "client": [],
   "injectors": {

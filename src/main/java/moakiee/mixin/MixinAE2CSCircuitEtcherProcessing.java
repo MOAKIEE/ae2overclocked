@@ -36,7 +36,13 @@ public abstract class MixinAE2CSCircuitEtcherProcessing {
     // Preserve upstream component ticking, intercept only the machine-specific recipe body.
     @Inject(method = "serverTick", at = @At(value = "INVOKE", target = "Lio/github/lounode/ae2cs/common/block/entity/AENetworkedSelfPoweredBlockEntity;serverTick()V", shift = At.Shift.AFTER), cancellable = true)
     private void ae2oc_tick(CallbackInfo ci) {
-        if (ae2oc_adapter().tick() != null) ci.cancel();
+        var self = (CircuitEtcherBlockEntity) (Object) this;
+        var adapter = ae2oc_adapter();
+        boolean powered = self.getAECurrentPower() > 0;
+        if (adapter.tick() != null) {
+            moakiee.ae2oc.compat.ae2cs.AE2CSStateSync.sync(self, powered, adapter);
+            ci.cancel();
+        }
     }
     @Inject(method = {"saveAdditional", "m_183515_"}, at = @At("TAIL"), require = 1)
     private void ae2oc_save(CompoundTag tag, CallbackInfo ci) {

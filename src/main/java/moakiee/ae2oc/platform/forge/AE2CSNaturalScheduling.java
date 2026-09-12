@@ -193,6 +193,79 @@ final class AE2CSNaturalScheduling {
         return total;
     }
 
+    /** Card-driven processing must keep the ACTIVE blockstate and menu progress fields in sync. */
+    static void stateSync(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        var fixture = fixture(helper, "crystal_pulverizer", pos);
+        helper.runAfterDelay(40, () -> {
+            var upgrades = ((IUpgradeableObject) fixture.host()).getUpgrades();
+            upgrades.setItemDirect(0, new ItemStack(ModItems.PARALLEL_CARD.get()));
+            upgrades.setItemDirect(1, new ItemStack(ModItems.SUPER_ENERGY_CARD.get()));
+            fixture.inputs().get(0).write(new ResourceAmount<AEKey>(fixture.keys().get(0), 2L * fixture.inputPerOperation()));
+            ((IAEPowerStorage) fixture.host()).injectAEPower(2 * fixture.energyPerOperation(), Actionable.MODULATE);
+            observeSync(helper, fixture, pos, false, false, 0);
+        });
+    }
+
+    private static void observeSync(GameTestHelper helper, Fixture fixture, BlockPos pos,
+            boolean sawActive, boolean sawProgress, int elapsed) {
+        var blockState = helper.getBlockState(pos);
+        helper.assertTrue(blockState.hasProperty(io.github.lounode.ae2cs.common.init.AECSBlockProperties.ACTIVE),
+                "Pulverizer block lost the ACTIVE property");
+        boolean active = blockState.getValue(io.github.lounode.ae2cs.common.init.AECSBlockProperties.ACTIVE);
+        var sync = (moakiee.ae2oc.compat.ae2cs.AE2CSStateSync) fixture.host();
+        boolean progressed = sync.ae2oc$progressMax() > 0;
+        long produced = fixture.drain().getAsLong();
+        if (produced == 2L * fixture.outputPerOperation()) {
+            helper.assertTrue(sawActive, "ACTIVE blockstate never turned on under shared processor");
+            helper.assertTrue(sawProgress, "Menu progress fields never moved under shared processor");
+            helper.runAfterDelay(3, () -> {
+                helper.assertTrue(sync.ae2oc$progress() == 0 && sync.ae2oc$progressMax() == 0,
+                        "Progress fields did not reset after batch completion");
+                helper.succeed();
+            });
+            return;
+        }
+        helper.assertTrue(elapsed < 400, "State sync observation stalled");
+        helper.runAfterDelay(1, () -> observeSync(helper, fixture, pos,
+                sawActive || active, sawProgress || progressed, elapsed + 1));
+    }
+
+    /** New batches must follow the current ENTROPY_CHANGE_MODE setting without an upstream recipe cache. */
+    static void entropyMode(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        var fixture = fixture(helper, "entropy_variation_reaction_chamber", pos);
+        helper.runAfterDelay(40, () -> {
+            var machine = (EntropyVariationReactionChamberBlockEntity) fixture.host();
+            machine.getConfigManager().putSetting(io.github.lounode.ae2cs.api.settings.AECSSettings.ENTROPY_CHANGE_MODE,
+                    appeng.recipes.entropy.EntropyMode.COOL);
+            var upgrades = machine.getUpgrades();
+            upgrades.setItemDirect(0, new ItemStack(ModItems.PARALLEL_CARD.get()));
+            upgrades.setItemDirect(1, new ItemStack(ModItems.SUPER_ENERGY_CARD.get()));
+            fixture.inputs().get(0).write(new ResourceAmount<AEKey>(fixture.keys().get(0), (long) fixture.inputPerOperation()));
+            ((IAEPowerStorage) machine).injectAEPower(2 * fixture.energyPerOperation(), Actionable.MODULATE);
+            helper.runAfterDelay(40, () -> {
+                helper.assertTrue(fixture.drain().getAsLong() == 0, "COOL mode processed a HEAT-only recipe");
+                helper.assertTrue(amount(fixture.inputs().get(0)) == fixture.inputPerOperation(),
+                        "COOL mode consumed an input it has no recipe for");
+                machine.getConfigManager().putSetting(io.github.lounode.ae2cs.api.settings.AECSSettings.ENTROPY_CHANGE_MODE,
+                        appeng.recipes.entropy.EntropyMode.HEAT);
+                observeEntropyMode(helper, fixture, 0);
+            });
+        });
+    }
+
+    private static void observeEntropyMode(GameTestHelper helper, Fixture fixture, int elapsed) {
+        long produced = fixture.drain().getAsLong();
+        if (produced == fixture.outputPerOperation()) {
+            helper.assertTrue(amount(fixture.inputs().get(0)) == 0, "HEAT mode left input after one operation");
+            helper.succeed();
+            return;
+        }
+        helper.assertTrue(elapsed < 400, "HEAT mode never processed after the setting changed");
+        helper.runAfterDelay(1, () -> observeEntropyMode(helper, fixture, elapsed + 1));
+    }
+
     private static void starved(GameTestHelper helper, Fixture fixture, int remaining) {
         helper.assertTrue(((IAEPowerStorage) fixture.host()).getAECurrentPower() == 0, "Unexpected energy in lone machine");
         helper.assertTrue(fixture.drain().getAsLong() == 0, "Unpowered machine produced output");

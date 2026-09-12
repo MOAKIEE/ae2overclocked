@@ -81,6 +81,16 @@ public final class AE2CSGameTests {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
         AE2CSNaturalScheduling.run(helper, "entropy_variation_reaction_chamber", true);
     }
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void pulverizerKeepsActiveStateAndProgressSynced(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.stateSync(helper);
+    }
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void entropyChamberFollowsModeSetting(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("ae2cs")) { helper.succeed(); return; }
+        AE2CSNaturalScheduling.entropyMode(helper);
+    }
 
     @GameTest(template = "empty", timeoutTicks = 600)
     public static void processorNaturallyResumesAfterEnergyArrives(GameTestHelper helper) {
