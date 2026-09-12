@@ -18,6 +18,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.GameRules;
@@ -40,6 +41,11 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraftforge.fml.ModList;
+import net.minecraftforge.registries.ForgeRegistries;
 
 /**
  * Development-only loopback client contract. It uses an integrated server, but all menu state changes
@@ -53,7 +59,7 @@ public final class ClientInteractionSmokeTest {
     private static final long EXTERNAL_UPDATE_AMOUNT = 4_242L;
     private static final long SHIFT_AMOUNT = 65L;
     private static final int MAX_WAIT_TICKS = 240;
-    private static final BlockPos MACHINE_OFFSET = new BlockPos(1, -1, 0);
+    private static final BlockPos MACHINE_OFFSET = new BlockPos(0, 0, 2);
     private static final String WORLD_NAME = "ae2oc-client-interaction-smoke-" + System.currentTimeMillis();
 
     private enum Phase {
@@ -66,6 +72,12 @@ public final class ClientInteractionSmokeTest {
         WAIT_REOPENED,
         WAIT_SHIFT_UPDATE,
         WAIT_SHIFT_CLICK,
+        WAIT_CLOSE_FOR_EXT_INSCRIBER,
+        WAIT_EXT_INSCRIBER_MENU,
+        WAIT_EXT_INSCRIBER_CLICK,
+        WAIT_CLOSE_FOR_REACTION_CHAMBER,
+        WAIT_REACTION_CHAMBER_MENU,
+        WAIT_WORLD_RENDER,
         DONE
     }
 
@@ -84,6 +96,12 @@ public final class ClientInteractionSmokeTest {
     private static boolean shiftClickSent;
     private static boolean initialScreenshotArmed;
     private static boolean reopenedScreenshotArmed;
+    private static boolean extInscriberSetupScheduled;
+    private static boolean extInscriberScreenshotArmed;
+    private static boolean extInscriberClickSent;
+    private static boolean reactionChamberSetupScheduled;
+    private static boolean reactionChamberScreenshotArmed;
+    private static int worldRenderTicks;
     private static String lastScreenClass;
     private static int lastClientMenuId = Integer.MIN_VALUE;
     private static volatile Throwable failure;
@@ -110,6 +128,7 @@ public final class ClientInteractionSmokeTest {
 
         var minecraft = Minecraft.getInstance();
         try {
+            logClientSurface(minecraft);
             switch (phase) {
                 case LOAD_WORLD -> loadWorld(minecraft);
                 case WAIT_PLAYER -> awaitPlayer(minecraft);
@@ -120,6 +139,12 @@ public final class ClientInteractionSmokeTest {
                 case WAIT_REOPENED -> awaitReopened(minecraft);
                 case WAIT_SHIFT_UPDATE -> awaitShiftUpdate(minecraft);
                 case WAIT_SHIFT_CLICK -> awaitShiftClick(minecraft);
+                case WAIT_CLOSE_FOR_EXT_INSCRIBER -> awaitCloseForExtInscriber(minecraft);
+                case WAIT_EXT_INSCRIBER_MENU -> awaitExtInscriberMenu(minecraft);
+                case WAIT_EXT_INSCRIBER_CLICK -> awaitExtInscriberClick(minecraft);
+                case WAIT_CLOSE_FOR_REACTION_CHAMBER -> awaitCloseForReactionChamber(minecraft);
+                case WAIT_REACTION_CHAMBER_MENU -> awaitReactionChamberMenu(minecraft);
+                case WAIT_WORLD_RENDER -> awaitWorldRender(minecraft);
                 case DONE -> { return; }
             }
             if (phase != Phase.LOAD_WORLD && phase != Phase.DONE) {
@@ -170,6 +195,18 @@ public final class ClientInteractionSmokeTest {
                 if (player == null) throw new IllegalStateException("Integrated server did not create the test player");
                 var level = player.serverLevel();
                 machinePos = player.blockPosition().offset(MACHINE_OFFSET.getX(), MACHINE_OFFSET.getY(), MACHINE_OFFSET.getZ());
+                for (int dx = -3; dx <= 3; dx++) {
+                    for (int dy = -1; dy <= 2; dy++) {
+                        for (int dz = 0; dz <= 3; dz++) {
+                            var p = player.blockPosition().offset(dx, dy, dz);
+                            if (dy == -1) {
+                                level.setBlock(p, net.minecraft.world.level.block.Blocks.SMOOTH_STONE.defaultBlockState(), 3);
+                            } else {
+                                level.setBlock(p, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
+                            }
+                        }
+                    }
+                }
                 level.setBlock(machinePos, AEBlocks.INSCRIBER.block().defaultBlockState(), 3);
                 var machine = (appeng.blockentity.misc.InscriberBlockEntity) level.getBlockEntity(machinePos);
                 if (machine == null) throw new IllegalStateException("Could not create the test inscriber");
@@ -181,6 +218,16 @@ public final class ClientInteractionSmokeTest {
                 identity = AEItemKey.of(namedGold);
                 ManagedItemStorages.slots(machine.getInternalInventory()).get(3)
                         .write(new ResourceAmount<>(identity, INITIAL_AMOUNT));
+
+                if (ModList.get().isLoaded("expatternprovider")) {
+                    ExtendedInscriberHelper.setup(level, machinePos.offset(2, 0, 0));
+                    LOGGER.info("Client interaction smoke: server prepared ExtendedInscriber host at {}", machinePos.offset(2, 0, 0));
+                }
+                if (ModList.get().isLoaded("advanced_ae")) {
+                    ReactionChamberHelper.setup(level, machinePos.offset(-2, 0, 0));
+                    LOGGER.info("Client interaction smoke: server prepared ReactionChamber host at {}", machinePos.offset(-2, 0, 0));
+                }
+
                 serverSetupComplete = true;
                 LOGGER.info("Client interaction smoke: server prepared InscriberMenu host at {}", machinePos);
             } catch (Throwable throwable) {
@@ -193,9 +240,16 @@ public final class ClientInteractionSmokeTest {
     }
 
     private static void awaitInitialMenu(Minecraft minecraft) {
-        logClientSurface(minecraft);
         if (!serverSetupComplete || machinePos == null
                 || !(minecraft.level.getBlockEntity(machinePos) instanceof appeng.blockentity.misc.InscriberBlockEntity)) {
+            return;
+        }
+        if (ModList.get().isLoaded("expatternprovider")
+                && minecraft.level.getBlockEntity(machinePos.offset(2, 0, 0)) == null) {
+            return;
+        }
+        if (ModList.get().isLoaded("advanced_ae")
+                && minecraft.level.getBlockEntity(machinePos.offset(-2, 0, 0)) == null) {
             return;
         }
         if (!initialOpenScheduled) {
@@ -352,7 +406,170 @@ public final class ClientInteractionSmokeTest {
         if (inventoryCount != 64) {
             return;
         }
-        LOGGER.info("Client interaction smoke passed: loopback menu sync, NBT, click, external update, close/reopen and Shift conservation");
+        LOGGER.info("Client interaction smoke: AE2 Inscriber menu interaction passed, closing container");
+        minecraft.player.closeContainer();
+        phase = Phase.WAIT_CLOSE_FOR_EXT_INSCRIBER;
+        waited = 0;
+    }
+
+    private static void awaitCloseForExtInscriber(Minecraft minecraft) {
+        if (minecraft.screen instanceof AbstractContainerScreen<?>) return;
+        if (!ModList.get().isLoaded("expatternprovider")) {
+            LOGGER.info("Client interaction smoke: skipping ExtendedInscriber (mod absent)");
+            phase = Phase.WAIT_CLOSE_FOR_REACTION_CHAMBER;
+            waited = 0;
+            return;
+        }
+        if (extInscriberSetupScheduled) return;
+        extInscriberSetupScheduled = true;
+        var server = minecraft.getSingleplayerServer();
+        if (server == null || machinePos == null) fail("Integrated server disappeared before ExtendedInscriber setup");
+        server.execute(() -> {
+            try {
+                var player = server.getPlayerList().getPlayer(minecraft.player.getUUID());
+                var extPos = machinePos.offset(2, 0, 0);
+                ExtendedInscriberHelper.open(player, extPos);
+                LOGGER.info("Client interaction smoke: server opened ContainerExInscriber at {}", extPos);
+            } catch (Throwable throwable) {
+                LOGGER.error("Client interaction smoke: ExtendedInscriber open failed", throwable);
+                failure = throwable;
+            }
+        });
+        phase = Phase.WAIT_EXT_INSCRIBER_MENU;
+        waited = 0;
+    }
+
+    private static void awaitExtInscriberMenu(Minecraft minecraft) {
+        if (!ExtendedInscriberHelper.isExtendedInscriberScreen(minecraft.screen)) {
+            if (waited % 20 == 0) {
+                LOGGER.info("Client interaction smoke: waiting for GuiExInscriber, current screen={}",
+                        minecraft.screen == null ? "<none>" : minecraft.screen.getClass().getName());
+            }
+            return;
+        }
+        var outputs = ExtendedInscriberHelper.getOutputSlots(minecraft.screen);
+        if (outputs.size() < 4) return;
+        var diamondKey = AEItemKey.of(Items.DIAMOND);
+        var ironKey = AEItemKey.of(Items.IRON_INGOT);
+
+        // Verify Lane 0 on default Page 0
+        var lane0 = unwrap(outputs.get(0).getItem());
+        if (lane0 == null || lane0.amount() != 1_000_000L || !lane0.what().equals(diamondKey)) {
+            if (waited % 20 == 0) {
+                LOGGER.info("Client interaction smoke: waiting for lane 0 item, got={}", lane0);
+            }
+            return;
+        }
+
+        // Verify Lane 3 when switched to Page 3
+        ExtendedInscriberHelper.setPage(minecraft.screen, 3);
+        var lane3 = unwrap(outputs.get(3).getItem());
+        ExtendedInscriberHelper.setPage(minecraft.screen, 0);
+        if (lane3 == null || lane3.amount() != 2_000_000L || !lane3.what().equals(ironKey)) {
+            if (waited % 20 == 0) {
+                LOGGER.info("Client interaction smoke: waiting for lane 3 item, got={}", lane3);
+            }
+            return;
+        }
+
+        if (!extInscriberScreenshotArmed) {
+            extInscriberScreenshotArmed = true;
+            return;
+        }
+        takeScreenshot("client-extended-inscriber-menu.png", minecraft);
+        if (extInscriberClickSent) return;
+        int menuId = ExtendedInscriberHelper.getMenuId(minecraft.screen);
+        minecraft.gameMode.handleInventoryMouseClick(menuId, outputs.get(0).index, 0, ClickType.PICKUP, minecraft.player);
+        extInscriberClickSent = true;
+        phase = Phase.WAIT_EXT_INSCRIBER_CLICK;
+        waited = 0;
+    }
+
+    private static void awaitExtInscriberClick(Minecraft minecraft) {
+        if (!ExtendedInscriberHelper.isExtendedInscriberScreen(minecraft.screen)) return;
+        var outputs = ExtendedInscriberHelper.getOutputSlots(minecraft.screen);
+        if (outputs.size() < 4) return;
+        var lane0 = unwrap(outputs.get(0).getItem());
+        if (lane0 == null || lane0.amount() != 1_000_000L - 64) {
+            if (waited % 20 == 0) {
+                LOGGER.info("Client interaction smoke: waiting for lane 0 after click, got={}", lane0);
+            }
+            return;
+        }
+        var carried = ExtendedInscriberHelper.getCarried(minecraft.screen);
+        if (carried.getCount() != 64 || !carried.is(Items.DIAMOND)) {
+            if (waited % 20 == 0) {
+                LOGGER.info("Client interaction smoke: waiting for carried diamond, got={}", carried);
+            }
+            return;
+        }
+        LOGGER.info("Client interaction smoke: ExtendedInscriber 4-lane menu sync and click passed, closing container");
+        minecraft.player.closeContainer();
+        phase = Phase.WAIT_CLOSE_FOR_REACTION_CHAMBER;
+        waited = 0;
+    }
+
+    private static void awaitCloseForReactionChamber(Minecraft minecraft) {
+        if (minecraft.screen instanceof AbstractContainerScreen<?>) return;
+        if (!ModList.get().isLoaded("advanced_ae")) {
+            LOGGER.info("Client interaction smoke: skipping ReactionChamber (mod absent)");
+            phase = Phase.WAIT_WORLD_RENDER;
+            waited = 0;
+            return;
+        }
+        if (reactionChamberSetupScheduled) return;
+        reactionChamberSetupScheduled = true;
+        var server = minecraft.getSingleplayerServer();
+        if (server == null || machinePos == null) fail("Integrated server disappeared before ReactionChamber setup");
+        server.execute(() -> {
+            try {
+                var player = server.getPlayerList().getPlayer(minecraft.player.getUUID());
+                var rcPos = machinePos.offset(-2, 0, 0);
+                ReactionChamberHelper.open(player, rcPos);
+                LOGGER.info("Client interaction smoke: server opened ReactionChamberMenu at {}", rcPos);
+            } catch (Throwable throwable) {
+                LOGGER.error("Client interaction smoke: ReactionChamber open failed", throwable);
+                failure = throwable;
+            }
+        });
+        phase = Phase.WAIT_REACTION_CHAMBER_MENU;
+        waited = 0;
+    }
+
+    private static void awaitReactionChamberMenu(Minecraft minecraft) {
+        if (!ReactionChamberHelper.isReactionChamberScreen(minecraft.screen)) {
+            if (waited % 20 == 0) {
+                LOGGER.info("Client interaction smoke: waiting for ReactionChamberScreen, current screen={}",
+                        minecraft.screen == null ? "<none>" : minecraft.screen.getClass().getName());
+            }
+            return;
+        }
+        if (!ReactionChamberHelper.verifyFluidTooltip(minecraft.screen, minecraft)) {
+            if (waited % 20 == 0) {
+                LOGGER.info("Client interaction smoke: waiting for ReactionChamber fluid tooltip");
+            }
+            return;
+        }
+        if (!reactionChamberScreenshotArmed) {
+            reactionChamberScreenshotArmed = true;
+            return;
+        }
+        takeScreenshot("client-reaction-chamber-menu.png", minecraft);
+        LOGGER.info("Client interaction smoke: ReactionChamber fluid capacity card tooltip passed, closing container");
+        minecraft.player.closeContainer();
+        phase = Phase.WAIT_WORLD_RENDER;
+        waited = 0;
+    }
+
+    private static void awaitWorldRender(Minecraft minecraft) {
+        if (minecraft.screen != null) return;
+        if (machinePos != null && minecraft.player != null) {
+            minecraft.player.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES,
+                    net.minecraft.world.phys.Vec3.atCenterOf(machinePos));
+        }
+        if (worldRenderTicks++ < 10) return;
+        takeScreenshot("client-machine-world-render.png", minecraft);
+        LOGGER.info("Client interaction smoke passed: inscriber loopback, extended inscriber 4-lane menu, reaction chamber fluid tooltip and in-world render");
         phase = Phase.DONE;
         minecraft.stop();
     }
@@ -426,5 +643,115 @@ public final class ClientInteractionSmokeTest {
 
     private static void fail(Throwable throwable) {
         failure = throwable;
+    }
+
+    private static final class ExtendedInscriberHelper {
+        private ExtendedInscriberHelper() {}
+
+        static void setup(ServerLevel level, BlockPos pos) {
+            var block = ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "ex_inscriber"));
+            if (block == null) throw new IllegalStateException("Missing ex_inscriber block");
+            level.setBlock(pos, block.defaultBlockState(), 3);
+            var machine = (com.glodblock.github.extendedae.common.tileentities.TileExInscriber) level.getBlockEntity(pos);
+            if (machine == null) throw new IllegalStateException("Missing TileExInscriber entity");
+            machine.getUpgrades().setItemDirect(0, new ItemStack(moakiee.ModItems.CAPACITY_CARD.get()));
+            var diamondKey = AEItemKey.of(Items.DIAMOND);
+            var ironKey = AEItemKey.of(Items.IRON_INGOT);
+            ManagedItemStorages.slots(machine.getIndexInventory(0)).get(3)
+                    .write(new ResourceAmount<>(diamondKey, 1_000_000L));
+            ManagedItemStorages.slots(machine.getIndexInventory(3)).get(3)
+                    .write(new ResourceAmount<>(ironKey, 2_000_000L));
+        }
+
+        static void open(ServerPlayer player, BlockPos pos) {
+            var machine = (com.glodblock.github.extendedae.common.tileentities.TileExInscriber) player.serverLevel().getBlockEntity(pos);
+            if (machine == null) throw new IllegalStateException("Missing TileExInscriber entity at " + pos);
+            var block = (com.glodblock.github.extendedae.common.blocks.BlockExInscriber) machine.getBlockState().getBlock();
+            block.openGui(machine, player);
+            if (player.containerMenu == player.inventoryMenu) {
+                throw new IllegalStateException("MenuOpener rejected ContainerExInscriber");
+            }
+        }
+
+        static boolean isExtendedInscriberScreen(Object screen) {
+            return screen != null && screen.getClass().getName().equals("com.glodblock.github.extendedae.client.gui.GuiExInscriber");
+        }
+
+        static List<LogicalMenuSlot> getOutputSlots(Object screen) {
+            if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) return List.of();
+            List<LogicalMenuSlot> outputs = new ArrayList<>();
+            for (var slot : containerScreen.getMenu().slots) {
+                if (slot instanceof LogicalMenuSlot logical && logical.getSlotIndex() == 3) {
+                    outputs.add(logical);
+                }
+            }
+            return outputs;
+        }
+
+        static int getMenuId(Object screen) {
+            return ((AbstractContainerScreen<?>) screen).getMenu().containerId;
+        }
+
+        static ItemStack getCarried(Object screen) {
+            return ((AbstractContainerScreen<?>) screen).getMenu().getCarried();
+        }
+
+        static void setPage(Object screen, int page) {
+            if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) return;
+            try {
+                var menu = containerScreen.getMenu();
+                var setPage = menu.getClass().getMethod("setPage", int.class);
+                var showPage = menu.getClass().getMethod("showPage");
+                setPage.invoke(menu, page);
+                showPage.invoke(menu);
+            } catch (ReflectiveOperationException exception) {
+                throw new IllegalStateException("Failed to switch page on ContainerExInscriber", exception);
+            }
+        }
+    }
+
+    private static final class ReactionChamberHelper {
+        private ReactionChamberHelper() {}
+
+        static void setup(ServerLevel level, BlockPos pos) {
+            var block = ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("advanced_ae", "reaction_chamber"));
+            if (block == null) throw new IllegalStateException("Missing reaction_chamber block");
+            level.setBlock(pos, block.defaultBlockState(), 3);
+            var machine = (net.pedroksl.advanced_ae.common.entities.ReactionChamberEntity) level.getBlockEntity(pos);
+            if (machine == null) throw new IllegalStateException("Missing ReactionChamberEntity");
+            machine.getUpgrades().setItemDirect(0, new ItemStack(moakiee.ModItems.CAPACITY_CARD.get()));
+            machine.getTank().setStack(1, new GenericStack(appeng.api.stacks.AEFluidKey.of(net.minecraft.world.level.material.Fluids.WATER), 32000L));
+        }
+
+        static void open(ServerPlayer player, BlockPos pos) {
+            var machine = (net.pedroksl.advanced_ae.common.entities.ReactionChamberEntity) player.serverLevel().getBlockEntity(pos);
+            if (machine == null) throw new IllegalStateException("Missing ReactionChamberEntity at " + pos);
+            if (!MenuOpener.open(net.pedroksl.advanced_ae.common.definitions.AAEMenus.REACTION_CHAMBER.get(), player,
+                    MenuLocators.forBlockEntity(machine))) {
+                throw new IllegalStateException("MenuOpener rejected ReactionChamberMenu");
+            }
+        }
+
+        static boolean isReactionChamberScreen(Object screen) {
+            return screen instanceof net.pedroksl.advanced_ae.client.gui.ReactionChamberScreen;
+        }
+
+        static boolean verifyFluidTooltip(Object screen, Minecraft minecraft) {
+            if (!(screen instanceof net.pedroksl.advanced_ae.client.gui.ReactionChamberScreen reactionScreen)) return false;
+            net.pedroksl.ae2addonlib.client.widgets.FluidTankSlot inputWidget = null;
+            for (var child : reactionScreen.children()) {
+                if (child instanceof net.pedroksl.ae2addonlib.client.widgets.FluidTankSlot tankSlot && tankSlot.index == 1) {
+                    inputWidget = tankSlot;
+                    break;
+                }
+            }
+            if (inputWidget == null || inputWidget.getTooltip() == null) return false;
+            var text = new StringBuilder();
+            for (var line : inputWidget.getTooltip().toCharSequence(minecraft)) {
+                line.accept((idx, style, codePoint) -> { text.appendCodePoint(codePoint); return true; });
+            }
+            String str = text.toString();
+            return str.contains("32000") && str.contains(String.valueOf(Integer.MAX_VALUE));
+        }
     }
 }
