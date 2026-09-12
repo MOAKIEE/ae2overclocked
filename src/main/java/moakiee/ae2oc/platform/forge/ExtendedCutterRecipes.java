@@ -43,6 +43,22 @@ final class ExtendedCutterRecipes {
 
     private ExtendedCutterRecipes() {}
 
+    private record RecipeCase(String id, AEItemKey input, AEItemKey output, long outputPerOperation) {}
+
+    private static final List<RecipeCase> ADDITIONAL_RECIPES = List.of(
+            new RecipeCase("expatternprovider:cutter/calculation", item("ae2:quartz_block"),
+                    item("ae2:printed_calculation_processor"), 4),
+            new RecipeCase("expatternprovider:cutter/engineering", item("minecraft:diamond_block"),
+                    item("ae2:printed_engineering_processor"), 9),
+            new RecipeCase("expatternprovider:cutter/silicon", item("expatternprovider:silicon_block"),
+                    item("ae2:printed_silicon"), 9));
+
+    private static AEItemKey item(String id) {
+        var value = ForgeRegistries.ITEMS.getValue(ResourceLocation.tryParse(id));
+        if (value == null || value == Items.AIR) throw new IllegalStateException("Missing test item: " + id);
+        return AEItemKey.of(value);
+    }
+
     private static TileCircuitCutter place(GameTestHelper helper, BlockPos pos) {
         helper.setBlock(pos, Blocks.AIR);
         helper.setBlock(pos.west(), AEBlocks.CREATIVE_ENERGY_CELL.block());
@@ -126,6 +142,71 @@ final class ExtendedCutterRecipes {
             helper.assertTrue(!machine.saveWithFullMetadata().contains("ae2ocProcessing"),
                     "Cutter retained a completed batch: " + label);
             recipeMatrix(helper, scenario + 1);
+        });
+    }
+
+    /**
+     * Covers every unconditional cutter recipe that is not already exercised by the upgrade matrix. The
+     * shared path reserves enough work to overflow a vanilla stack and must preserve both ledgers while
+     * emitting only legal ItemStacks. The remaining accumulation recipe is conditional on Mega Cells; the
+     * supported runtime deliberately omits it, so its absence is asserted instead of fabricating its inputs.
+     */
+    static void additionalRecipeCoverage(GameTestHelper helper, int scenario) {
+        if (scenario == ADDITIONAL_RECIPES.size()) {
+            if (!net.minecraftforge.fml.ModList.get().isLoaded("megacells")) {
+                var accumulation = ResourceLocation.fromNamespaceAndPath("expatternprovider", "cutter/accumulation");
+                helper.assertTrue(helper.getLevel().getRecipeManager().byKey(accumulation).isEmpty(),
+                        "Conditional accumulation recipe loaded without Mega Cells");
+            }
+            helper.succeed();
+            return;
+        }
+        var recipe = ADDITIONAL_RECIPES.get(scenario);
+        var pos = new BlockPos(1, 1, 1);
+        var machine = place(helper, pos);
+        helper.runAfterDelay(40, () -> {
+            helper.assertTrue(machine.getMainNode().isActive(), "Cutter grid is inactive for " + recipe.id());
+            upgrade(machine, ModItems.PARALLEL_CARD_8X.get(), true);
+            machine.getConfigManager().putSetting(Settings.AUTO_EXPORT, YesNo.NO);
+
+            final long operations = 24;
+            inputSlot(machine).write(new ResourceAmount<AEKey>(recipe.input(), operations));
+            machine.getTank().setStack(0, new GenericStack(WATER, operations * FLUID_PER_OPERATION));
+
+            long collected = 0;
+            int ticks = 0;
+            while (collected < operations * recipe.outputPerOperation() && ticks++ < 40000) {
+                machine.tickingRequest(machine.getMainNode().getNode(), 1);
+                var output = machine.getOutput().extractItem(0, 64, false);
+                helper.assertTrue(output.isEmpty() || recipe.output().matches(output)
+                                && output.getCount() <= output.getMaxStackSize(),
+                        "Wrong or oversized cutter output for " + recipe.id());
+                collected += output.getCount();
+
+                var batch = batch(machine);
+                if (ticks == 1) {
+                    helper.assertTrue(batch != null && batch.recipe().equals(recipe.id()),
+                            "Custom path did not select " + recipe.id());
+                }
+                long reserved = batch == null || batch.finished() ? 0 : amountOf(batch.inputs(), recipe.input());
+                long pending = batch == null || !batch.finished() ? 0 : amountOf(batch.outputs(), recipe.output());
+                long materialized = collected + amount(outputSlot(machine)) + pending;
+                helper.assertTrue(materialized % recipe.outputPerOperation() == 0,
+                        "Cutter produced a partial operation for " + recipe.id());
+                long consumed = materialized / recipe.outputPerOperation() + reserved;
+                helper.assertTrue(amount(inputSlot(machine)) + consumed == operations,
+                        "Cutter item conservation failed for " + recipe.id() + " at tick " + ticks);
+                helper.assertTrue(tank(machine) + consumed * FLUID_PER_OPERATION
+                                == operations * FLUID_PER_OPERATION,
+                        "Cutter fluid conservation failed for " + recipe.id() + " at tick " + ticks);
+            }
+            helper.assertTrue(collected == operations * recipe.outputPerOperation(),
+                    "Cutter recipe did not complete: " + recipe.id());
+            helper.assertTrue(amount(inputSlot(machine)) == 0 && tank(machine) == 0,
+                    "Cutter retained inputs after " + recipe.id());
+            helper.assertTrue(!machine.saveWithFullMetadata().contains("ae2ocProcessing"),
+                    "Cutter retained a completed batch for " + recipe.id());
+            additionalRecipeCoverage(helper, scenario + 1);
         });
     }
 

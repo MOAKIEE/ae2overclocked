@@ -17,6 +17,12 @@ public final class CutterGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 2000)
+    public static void cutterAdditionalRecipesConserveResources(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedCutterRecipes.additionalRecipeCoverage(helper, 0);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 2000)
     public static void cutterAutoExportConservesOverflow(GameTestHelper helper) {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
         ExtendedCutterRecipes.autoExportConservation(helper);
