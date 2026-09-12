@@ -27,4 +27,10 @@ public final class CutterGameTests {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
         ExtendedCutterRecipes.destructionDrops(helper);
     }
+
+    @GameTest(template = "empty", timeoutTicks = 200)
+    public static void cutterRealDestructionReturnsVisibleAndOverflowResources(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedCutterRecipes.realDestructionDrops(helper);
+    }
 }

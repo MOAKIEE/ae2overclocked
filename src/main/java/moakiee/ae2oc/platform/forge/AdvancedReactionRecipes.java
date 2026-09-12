@@ -308,6 +308,42 @@ final class AdvancedReactionRecipes {
         helper.succeed();
     }
 
+    /**
+     * Real destruction of a placed chamber. The visible input, the logical output that overflows a legal
+     * stack, the products of a finished batch and both tank slots must reach the world exactly once when the
+     * block is actually destroyed, not merely when the drop hook is invoked directly.
+     */
+    static void realDestructionDrops(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.tryParse("advanced_ae:reaction_chamber")));
+        var machine = (ReactionChamberEntity) helper.getBlockEntity(pos);
+        inputSlot(machine, 0).write(new ResourceAmount<AEKey>(PRINT_LOGIC, 3));
+        ManagedItemStorages.slots(machine.getOutput()).get(0).write(new ResourceAmount<AEKey>(LOGIC_PROCESSOR, 130));
+        machine.getTank().setStack(1, new GenericStack(WATER, 4000));
+        machine.getTank().setStack(0, new GenericStack(QUANTUM_INFUSION, 1000));
+
+        var saved = machine.saveWithFullMetadata();
+        saved.put("ae2ocProcessing", ProcessingCodec.write(new ProcessingState<AEKey>(ITEM_RECIPE,
+                List.<ResourceAmount<AEKey>>of(), List.of(new ResourceAmount<>(LOGIC_PROCESSOR, 45)), 100, 100, 0)));
+        machine.load(saved);
+
+        helper.assertTrue(helper.getLevel().destroyBlock(helper.absolutePos(pos), true, helper.makeMockPlayer()),
+                "Reaction chamber destruction failed");
+        helper.assertTrue(helper.getLevel().getBlockEntity(helper.absolutePos(pos)) == null,
+                "Destroyed reaction chamber remains in the world");
+        helper.runAfterDelay(2, () -> {
+            var entities = helper.getEntities(net.minecraft.world.entity.EntityType.ITEM, pos, 4);
+            helper.assertTrue(entityAmount(entities, LOGIC_PROCESSOR) == 175,
+                    "Real destruction lost or duplicated reaction output: " + entityAmount(entities, LOGIC_PROCESSOR));
+            helper.assertTrue(entityAmount(entities, PRINT_LOGIC) == 3,
+                    "Real destruction lost the visible reaction input: " + entityAmount(entities, PRINT_LOGIC));
+            helper.assertTrue(entityAmount(entities, WATER) == 4000, "Real destruction lost the water input");
+            helper.assertTrue(entityAmount(entities, QUANTUM_INFUSION) == 1000,
+                    "Real destruction lost the fluid product");
+            helper.succeed();
+        });
+    }
+
     private static long chestCount(ChestBlockEntity chest, AEItemKey key) {
         long total = 0;
         for (int slot = 0; slot < chest.getContainerSize(); slot++)
@@ -322,6 +358,19 @@ final class AdvancedReactionRecipes {
             if (!drop.is(ModItems.STORED_RESOURCES.get()) || !drop.hasTag()) continue;
             if (key.equals(AEKey.fromTagGeneric(drop.getTag().getCompound("resource"))))
                 total += Math.max(0, drop.getTag().getLong("amount"));
+        }
+        return total;
+    }
+
+    /** Visible stacks plus bounded stored-resource containers, as they appear in the world after a break. */
+    private static long entityAmount(List<net.minecraft.world.entity.item.ItemEntity> entities, AEKey key) {
+        long total = 0;
+        for (var entity : entities) {
+            var stack = entity.getItem();
+            if (key instanceof AEItemKey item && item.matches(stack)) total += stack.getCount();
+            else if (stack.is(ModItems.STORED_RESOURCES.get()) && stack.hasTag()
+                    && key.equals(AEKey.fromTagGeneric(stack.getTag().getCompound("resource"))))
+                total += Math.max(0, stack.getTag().getLong("amount"));
         }
         return total;
     }

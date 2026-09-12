@@ -33,4 +33,10 @@ public final class ReactionChamberGameTests {
         if (!net.minecraftforge.fml.ModList.get().isLoaded("advanced_ae")) { helper.succeed(); return; }
         AdvancedReactionRecipes.destructionDrops(helper);
     }
+
+    @GameTest(template = "empty", timeoutTicks = 200)
+    public static void reactionChamberRealDestructionReturnsVisibleAndOverflowResources(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("advanced_ae")) { helper.succeed(); return; }
+        AdvancedReactionRecipes.realDestructionDrops(helper);
+    }
 }
