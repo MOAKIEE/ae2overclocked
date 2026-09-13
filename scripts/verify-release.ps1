@@ -6,6 +6,7 @@ param(
     [switch]$AcceptMinecraftEula
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'VerificationEvidence.ps1')
 if (!$AcceptMinecraftEula) {
     throw 'Read https://aka.ms/MinecraftEULA and supply -AcceptMinecraftEula only if you agree.'
 }
@@ -14,6 +15,7 @@ $runDirectory = Join-Path $projectRoot ('build/reports/release/' + [guid]::NewGu
 New-Item -ItemType Directory -Path $runDirectory -Force | Out-Null
 $gradleProperties = ConvertFrom-StringData ((Get-Content -LiteralPath (Join-Path $projectRoot 'gradle.properties')) |
     Where-Object { $_ -match '^\s*[^#!][^=]*=' } | Out-String)
+$expectedModVersion = $gradleProperties.mod_version.Trim()
 $forgeCoordinate = "$($gradleProperties.minecraft_version)-$($gradleProperties.forge_version)"
 $installerName = "forge-$forgeCoordinate-installer.jar"
 $installerSha256 = '1912760B4CB6B803D8A826DE603C9076B1DA71EC2765E9A1F8C1CA78F65278E3'
@@ -48,11 +50,10 @@ try {
 
     # Step 2: Release artifact inspection
     Write-Output "Executing Release Verification Step 2: inspecting production jar archive..."
-    $libs = Get-ChildItem (Join-Path $projectRoot 'build/libs') -Filter 'ae2_overclocked-*.jar' |
-        Where-Object { $_.Name -notmatch '-(sources|javadoc)\.jar$' }
-    if ($libs.Count -eq 0) { throw "No production release jar found in build/libs" }
-    $releaseJar = $libs[0].FullName
-    Write-Output "Found production release jar: $($libs[0].Name) ($($libs[0].Length) bytes)"
+    $releaseFile = Resolve-CurrentReleaseJar -ProjectRoot $projectRoot `
+        -ModId $gradleProperties.mod_id -ModVersion $expectedModVersion
+    $releaseJar = $releaseFile.FullName
+    Write-Output "Found current production release jar: $($releaseFile.Name) ($($releaseFile.Length) bytes)"
 
     [System.Reflection.Assembly]::LoadWithPartialName('System.IO.Compression.FileSystem') | Out-Null
     $zip = [System.IO.Compression.ZipFile]::OpenRead($releaseJar)
@@ -110,7 +111,7 @@ try {
     Copy-Item -Path (Join-Path $serverBase '*') -Destination $runDirectory -Recurse -Force
 
     $releaseHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $releaseJar).Hash
-    $loadedJar = Join-Path (Join-Path $runDirectory 'mods') $libs[0].Name
+    $loadedJar = Join-Path (Join-Path $runDirectory 'mods') $releaseFile.Name
     Copy-Item -LiteralPath $releaseJar -Destination $loadedJar -Force
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $loadedJar).Hash -ne $releaseHash) {
         throw 'Staged release jar hash changed while copying into the production server'
@@ -131,7 +132,7 @@ max-tick-time=120000
         '-Xms512M'
         '-Xmx2G'
         '-Dae2oc.releaseCheck=true'
-        "-Dae2oc.releaseJarName=$($libs[0].Name)"
+        "-Dae2oc.releaseJarName=$($releaseFile.Name)"
         "-Dae2oc.releaseJarSha256=$releaseHash"
     ) | Set-Content -LiteralPath (Join-Path $runDirectory 'user_jvm_args.txt') -Encoding ASCII
 
@@ -169,6 +170,9 @@ max-tick-time=120000
         throw "Server did not report release check completion; see $serverReport"
     }
     $modVer = $Matches['ver']
+    if ($modVer -ne $expectedModVersion) {
+        throw "Running mod reported the wrong version: expected=$expectedModVersion actual=$modVer"
+    }
     $compatIds = switch ($Runtime) {
         'all' { @('expatternprovider', 'advanced_ae', 'ae2cs') }
         'extendedae' { @('expatternprovider') }
@@ -189,7 +193,8 @@ AE2 Overclocked Release Verification Summary
 ================================================================================
 Timestamp: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 Runtime: $Runtime
-Release Jar: $($libs[0].Name) ($($libs[0].Length) bytes)
+Review Commit: $(& git rev-parse HEAD)
+Release Jar: $($releaseFile.Name) ($($releaseFile.Length) bytes)
 Release SHA-256: $releaseHash
 Loaded Jar Path: $reportedPath
 Forge Production Entry: forgeserver ($forgeCoordinate)

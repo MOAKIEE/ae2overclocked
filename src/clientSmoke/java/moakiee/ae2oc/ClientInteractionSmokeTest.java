@@ -74,6 +74,7 @@ public final class ClientInteractionSmokeTest {
         WAIT_SHIFT_CLICK,
         WAIT_CLOSE_FOR_EXT_INSCRIBER,
         WAIT_EXT_INSCRIBER_MENU,
+        WAIT_EXT_INSCRIBER_HIDDEN_CLICK,
         WAIT_EXT_INSCRIBER_CLICK,
         WAIT_CLOSE_FOR_REACTION_CHAMBER,
         WAIT_REACTION_CHAMBER_MENU,
@@ -105,6 +106,9 @@ public final class ClientInteractionSmokeTest {
     private static boolean reopenedScreenshotArmed;
     private static boolean extInscriberSetupScheduled;
     private static boolean extInscriberScreenshotArmed;
+    private static boolean extInscriberPage3Requested;
+    private static boolean extInscriberPage0Requested;
+    private static boolean extInscriberHiddenClickSent;
     private static boolean extInscriberClickSent;
     private static boolean reactionChamberSetupScheduled;
     private static boolean reactionChamberScreenshotArmed;
@@ -154,6 +158,7 @@ public final class ClientInteractionSmokeTest {
                 case WAIT_SHIFT_CLICK -> awaitShiftClick(minecraft);
                 case WAIT_CLOSE_FOR_EXT_INSCRIBER -> awaitCloseForExtInscriber(minecraft);
                 case WAIT_EXT_INSCRIBER_MENU -> awaitExtInscriberMenu(minecraft);
+                case WAIT_EXT_INSCRIBER_HIDDEN_CLICK -> awaitExtInscriberHiddenClick(minecraft);
                 case WAIT_EXT_INSCRIBER_CLICK -> awaitExtInscriberClick(minecraft);
                 case WAIT_CLOSE_FOR_REACTION_CHAMBER -> awaitCloseForReactionChamber(minecraft);
                 case WAIT_REACTION_CHAMBER_MENU -> awaitReactionChamberMenu(minecraft);
@@ -475,22 +480,69 @@ public final class ClientInteractionSmokeTest {
         var diamondKey = AEItemKey.of(Items.DIAMOND);
         var ironKey = AEItemKey.of(Items.IRON_INGOT);
 
-        // Verify Lane 0 on default Page 0
-        var lane0 = unwrap(outputs.get(0).getItem());
-        if (lane0 == null || lane0.amount() != 1_000_000L || !lane0.what().equals(diamondKey)) {
+        // Switch through the real client-to-server page packet, then wait for the authoritative menu field sync.
+        if (!extInscriberPage3Requested) {
+            var lane0 = unwrap(outputs.get(0).getItem());
+            if (lane0 == null || lane0.amount() != 1_000_000L || !lane0.what().equals(diamondKey)) {
+                if (waited % 20 == 0) {
+                    LOGGER.info("Client interaction smoke: waiting for lane 0 item, got={}, page={}, enabled={}",
+                            lane0, ExtendedInscriberHelper.getPage(minecraft.screen),
+                            ExtendedInscriberHelper.getLogicalSlots(minecraft.screen).stream()
+                                    .filter(LogicalMenuSlot::isSlotEnabled).count());
+                }
+                return;
+            }
+            ExtendedInscriberHelper.requestPage(3);
+            extInscriberPage3Requested = true;
+            return;
+        }
+        if (ExtendedInscriberHelper.getPage(minecraft.screen) != 3) return;
+        var logicalSlots = ExtendedInscriberHelper.getLogicalSlots(minecraft.screen);
+        long enabled = logicalSlots.stream().filter(LogicalMenuSlot::isSlotEnabled).count();
+        if (enabled != 4 || outputs.get(0).isSlotEnabled() || !outputs.get(3).isSlotEnabled()) {
+            fail("ExtendedInscriber Page 3 did not isolate exactly its four logical slots: enabled=" + enabled);
+            return;
+        }
+        var lane3 = unwrap(outputs.get(3).getItem());
+        if (lane3 == null || lane3.amount() != 2_000_000L || !lane3.what().equals(ironKey)) {
             if (waited % 20 == 0) {
-                LOGGER.info("Client interaction smoke: waiting for lane 0 item, got={}", lane0);
+                LOGGER.info("Client interaction smoke: waiting for lane 3 item, got={}", lane3);
             }
             return;
         }
 
-        // Verify Lane 3 when switched to Page 3
-        ExtendedInscriberHelper.setPage(minecraft.screen, 3);
-        var lane3 = unwrap(outputs.get(3).getItem());
-        ExtendedInscriberHelper.setPage(minecraft.screen, 0);
-        if (lane3 == null || lane3.amount() != 2_000_000L || !lane3.what().equals(ironKey)) {
+        if (!extInscriberHiddenClickSent) {
+            int menuId = ExtendedInscriberHelper.getMenuId(minecraft.screen);
+            minecraft.gameMode.handleInventoryMouseClick(menuId, outputs.get(0).index, 0, ClickType.PICKUP, minecraft.player);
+            extInscriberHiddenClickSent = true;
+            phase = Phase.WAIT_EXT_INSCRIBER_HIDDEN_CLICK;
+            waited = 0;
+        }
+    }
+
+    private static void awaitExtInscriberHiddenClick(Minecraft minecraft) {
+        if (!ExtendedInscriberHelper.isExtendedInscriberScreen(minecraft.screen)) return;
+        if (waited < 5) return;
+        var outputs = ExtendedInscriberHelper.getOutputSlots(minecraft.screen);
+        if (outputs.size() < 4) return;
+        if (!ExtendedInscriberHelper.getCarried(minecraft.screen).isEmpty()) {
+            fail("ExtendedInscriber hidden Page 0 output was picked up while Page 3 was selected");
+            return;
+        }
+        if (!extInscriberPage0Requested) {
+            ExtendedInscriberHelper.requestPage(0);
+            extInscriberPage0Requested = true;
+            return;
+        }
+        if (ExtendedInscriberHelper.getPage(minecraft.screen) != 0) return;
+        var lane0 = unwrap(outputs.get(0).getItem());
+        long enabled = ExtendedInscriberHelper.getLogicalSlots(minecraft.screen).stream()
+                .filter(LogicalMenuSlot::isSlotEnabled).count();
+        if (enabled != 4 || !outputs.get(0).isSlotEnabled() || outputs.get(3).isSlotEnabled()
+                || lane0 == null || lane0.amount() != 1_000_000L) {
             if (waited % 20 == 0) {
-                LOGGER.info("Client interaction smoke: waiting for lane 3 item, got={}", lane3);
+                LOGGER.info("Client interaction smoke: waiting for Page 0 render state after hidden click, enabled={}, lane0={}",
+                        enabled, lane0);
             }
             return;
         }
@@ -845,6 +897,15 @@ public final class ClientInteractionSmokeTest {
             return outputs;
         }
 
+        static List<LogicalMenuSlot> getLogicalSlots(Object screen) {
+            if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) return List.of();
+            List<LogicalMenuSlot> slots = new ArrayList<>();
+            for (var slot : containerScreen.getMenu().slots) {
+                if (slot instanceof LogicalMenuSlot logical) slots.add(logical);
+            }
+            return slots;
+        }
+
         static int getMenuId(Object screen) {
             return ((AbstractContainerScreen<?>) screen).getMenu().containerId;
         }
@@ -853,16 +914,28 @@ public final class ClientInteractionSmokeTest {
             return ((AbstractContainerScreen<?>) screen).getMenu().getCarried();
         }
 
-        static void setPage(Object screen, int page) {
-            if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) return;
+        static int getPage(Object screen) {
+            if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) return -1;
             try {
                 var menu = containerScreen.getMenu();
-                var setPage = menu.getClass().getMethod("setPage", int.class);
-                var showPage = menu.getClass().getMethod("showPage");
-                setPage.invoke(menu, page);
-                showPage.invoke(menu);
+                return (int) menu.getClass().getMethod("getPage").invoke(menu);
             } catch (ReflectiveOperationException exception) {
-                throw new IllegalStateException("Failed to switch page on ContainerExInscriber", exception);
+                throw new IllegalStateException("Failed to read ContainerExInscriber page", exception);
+            }
+        }
+
+        static void requestPage(int page) {
+            try {
+                var handlerClass = Class.forName("com.glodblock.github.extendedae.network.EPPNetworkHandler");
+                var packetClass = Class.forName("com.glodblock.github.extendedae.network.packet.CUpdatePage");
+                var handler = handlerClass.getField("INSTANCE").get(null);
+                var packet = packetClass.getConstructor(int.class).newInstance(page);
+                var send = java.util.Arrays.stream(handlerClass.getMethods())
+                        .filter(method -> method.getName().equals("sendToServer") && method.getParameterCount() == 1)
+                        .findFirst().orElseThrow();
+                send.invoke(handler, packet);
+            } catch (ReflectiveOperationException exception) {
+                throw new IllegalStateException("Failed to request ContainerExInscriber page", exception);
             }
         }
     }

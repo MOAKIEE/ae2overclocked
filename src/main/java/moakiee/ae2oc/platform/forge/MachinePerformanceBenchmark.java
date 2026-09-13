@@ -423,6 +423,7 @@ public final class MachinePerformanceBenchmark {
             LOG.info("Saved benchmark JSON report to: {}", localJson.getAbsolutePath());
         } catch (Exception e) {
             LOG.error("Failed to write benchmark-results.json", e);
+            throw new IllegalStateException("Benchmark completed but its JSON evidence could not be written", e);
         }
     }
 

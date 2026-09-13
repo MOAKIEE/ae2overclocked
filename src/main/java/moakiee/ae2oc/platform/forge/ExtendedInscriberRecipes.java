@@ -7,8 +7,10 @@ import appeng.api.stacks.AEKey;
 import appeng.core.definitions.AEBlocks;
 import appeng.core.definitions.AEItems;
 import com.glodblock.github.extendedae.common.tileentities.TileExInscriber;
+import com.glodblock.github.extendedae.container.ContainerExInscriber;
 import moakiee.ModItems;
 import moakiee.ae2oc.api.ResourceAmount;
+import moakiee.ae2oc.client.LogicalMenuSlot;
 import moakiee.ae2oc.compat.ae2.ManagedItemStorages;
 import moakiee.ae2oc.compat.ae2.ProcessingCodec;
 import moakiee.ae2oc.compat.extendedae.ExtendedInscriberVisualState;
@@ -17,6 +19,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -25,6 +28,108 @@ import net.minecraftforge.registries.ForgeRegistries;
 
 /** Loaded only when ExtendedAE is present. All four lanes run real upstream recipes. */
 final class ExtendedInscriberRecipes {
+    static void pageSelectionDisablesHiddenLanes(GameTestHelper helper) {
+        var machine = placeForMenuTest(helper);
+        var player = helper.makeMockPlayer();
+        appeng.menu.AEBaseMenu menu = (appeng.menu.AEBaseMenu) (Object)
+                new ContainerExInscriber(1, player.getInventory(), machine);
+        for (int page = 0; page < 4; page++) {
+            showPage(menu, page);
+            for (int lane = 0; lane < 4; lane++) {
+                var inventory = machine.getIndexInventory(lane);
+                long enabled = menu.slots.stream()
+                        .filter(slot -> slot instanceof LogicalMenuSlot logical
+                                && logical.getInventory() == inventory && logical.isSlotEnabled())
+                        .count();
+                helper.assertTrue(enabled == (lane == page ? 4 : 0),
+                        "Page " + page + " exposed " + enabled + " slots from lane " + lane);
+            }
+        }
+        helper.succeed();
+    }
+
+    static void hiddenLaneRejectsMenuClicks(GameTestHelper helper) {
+        var machine = placeForMenuTest(helper);
+        var lane0 = machine.getIndexInventory(0);
+        var output = ManagedItemStorages.slots(lane0).get(3);
+        output.write(new ResourceAmount<AEKey>(AEItemKey.of(Items.DIAMOND), 1_000_000));
+        var player = helper.makeMockPlayer();
+        appeng.menu.AEBaseMenu menu = (appeng.menu.AEBaseMenu) (Object)
+                new ContainerExInscriber(1, player.getInventory(), machine);
+        showPage(menu, 3);
+        var hidden = menu.slots.stream()
+                .filter(slot -> slot instanceof LogicalMenuSlot logical
+                        && logical.getInventory() == lane0 && logical.getSlotIndex() == 3)
+                .findFirst().orElseThrow();
+
+        menu.clicked(hidden.index, 0, ClickType.PICKUP, player);
+        helper.assertTrue(amount(output) == 1_000_000 && menu.getCarried().isEmpty(),
+                "PICKUP transferred resources from a hidden lane");
+        menu.clicked(hidden.index, 0, ClickType.QUICK_MOVE, player);
+        helper.assertTrue(amount(output) == 1_000_000 && countPlayerItem(player, Items.DIAMOND) == 0,
+                "QUICK_MOVE transferred resources from a hidden lane");
+        helper.succeed();
+    }
+
+    static void shiftInsertUsesVisibleLaneOnly(GameTestHelper helper) {
+        var machine = placeForMenuTest(helper);
+        var player = helper.makeMockPlayer();
+        player.getInventory().setItem(0, new ItemStack(Items.DIAMOND, 16));
+        appeng.menu.AEBaseMenu menu = (appeng.menu.AEBaseMenu) (Object)
+                new ContainerExInscriber(1, player.getInventory(), machine);
+        showPage(menu, 3);
+        var source = menu.slots.stream()
+                .filter(slot -> slot.container == player.getInventory() && slot.getItem().is(Items.DIAMOND))
+                .findFirst().orElseThrow();
+        menu.clicked(source.index, 0, ClickType.QUICK_MOVE, player);
+
+        for (int lane = 0; lane < 3; lane++) {
+            helper.assertTrue(totalItem(machine, lane, AEItemKey.of(Items.DIAMOND)) == 0,
+                    "Shift insertion reached hidden lane " + lane);
+        }
+        long visible = totalItem(machine, 3, AEItemKey.of(Items.DIAMOND));
+        long remaining = countPlayerItem(player, Items.DIAMOND);
+        helper.assertTrue(visible > 0 && visible + remaining == 16,
+                "Shift insertion did not conserve the stack through the visible lane: visible="
+                        + visible + ", remaining=" + remaining);
+        helper.succeed();
+    }
+
+    private static TileExInscriber placeForMenuTest(GameTestHelper helper) {
+        var pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(
+                ResourceLocation.fromNamespaceAndPath("expatternprovider", "ex_inscriber")));
+        return (TileExInscriber) helper.getBlockEntity(pos);
+    }
+
+    // These methods inherit an optional Glodium interface that is runtime-only in the compatibility matrix.
+    private static void showPage(Object menu, int page) {
+        try {
+            menu.getClass().getMethod("setPage", int.class).invoke(menu, page);
+            menu.getClass().getMethod("showPage").invoke(menu);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("ExtendedAE menu pagination API changed", e);
+        }
+    }
+
+    private static long countPlayerItem(net.minecraft.world.entity.player.Player player, net.minecraft.world.item.Item item) {
+        long total = 0;
+        for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
+            var stack = player.getInventory().getItem(slot);
+            if (stack.is(item)) total += stack.getCount();
+        }
+        return total;
+    }
+
+    private static long totalItem(TileExInscriber machine, int lane, AEItemKey key) {
+        return ManagedItemStorages.slots(machine.getIndexInventory(lane)).stream()
+                .map(moakiee.ae2oc.compat.ae2.LocalResourceSlot::read)
+                .filter(java.util.Objects::nonNull)
+                .filter(value -> value.key().equals(key))
+                .mapToLong(ResourceAmount::amount)
+                .sum();
+    }
+
     static void progressSync(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos, ForgeRegistries.BLOCKS.getValue(ResourceLocation.fromNamespaceAndPath("expatternprovider", "ex_inscriber")));

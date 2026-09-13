@@ -20,12 +20,18 @@ public final class LogicalMenuSlot extends AppEngSlot {
         this.original = original;
         this.backingIndex = backingIndex;
         logical = ManagedItemStorages.slots(original.getInventory()).get(backingIndex);
+        super.setSlotEnabled(original.isSlotEnabled());
         setNotDraggable();
     }
     @Override public void setMenu(AEBaseMenu menu) { super.setMenu(menu); original.setMenu(menu); }
-    @Override public boolean isSlotEnabled() { return original.isSlotEnabled(); }
-    @Override public boolean mayPlace(ItemStack stack) { return !GenericStack.isWrapped(stack) && original.mayPlace(stack); }
-    @Override public boolean mayPickup(Player player) { return original.mayPickup(player); }
+    @Override public void setSlotEnabled(boolean enabled) {
+        super.setSlotEnabled(enabled);
+        original.setSlotEnabled(enabled);
+    }
+    @Override public boolean mayPlace(ItemStack stack) {
+        return isSlotEnabled() && !GenericStack.isWrapped(stack) && original.mayPlace(stack);
+    }
+    @Override public boolean mayPickup(Player player) { return isSlotEnabled() && original.mayPickup(player); }
     @Override public void onTake(Player player, ItemStack stack) { original.onTake(player, stack); }
     public ItemStack backingItem() { return getInventory().getStackInSlot(backingIndex); }
     public long amount() { var value = logical.read(); return value == null ? 0 : value.amount(); }
@@ -43,6 +49,7 @@ public final class LogicalMenuSlot extends AppEngSlot {
         else if (!GenericStack.isWrapped(stack)) original.set(stack);
     }
     @Override public ItemStack remove(int amount) {
+        if (!isSlotEnabled()) return ItemStack.EMPTY;
         var current = backingItem();
         return current.isEmpty() ? ItemStack.EMPTY : getInventory().extractItem(backingIndex, Math.min(Math.max(0, amount), current.getMaxStackSize()), false);
     }

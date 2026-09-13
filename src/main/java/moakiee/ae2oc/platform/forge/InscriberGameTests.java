@@ -138,6 +138,24 @@ public final class InscriberGameTests {
         ExtendedInscriberRecipes.configuredSlotSizeControlsInsertion(helper);
     }
 
+    @GameTest(template = "empty")
+    public static void extendedInscriberPageSelectionDisablesHiddenLanes(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedInscriberRecipes.pageSelectionDisablesHiddenLanes(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void extendedInscriberHiddenLaneRejectsMenuClicks(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedInscriberRecipes.hiddenLaneRejectsMenuClicks(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void extendedInscriberShiftInsertUsesVisibleLaneOnly(GameTestHelper helper) {
+        if (!net.minecraftforge.fml.ModList.get().isLoaded("expatternprovider")) { helper.succeed(); return; }
+        ExtendedInscriberRecipes.shiftInsertUsesVisibleLaneOnly(helper);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 300)
     public static void inscriberNamePressRetainsTemplateAndCopiesName(GameTestHelper helper) {
         var pos = new BlockPos(1, 1, 1);

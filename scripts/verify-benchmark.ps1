@@ -6,6 +6,7 @@ param(
     [switch]$AcceptMinecraftEula
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'VerificationEvidence.ps1')
 if (!$AcceptMinecraftEula) {
     throw 'Read https://aka.ms/MinecraftEULA and supply -AcceptMinecraftEula only if you agree.'
 }
@@ -48,12 +49,10 @@ try {
 
     $jsonReportInRun = Join-Path $runDirectory 'benchmark-results.json'
     $jsonReport = Join-Path $projectRoot 'build/reports/benchmark-results.json'
-    if (Test-Path $jsonReportInRun) {
-        $null = New-Item -ItemType Directory -Force -Path (Join-Path $projectRoot 'build/reports')
-        Copy-Item -Path $jsonReportInRun -Destination $jsonReport -Force
-    }
-    if (!(Test-Path $jsonReport)) {
-        throw "Benchmark results JSON was not generated at $jsonReport; see $report"
+    try {
+        $parsedJson = Publish-CurrentBenchmarkReport -RunReportPath $jsonReportInRun -DestinationPath $jsonReport
+    } catch {
+        throw "$($_.Exception.Message); see $report"
     }
 
     # Print summary table from log
